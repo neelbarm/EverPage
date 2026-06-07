@@ -114,14 +114,15 @@ router.patch("/rooms/:code/progress", async (req, res) => {
 
   const code = req.params.code.toUpperCase();
   const { currentPage } = req.body ?? {};
-  if (currentPage == null) {
-    res.status(400).json({ error: "currentPage is required" });
+  const pageNum = parseInt(String(currentPage ?? ""), 10);
+  if (isNaN(pageNum) || pageNum < 0) {
+    res.status(400).json({ error: "currentPage must be a non-negative number" });
     return;
   }
 
   await db
     .update(npRoomMembers)
-    .set({ currentPage: Math.max(0, parseInt(currentPage, 10)) })
+    .set({ currentPage: pageNum })
     .where(and(eq(npRoomMembers.roomId, code), eq(npRoomMembers.userId, userId)));
 
   res.json({ ok: true });

@@ -336,9 +336,9 @@ export default function YouScreen() {
     <View style={[styles.root, { backgroundColor: colors.background }]}>
       <View style={[styles.header, { paddingTop: topPad + 12 }]}>
         <Text style={[styles.title, { color: colors.foreground, fontFamily: 'Inter_700Bold' }]}>You</Text>
-        <TouchableOpacity activeOpacity={0.7} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
+        <View>
           <Feather name="settings" size={22} color={colors.mutedForeground} />
-        </TouchableOpacity>
+        </View>
       </View>
 
       <ScrollView

@@ -43,7 +43,8 @@ export default function FinishScreen() {
   const totalHours = Math.floor(totalMin / 60);
   const totalMinsRem = totalMin % 60;
   const sessionCount = bookSessions.length;
-  const daysDisplay = sessionCount > 0 ? String(Math.max(1, sessionCount * 2)) : '8';
+  const uniqueDays = new Set(bookSessions.map(s => s.date)).size;
+  const daysDisplay = uniqueDays > 0 ? String(uniqueDays) : sessionCount > 0 ? '1' : '0';
 
   const isAlreadyFinished = !!book?.finishedAt;
 

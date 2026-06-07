@@ -75,8 +75,9 @@ router.post("/notes", async (req, res) => {
   if (!userId) return;
 
   const { bookTitle, bookAuthor, page, noteText } = req.body ?? {};
-  if (!bookTitle || page == null || !noteText?.trim()) {
-    res.status(400).json({ error: "bookTitle, page and noteText are required" });
+  const pageNum = parseInt(String(page ?? ""), 10);
+  if (!bookTitle || isNaN(pageNum) || pageNum < 0 || !noteText?.trim()) {
+    res.status(400).json({ error: "bookTitle, page (number) and noteText are required" });
     return;
   }
 
@@ -86,7 +87,7 @@ router.post("/notes", async (req, res) => {
     userId,
     bookTitle: String(bookTitle).trim(),
     bookAuthor: String(bookAuthor ?? "").trim(),
-    page: parseInt(page, 10),
+    page: pageNum,
     noteText: String(noteText).trim(),
   });
 

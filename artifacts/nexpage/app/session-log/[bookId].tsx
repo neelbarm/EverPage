@@ -138,9 +138,16 @@ export default function SessionLogScreen() {
 
         {isAuthenticated && (
           <View style={styles.noteSection}>
-            <Text style={[styles.notePrompt, { color: colors.foreground, fontFamily: 'Inter_600SemiBold' }]}>
-              Add a margin note
-            </Text>
+            <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'baseline' }}>
+              <Text style={[styles.notePrompt, { color: colors.foreground, fontFamily: 'Inter_600SemiBold' }]}>
+                Add a margin note
+              </Text>
+              {noteText.length > 0 && (
+                <Text style={[{ fontSize: 12, fontFamily: 'Inter_400Regular' }, { color: noteText.length > 270 ? colors.destructive : colors.mutedForeground }]}>
+                  {300 - noteText.length}
+                </Text>
+              )}
+            </View>
             <Text style={[styles.noteHint, { color: colors.mutedForeground, fontFamily: 'Inter_400Regular' }]}>
               Optional — friends see it once they reach p. {endPage}
             </Text>
