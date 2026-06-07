@@ -141,6 +141,22 @@ export default function LogScreen() {
   const showFreezeBanner = !hasReadToday && streak.freezesLeft > 0;
   const [bannerDismissed, setBannerDismissed] = useState(false);
 
+  const [freezeToastText, setFreezeToastText] = useState('');
+  const freezeToastOpacity = useRef(new Animated.Value(0)).current;
+  const freezeToastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  function showFreezeToast(remainingFreezes: number) {
+    const label = remainingFreezes === 1 ? 'freeze' : 'freezes';
+    setFreezeToastText(`Streak saved! ❄️ ${remainingFreezes} ${label} remaining`);
+    if (freezeToastTimer.current) clearTimeout(freezeToastTimer.current);
+    Animated.sequence([
+      Animated.timing(freezeToastOpacity, { toValue: 1, duration: 200, useNativeDriver: true }),
+      Animated.delay(1800),
+      Animated.timing(freezeToastOpacity, { toValue: 0, duration: 300, useNativeDriver: true }),
+    ]).start();
+    freezeToastTimer.current = setTimeout(() => setFreezeToastText(''), 2400);
+  }
+
   const [showModal, setShowModal] = useState(false);
 
   const [searchQuery, setSearchQuery] = useState('');
@@ -265,7 +281,12 @@ export default function LogScreen() {
 
       {showFreezeBanner && !bannerDismissed && (
         <FreezeBanner
-          onUse={() => { useStreakFreeze(); setBannerDismissed(true); }}
+          onUse={() => {
+            const remaining = streak.freezesLeft - 1;
+            useStreakFreeze();
+            setBannerDismissed(true);
+            showFreezeToast(remaining);
+          }}
           onDismiss={() => setBannerDismissed(true)}
         />
       )}
@@ -289,6 +310,17 @@ export default function LogScreen() {
           scrollEnabled={activeBooks.length > 0}
           showsVerticalScrollIndicator={false}
         />
+      )}
+
+      {freezeToastText.length > 0 && (
+        <Animated.View
+          style={[styles.freezeToast, { backgroundColor: colors.card, borderColor: colors.primary, opacity: freezeToastOpacity }]}
+          pointerEvents="none"
+        >
+          <Text style={[styles.freezeToastText, { color: colors.foreground, fontFamily: 'Inter_600SemiBold' }]}>
+            {freezeToastText}
+          </Text>
+        </Animated.View>
       )}
 
       <Modal
@@ -488,4 +520,19 @@ const styles = StyleSheet.create({
   genreText: { fontSize: 13 },
   submitBtn: { marginHorizontal: 20, marginTop: 32, paddingVertical: 16, borderRadius: 14, alignItems: 'center' },
   submitText: { fontSize: 16 },
+  freezeToast: {
+    position: 'absolute',
+    bottom: 28,
+    alignSelf: 'center',
+    paddingHorizontal: 20,
+    paddingVertical: 12,
+    borderRadius: 24,
+    borderWidth: 1.5,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.12,
+    shadowRadius: 8,
+    elevation: 6,
+  },
+  freezeToastText: { fontSize: 14, letterSpacing: -0.1 },
 });
