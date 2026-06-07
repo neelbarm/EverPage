@@ -1,10 +1,30 @@
-import express, { type Express } from "express";
+import express, { type Express, type Request } from "express";
 import cors from "cors";
+import cookieParser from "cookie-parser";
 import pinoHttp from "pino-http";
 import router from "./routes";
 import { logger } from "./lib/logger";
+import { authMiddleware } from "./middlewares/authMiddleware";
 
 const app: Express = express();
+
+function getAllowedOrigins(): Set<string> {
+  const origins = new Set<string>();
+  // Replit dev domain (development)
+  if (process.env.REPLIT_DEV_DOMAIN) {
+    origins.add(`https://${process.env.REPLIT_DEV_DOMAIN}`);
+  }
+  // Replit deployment domains (production) — comma-separated
+  if (process.env.REPLIT_DOMAINS) {
+    for (const d of process.env.REPLIT_DOMAINS.split(",")) {
+      const host = d.trim();
+      if (host) origins.add(`https://${host}`);
+    }
+  }
+  return origins;
+}
+
+const allowedOrigins = getAllowedOrigins();
 
 app.use(
   pinoHttp({
@@ -25,9 +45,29 @@ app.use(
     },
   }),
 );
-app.use(cors());
+
+app.use(
+  cors({
+    credentials: true,
+    origin(requestOrigin: string | undefined, callback: (err: Error | null, allow?: boolean) => void) {
+      // Allow same-origin requests (no Origin header) and pre-flight without origin
+      if (!requestOrigin) {
+        callback(null, true);
+        return;
+      }
+      if (allowedOrigins.has(requestOrigin)) {
+        callback(null, true);
+      } else {
+        callback(new Error(`CORS: origin not allowed — ${requestOrigin}`));
+      }
+    },
+  }),
+);
+
+app.use(cookieParser());
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
+app.use(authMiddleware);
 
 app.use("/api", router);
 

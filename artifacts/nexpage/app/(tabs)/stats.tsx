@@ -1,10 +1,12 @@
 import React, { useState } from 'react';
-import { View, Text, ScrollView, TouchableOpacity, StyleSheet, Platform } from 'react-native';
+import { View, Text, ScrollView, TouchableOpacity, StyleSheet, Platform, ActivityIndicator } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
 import { useColors } from '@/hooks/useColors';
 import { useStore } from '@/context/StoreContext';
+import { useSocial, LeaderboardEntry } from '@/context/SocialContext';
+import RegisterModal from '@/components/RegisterModal';
 
 function StreakDot({ checked, day }: { checked: boolean; day: string }) {
   const colors = useColors();
@@ -41,11 +43,49 @@ function WeeklyBarItem({ value, maxValue, day, isToday }: { value: number; maxVa
   );
 }
 
+function AvatarCircle({ initial, color, size = 40 }: { initial: string; color: string; size?: number }) {
+  return (
+    <View style={{ width: size, height: size, borderRadius: size / 2, backgroundColor: color, alignItems: 'center', justifyContent: 'center' }}>
+      <Text style={{ color: '#fff', fontSize: size * 0.38, fontFamily: 'Inter_700Bold' }}>{initial}</Text>
+    </View>
+  );
+}
+
+function LeaderRow({ entry, rank }: { entry: LeaderboardEntry; rank: number }) {
+  const colors = useColors();
+  const { unfollowUser } = useSocial();
+  return (
+    <View style={[styles.leaderRow, { borderBottomColor: colors.border }]}>
+      <Text style={[styles.rank, { color: colors.mutedForeground, fontFamily: 'Inter_700Bold' }]}>{rank}</Text>
+      <AvatarCircle initial={entry.initial} color={entry.color} />
+      <View style={{ flex: 1, gap: 2 }}>
+        <Text style={[styles.leaderName, { color: colors.foreground, fontFamily: 'Inter_600SemiBold' }]}>{entry.displayName}</Text>
+        <Text style={[styles.leaderMeta, { color: colors.mutedForeground, fontFamily: 'Inter_400Regular' }]}>
+          {entry.todayMinutes} min · {entry.todayPages} pages today
+        </Text>
+      </View>
+      <Text style={[styles.leaderMin, { color: colors.primary, fontFamily: 'Inter_700Bold' }]}>{entry.weekMinutes}m</Text>
+    </View>
+  );
+}
+
 export default function StatsScreen() {
   const colors = useColors();
   const insets = useSafeAreaInsets();
-  const { streak, profile, friends, recommendedBooks, suggestedFriends } = useStore();
+  const { streak, profile, recommendedBooks } = useStore();
+  const {
+    isRegistered,
+    leaderboard,
+    suggestedUsers,
+    followUser,
+    unfollowUser,
+    isFollowing,
+    isLoading,
+    refreshFeed,
+  } = useSocial();
   const [view, setView] = useState<'streaks' | 'discover'>('streaks');
+  const [showRegister, setShowRegister] = useState(false);
+  const [followingId, setFollowingId] = useState<string | null>(null);
   const topPad = insets.top + (Platform.OS === 'web' ? 67 : 0);
 
   const DAYS = ['M', 'T', 'W', 'T', 'F', 'S', 'S'];
@@ -64,7 +104,22 @@ export default function StatsScreen() {
   const weekH = Math.floor(totalWeekMin / 60);
   const weekM = totalWeekMin % 60;
   const maxMin = Math.max(...profile.weeklyMinutes, 1);
-  const nudgeFriend = friends.find(f => f.todayMinutes > (profile.weeklyMinutes[todayIdx] ?? 0));
+
+  const nudgeFriend = leaderboard.find(e => e.todayMinutes > (profile.weeklyMinutes[todayIdx] ?? 0));
+
+  async function handleFollowToggle(userId: string) {
+    setFollowingId(userId);
+    try {
+      if (isFollowing(userId)) {
+        await unfollowUser(userId);
+      } else {
+        await followUser(userId);
+        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+      }
+    } finally {
+      setFollowingId(null);
+    }
+  }
 
   return (
     <View style={[styles.root, { backgroundColor: colors.background }]}>
@@ -132,7 +187,7 @@ export default function StatsScreen() {
                   <Text style={[styles.nudgeInitial, { color: '#fff', fontFamily: 'Inter_700Bold' }]}>{nudgeFriend.initial}</Text>
                 </View>
                 <Text style={[styles.nudgeText, { color: colors.foreground, fontFamily: 'Inter_400Regular' }]}>
-                  <Text style={{ fontFamily: 'Inter_600SemiBold' }}>{nudgeFriend.name}</Text> read {nudgeFriend.todayMinutes} min today. Catch up?
+                  <Text style={{ fontFamily: 'Inter_600SemiBold' }}>{nudgeFriend.displayName}</Text> read {nudgeFriend.todayMinutes} min today. Catch up?
                 </Text>
               </View>
             )}
@@ -195,33 +250,78 @@ export default function StatsScreen() {
               ))}
             </ScrollView>
 
-            <Text style={[styles.sectionTitle, { color: colors.mutedForeground, fontFamily: 'Inter_600SemiBold', marginTop: 8 }]}>SUGGESTED FRIENDS</Text>
-            {suggestedFriends.map((sf, i, arr) => (
-              <View
-                key={sf.id}
-                style={[styles.sfRow, { borderBottomColor: colors.border, borderBottomWidth: i < arr.length - 1 ? StyleSheet.hairlineWidth : 0 }]}
-              >
-                <View style={[styles.sfAvatar, { backgroundColor: sf.color }]}>
-                  <Text style={[styles.sfInitial, { color: '#fff', fontFamily: 'Inter_700Bold' }]}>{sf.initial}</Text>
+            {leaderboard.length > 0 && (
+              <>
+                <Text style={[styles.sectionTitle, { color: colors.mutedForeground, fontFamily: 'Inter_600SemiBold', marginTop: 8 }]}>FRIENDS · THIS WEEK</Text>
+                <View style={[styles.card, { backgroundColor: colors.card, borderColor: colors.border, padding: 0, overflow: 'hidden' }]}>
+                  {leaderboard.map((entry, i) => (
+                    <LeaderRow key={entry.userId} entry={entry} rank={i + 1} />
+                  ))}
                 </View>
-                <View style={{ flex: 1, gap: 2 }}>
-                  <Text style={[styles.sfName, { color: colors.foreground, fontFamily: 'Inter_600SemiBold' }]}>{sf.name}</Text>
-                  <Text style={[styles.sfMeta, { color: colors.mutedForeground, fontFamily: 'Inter_400Regular' }]}>
-                    {sf.mutualCount} mutual · loves {sf.genre}
-                  </Text>
-                </View>
+              </>
+            )}
+
+            <Text style={[styles.sectionTitle, { color: colors.mutedForeground, fontFamily: 'Inter_600SemiBold', marginTop: 8 }]}>
+              {isRegistered ? 'SUGGESTED READERS' : 'JOIN THE COMMUNITY'}
+            </Text>
+
+            {!isRegistered ? (
+              <View style={[styles.card, { backgroundColor: colors.card, borderColor: colors.border, alignItems: 'center', gap: 12 }]}>
+                <Ionicons name="people-outline" size={36} color={colors.mutedForeground} />
+                <Text style={[styles.joinText, { color: colors.mutedForeground, fontFamily: 'Inter_400Regular' }]}>
+                  Create a profile to follow friends and see who's reading what.
+                </Text>
                 <TouchableOpacity
-                  style={[styles.addBtn, { borderColor: colors.primary }]}
-                  onPress={() => Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light)}
-                  activeOpacity={0.8}
+                  style={[styles.joinBtn, { backgroundColor: colors.primary }]}
+                  onPress={() => setShowRegister(true)}
+                  activeOpacity={0.85}
                 >
-                  <Text style={[styles.addBtnText, { color: colors.primary, fontFamily: 'Inter_600SemiBold' }]}>Add</Text>
+                  <Text style={[styles.joinBtnText, { color: colors.primaryForeground, fontFamily: 'Inter_600SemiBold' }]}>Create Profile</Text>
                 </TouchableOpacity>
               </View>
-            ))}
+            ) : isLoading && suggestedUsers.length === 0 ? (
+              <ActivityIndicator color={colors.primary} style={{ marginTop: 12 }} />
+            ) : suggestedUsers.length === 0 ? (
+              <Text style={[styles.emptyHint, { color: colors.mutedForeground, fontFamily: 'Inter_400Regular' }]}>
+                No suggested readers right now — invite friends to join!
+              </Text>
+            ) : (
+              suggestedUsers.map((user, i, arr) => (
+                <View
+                  key={user.id}
+                  style={[styles.sfRow, { borderBottomColor: colors.border, borderBottomWidth: i < arr.length - 1 ? StyleSheet.hairlineWidth : 0 }]}
+                >
+                  <AvatarCircle initial={user.initial} color={user.color} size={44} />
+                  <View style={{ flex: 1, gap: 2 }}>
+                    <Text style={[styles.sfName, { color: colors.foreground, fontFamily: 'Inter_600SemiBold' }]}>{user.displayName}</Text>
+                    <Text style={[styles.sfMeta, { color: colors.mutedForeground, fontFamily: 'Inter_400Regular' }]}>@{user.username}</Text>
+                  </View>
+                  <TouchableOpacity
+                    style={[
+                      styles.addBtn,
+                      isFollowing(user.id)
+                        ? { borderColor: colors.border }
+                        : { borderColor: colors.primary },
+                    ]}
+                    onPress={() => handleFollowToggle(user.id)}
+                    disabled={followingId === user.id}
+                    activeOpacity={0.8}
+                  >
+                    {followingId === user.id
+                      ? <ActivityIndicator size="small" color={colors.primary} />
+                      : <Text style={[styles.addBtnText, { color: isFollowing(user.id) ? colors.mutedForeground : colors.primary, fontFamily: 'Inter_600SemiBold' }]}>
+                          {isFollowing(user.id) ? 'Following' : 'Follow'}
+                        </Text>
+                    }
+                  </TouchableOpacity>
+                </View>
+              ))
+            )}
           </>
         )}
       </ScrollView>
+
+      <RegisterModal visible={showRegister} onClose={() => setShowRegister(false)} />
     </View>
   );
 }
@@ -265,11 +365,18 @@ const styles = StyleSheet.create({
   recAuthor: { fontSize: 12 },
   recReason: { fontSize: 11 },
   recFriends: { fontSize: 11 },
+  leaderRow: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 14, gap: 12, borderBottomWidth: StyleSheet.hairlineWidth },
+  rank: { fontSize: 14, minWidth: 20, textAlign: 'center' },
+  leaderName: { fontSize: 15, letterSpacing: -0.2 },
+  leaderMeta: { fontSize: 12 },
+  leaderMin: { fontSize: 16, letterSpacing: -0.5 },
   sfRow: { flexDirection: 'row', alignItems: 'center', paddingVertical: 14, gap: 12 },
-  sfAvatar: { width: 44, height: 44, borderRadius: 22, alignItems: 'center', justifyContent: 'center' },
-  sfInitial: { fontSize: 17 },
   sfName: { fontSize: 15 },
   sfMeta: { fontSize: 13 },
-  addBtn: { paddingHorizontal: 16, paddingVertical: 7, borderRadius: 20, borderWidth: 1.5 },
+  addBtn: { paddingHorizontal: 14, paddingVertical: 7, borderRadius: 20, borderWidth: 1.5, minWidth: 88, alignItems: 'center' },
   addBtnText: { fontSize: 14 },
+  joinText: { fontSize: 14, textAlign: 'center', lineHeight: 20 },
+  joinBtn: { paddingHorizontal: 24, paddingVertical: 10, borderRadius: 20 },
+  joinBtnText: { fontSize: 14 },
+  emptyHint: { fontSize: 14, textAlign: 'center', marginTop: 4, marginBottom: 8 },
 });

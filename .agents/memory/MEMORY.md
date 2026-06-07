@@ -1,0 +1,2 @@
+- [lib/db rebuild pattern](lib-db-rebuild.md) — after schema changes, `tsc --build --force` is required; `--build` alone reuses stale cache
+- [Replit Auth mobile OIDC wiring](replit-auth-mobile.md) — PKCE flow in expo-auth-session → /api/mobile-auth/token-exchange → SecureStore → Bearer header pattern

@@ -5,6 +5,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import * as Haptics from 'expo-haptics';
 import { useColors } from '@/hooks/useColors';
 import { useStore } from '@/context/StoreContext';
+import { useSocial } from '@/context/SocialContext';
 import { BookCover } from '@/components/BookCover';
 
 export default function SessionLogScreen() {
@@ -13,6 +14,7 @@ export default function SessionLogScreen() {
   const router = useRouter();
   const { bookId, minutes, startPage } = useLocalSearchParams<{ bookId: string; minutes: string; startPage: string }>();
   const { getBook, logSession } = useStore();
+  const { postActivity } = useSocial();
   const book = getBook(bookId ?? '');
 
   const durationMin = Math.max(1, parseInt(minutes ?? '1', 10));
@@ -33,6 +35,7 @@ export default function SessionLogScreen() {
     if (!book) return;
     Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     await logSession(book.id, durationMin, startPg, endPage);
+    postActivity(book.title, book.author, durationMin, pagesRead).catch(() => {});
     const finished = endPage >= book.totalPages;
     if (finished) {
       router.replace({ pathname: '/finish/[bookId]', params: { bookId: book.id } });

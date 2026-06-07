@@ -1,4 +1,4 @@
-modules = ["nodejs-24"]
+modules = ["nodejs-24", "postgresql-16"]
 
 [deployment]
 router = "application"
@@ -30,3 +30,12 @@ externalPort = 8081
 [[ports]]
 localPort = 20664
 externalPort = 3000
+
+[nix]
+channel = "stable-25_05"
+
+[userenv]
+
+[userenv.shared]
+EXPO_PUBLIC_DOMAIN = "6250ba60-3218-4577-8acf-d321838c4c81-00-30mlswkcamw7y-pidvzkt2.picard.replit.dev"
+EXPO_PUBLIC_REPL_ID = "6250ba60-3218-4577-8acf-d321838c4c81:pidvzkt2"
