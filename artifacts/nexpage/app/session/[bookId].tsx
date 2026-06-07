@@ -55,8 +55,8 @@ export default function SessionScreen() {
 
   if (!book) {
     return (
-      <View style={[styles.root, { backgroundColor: '#0F0D0A', justifyContent: 'center', alignItems: 'center' }]}>
-        <Text style={{ color: '#fff', fontFamily: 'Inter_400Regular' }}>Book not found</Text>
+      <View style={[styles.root, { backgroundColor: '#180e09', justifyContent: 'center', alignItems: 'center' }]}>
+        <Text style={{ color: '#f2e9db', fontFamily: 'Inter_400Regular' }}>Book not found</Text>
       </View>
     );
   }
@@ -64,33 +64,33 @@ export default function SessionScreen() {
   const closeBtnTop = insets.top + (Platform.OS === 'web' ? 67 : 12);
 
   return (
-    <View style={[styles.root, { backgroundColor: '#0F0D0A' }]}>
+    <View style={[styles.root, { backgroundColor: '#180e09' }]}>
       <TouchableOpacity
         style={[styles.closeBtn, { top: closeBtnTop }]}
         onPress={() => router.back()}
         activeOpacity={0.7}
       >
-        <Ionicons name="close" size={24} color="rgba(255,255,255,0.55)" />
+        <Ionicons name="close" size={24} color="rgba(242,233,219,0.55)" />
       </TouchableOpacity>
 
       <View style={[styles.top, { paddingTop: closeBtnTop + 40 }]}>
-        <Text style={[styles.nowLabel, { color: 'rgba(255,255,255,0.38)', fontFamily: 'Inter_600SemiBold' }]}>
+        <Text style={[styles.nowLabel, { color: 'rgba(242,233,219,0.38)', fontFamily: 'Inter_600SemiBold' }]}>
           NOW READING
         </Text>
         <BookCover bookId={book.id} coverColor={book.coverColor} width={72} height={106} borderRadius={8} />
-        <Text style={[styles.bookTitle, { color: '#fff', fontFamily: 'Inter_700Bold' }]} numberOfLines={2}>
+        <Text style={[styles.bookTitle, { color: '#f2e9db', fontFamily: 'Inter_700Bold' }]} numberOfLines={2}>
           {book.title}
         </Text>
-        <Text style={[styles.bookAuthor, { color: 'rgba(255,255,255,0.45)', fontFamily: 'Inter_400Regular' }]}>
+        <Text style={[styles.bookAuthor, { color: 'rgba(242,233,219,0.45)', fontFamily: 'Inter_400Regular' }]}>
           {book.author}
         </Text>
       </View>
 
       <View style={styles.timerSection}>
-        <Text style={[styles.timerDisplay, { color: '#fff', fontFamily: 'Inter_700Bold' }]}>{display}</Text>
+        <Text style={[styles.timerDisplay, { color: '#f2e9db', fontFamily: 'Inter_700Bold' }]}>{display}</Text>
         <View style={styles.liveRow}>
-          {isRunning && <View style={[styles.liveDot, { backgroundColor: '#E85C3A' }]} />}
-          <Text style={[styles.liveLabel, { color: 'rgba(255,255,255,0.4)', fontFamily: 'Inter_500Medium' }]}>
+          {isRunning && <View style={[styles.liveDot, { backgroundColor: '#8a2333' }]} />}
+          <Text style={[styles.liveLabel, { color: 'rgba(242,233,219,0.4)', fontFamily: 'Inter_500Medium' }]}>
             {isRunning ? 'SESSION LIVE' : 'PAUSED'}
           </Text>
         </View>
@@ -98,10 +98,10 @@ export default function SessionScreen() {
 
       <View style={[styles.controls, { paddingBottom: insets.bottom + (Platform.OS === 'web' ? 34 : 20) }]}>
         <TouchableOpacity style={styles.pauseBtn} onPress={handleTogglePause} activeOpacity={0.75}>
-          <Ionicons name={isRunning ? 'pause' : 'play'} size={24} color="rgba(255,255,255,0.6)" />
+          <Ionicons name={isRunning ? 'pause' : 'play'} size={24} color="rgba(242,233,219,0.6)" />
         </TouchableOpacity>
         <TouchableOpacity style={styles.stopBtn} onPress={handleStop} activeOpacity={0.88}>
-          <Text style={[styles.stopText, { color: '#0F0D0A', fontFamily: 'Inter_700Bold' }]}>Stop</Text>
+          <Text style={[styles.stopText, { color: '#180e09', fontFamily: 'Inter_700Bold' }]}>Stop</Text>
         </TouchableOpacity>
         <View style={{ width: 52 }} />
       </View>
@@ -128,7 +128,7 @@ const styles = StyleSheet.create({
   pauseBtn: { width: 52, height: 52, alignItems: 'center', justifyContent: 'center' },
   stopBtn: {
     flex: 1, paddingVertical: 18, borderRadius: 16,
-    alignItems: 'center', backgroundColor: '#FFFFFF',
+    alignItems: 'center', backgroundColor: '#f2e9db',
   },
   stopText: { fontSize: 17 },
 });
