@@ -1,0 +1,38 @@
+uploads = []
+outputs = []
+
+[[generated]]
+id = "KlJssFpXNJiERLK2hA_rc"
+uri = "file://artifacts/nexpage/assets/images/icon.png"
+type = "image"
+title = "nexpage app icon"
+
+[[generated]]
+id = "LiRi-BUwcHQJiTL31J9Su"
+uri = "file://artifacts/nexpage/assets/images/cover_klara.png"
+type = "image"
+title = "klara book cover"
+
+[[generated]]
+id = "8XuBJSOaaHDmn9XV9pGgC"
+uri = "file://artifacts/nexpage/assets/images/cover_pachinko.png"
+type = "image"
+title = "pachinko book cover"
+
+[[generated]]
+id = "eJeE5Zi7kQFDypIdmU2mQ"
+uri = "file://artifacts/nexpage/assets/images/cover_overstory.png"
+type = "image"
+title = "overstory book cover"
+
+[[generated]]
+id = "7CR9TMhec8kVZeSo2LjYp"
+uri = "file://artifacts/nexpage/assets/images/cover_demon.png"
+type = "image"
+title = "demon copperhead cover"
+
+[[generated]]
+id = "MIdl08gxOdlEYVBTDc81_"
+uri = "file://artifacts/nexpage/assets/images/cover_educated.png"
+type = "image"
+title = "educated book cover"
