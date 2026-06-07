@@ -190,6 +190,11 @@ export default function RoomScreen() {
               {room.bookAuthor}
             </Text>
           ) : null}
+          {room.weeklyTargetPages > 0 ? (
+            <Text style={[styles.weeklyTarget, { color: colors.accent, fontFamily: 'Inter_600SemiBold' }]}>
+              {room.weeklyTargetPages} pages / week
+            </Text>
+          ) : null}
         </View>
         <View style={[styles.memberCount, { backgroundColor: colors.muted }]}>
           <Text style={[styles.memberCountText, { color: colors.mutedForeground, fontFamily: 'Inter_600SemiBold' }]}>
@@ -368,6 +373,7 @@ const styles = StyleSheet.create({
   roomCode: { fontSize: 11, letterSpacing: 1.5 },
   bookTitle: { fontSize: 17, letterSpacing: -0.3 },
   bookAuthor: { fontSize: 13 },
+  weeklyTarget: { fontSize: 12, letterSpacing: 0.2, marginTop: 2 },
   memberCount: { flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 10, paddingVertical: 5, borderRadius: 12 },
   memberCountText: { fontSize: 13 },
   joinBanner: {

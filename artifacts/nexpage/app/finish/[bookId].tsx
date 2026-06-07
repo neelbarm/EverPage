@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { Animated, View, Text, ScrollView, TouchableOpacity, StyleSheet, Platform } from 'react-native';
+import { Animated, View, Text, ScrollView, TouchableOpacity, StyleSheet, Platform, TextInput } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -46,6 +46,7 @@ export default function FinishScreen() {
   const uniqueDays = new Set(bookSessions.map(s => s.date)).size;
   const daysDisplay = uniqueDays > 0 ? String(uniqueDays) : sessionCount > 0 ? '1' : '0';
 
+  const [quote, setQuote] = useState(book?.favoriteQuote ?? '');
   const isAlreadyFinished = !!book?.finishedAt;
 
   const today = new Date().toISOString().split('T')[0];
@@ -55,7 +56,7 @@ export default function FinishScreen() {
 
   function handleConfirmFinish() {
     if (!book || isAlreadyFinished) return;
-    finishBook(book.id);
+    finishBook(book.id, quote.trim() || undefined);
     Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
   }
 
@@ -181,6 +182,24 @@ export default function FinishScreen() {
           </View>
         )}
 
+        {/* Favorite quote input */}
+        {!isAlreadyFinished && (
+          <View style={[styles.quoteInputCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
+            <Text style={[styles.quoteInputLabel, { color: colors.mutedForeground, fontFamily: 'Inter_600SemiBold' }]}>
+              FAVORITE LINE
+            </Text>
+            <TextInput
+              style={[styles.quoteInput, { color: colors.foreground, borderColor: colors.border, fontFamily: 'Inter_400Regular' }]}
+              placeholder="Add a line that stayed with you…"
+              placeholderTextColor={colors.mutedForeground}
+              value={quote}
+              onChangeText={setQuote}
+              multiline
+              maxLength={200}
+            />
+          </View>
+        )}
+
         {/* Confirm finish */}
         {!isAlreadyFinished && (
           <TouchableOpacity
@@ -227,6 +246,9 @@ const styles = StyleSheet.create({
   statVal: { fontSize: 16, letterSpacing: -0.3 },
   statLbl: { fontSize: 11 },
   quote: { fontSize: 13, lineHeight: 19, fontStyle: 'italic', borderLeftWidth: 2, paddingLeft: 10, marginTop: 4 },
+  quoteInputCard: { borderRadius: 14, borderWidth: 1, padding: 16, gap: 10 },
+  quoteInputLabel: { fontSize: 11, letterSpacing: 1.5 },
+  quoteInput: { fontSize: 14, lineHeight: 21, borderWidth: 1, borderRadius: 10, padding: 12, minHeight: 72 },
   streakCard: {
     borderRadius: 16, padding: 22,
     flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
