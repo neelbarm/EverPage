@@ -108,6 +108,7 @@ interface StoreContextType {
   updateBook: (id: string, updates: Partial<Pick<Book, 'title' | 'author' | 'totalPages' | 'genre' | 'coverImageUri'>>) => void;
   getBook: (id: string) => Book | undefined;
   setReminder: (settings: ReminderSettings) => Promise<void>;
+  setDailyGoal: (minutes: number) => Promise<void>;
 }
 
 const StoreContext = createContext<StoreContextType | null>(null);
@@ -455,6 +456,13 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
     await persist(books, sessions, streak, profile, settings);
   }
 
+  async function setDailyGoal(minutes: number) {
+    const newStreak = { ...streak, dailyGoalMinutes: minutes };
+    setStreak(newStreak);
+    await persist(books, sessions, newStreak, profile, reminder);
+    syncStreakToCloud(newStreak);
+  }
+
   async function logSession(bookId: string, durationMinutes: number, startPage: number, endPage: number) {
     const session: ReadingSession = {
       id: generateId(),
@@ -569,7 +577,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
       recommendedBooks: RECOMMENDED,
       suggestedFriends: SUGGESTED,
       isLoaded,
-      logSession, finishBook, useStreakFreeze, addBook, updateBook, getBook, setReminder,
+      logSession, finishBook, useStreakFreeze, addBook, updateBook, getBook, setReminder, setDailyGoal,
     }}>
       {children}
     </StoreContext.Provider>

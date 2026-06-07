@@ -178,13 +178,99 @@ function ReminderModal({
   );
 }
 
+function DailyGoalModal({
+  visible,
+  initialMinutes,
+  onSave,
+  onClose,
+}: {
+  visible: boolean;
+  initialMinutes: number;
+  onSave: (minutes: number) => void;
+  onClose: () => void;
+}) {
+  const colors = useColors();
+  const insets = useSafeAreaInsets();
+  const [selected, setSelected] = useState(initialMinutes);
+
+  const options = [10, 15, 20, 30, 45, 60, 90, 120];
+
+  return (
+    <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
+      <View style={styles.modalOverlay}>
+        <View
+          style={[
+            styles.modalSheet,
+            { backgroundColor: colors.card, paddingBottom: insets.bottom + 16 },
+          ]}
+        >
+          <View style={[styles.modalHandle, { backgroundColor: colors.border }]} />
+          <Text style={[styles.modalTitle, { color: colors.foreground, fontFamily: 'Inter_700Bold' }]}>
+            Daily Reading Goal
+          </Text>
+
+          <Text style={[styles.pickerLabel, { color: colors.mutedForeground, fontFamily: 'Inter_600SemiBold' }]}>
+            MINUTES PER DAY
+          </Text>
+          <View style={styles.minuteRow}>
+            {options.map(m => (
+              <TouchableOpacity
+                key={m}
+                onPress={() => setSelected(m)}
+                style={[
+                  styles.minuteChip,
+                  {
+                    backgroundColor: m === selected ? colors.primary : colors.muted,
+                    borderColor: m === selected ? colors.primary : colors.border,
+                  },
+                ]}
+                activeOpacity={0.7}
+              >
+                <Text
+                  style={[
+                    styles.minuteChipText,
+                    {
+                      color: m === selected ? '#fff' : colors.foreground,
+                      fontFamily: 'Inter_500Medium',
+                    },
+                  ]}
+                >
+                  {m} min
+                </Text>
+              </TouchableOpacity>
+            ))}
+          </View>
+
+          <View style={[styles.previewRow, { backgroundColor: colors.muted, borderRadius: 12 }]}>
+            <Feather name="target" size={16} color={colors.primary} />
+            <Text style={[styles.previewText, { color: colors.mutedForeground, fontFamily: 'Inter_400Regular' }]}>
+              {`Read ${selected} minutes a day to keep your streak alive.`}
+            </Text>
+          </View>
+
+          <TouchableOpacity
+            style={[styles.saveBtn, { backgroundColor: colors.primary }]}
+            onPress={() => onSave(selected)}
+            activeOpacity={0.8}
+          >
+            <Text style={[styles.saveBtnText, { fontFamily: 'Inter_600SemiBold' }]}>
+              Save
+            </Text>
+          </TouchableOpacity>
+        </View>
+      </View>
+    </Modal>
+  );
+}
+
 export default function YouScreen() {
   const colors = useColors();
   const insets = useSafeAreaInsets();
-  const { profile, streak, reminder, setReminder } = useStore();
+  const { profile, streak, reminder, setReminder, setDailyGoal } = useStore();
   const { socialProfile, setNudgesEnabled, isRegistered } = useSocial();
   const topPad = insets.top + (Platform.OS === 'web' ? 67 : 0);
   const [showReminderModal, setShowReminderModal] = useState(false);
+  const [showGoalModal, setShowGoalModal] = useState(false);
   const [togglingNudges, setTogglingNudges] = useState(false);
 
   const totalHours = Math.floor(profile.totalMinutes / 60);
@@ -226,7 +312,7 @@ export default function YouScreen() {
       icon: 'target' as const,
       label: 'Daily reading goal',
       value: `${streak.dailyGoalMinutes} min`,
-      onPress: undefined as (() => void) | undefined,
+      onPress: () => setShowGoalModal(true),
     },
     {
       icon: 'bell' as const,
@@ -369,6 +455,16 @@ export default function YouScreen() {
         streakDays={streak.currentStreak}
         onSave={handleSaveReminder}
         onClose={() => setShowReminderModal(false)}
+      />
+
+      <DailyGoalModal
+        visible={showGoalModal}
+        initialMinutes={streak.dailyGoalMinutes}
+        onSave={async (minutes) => {
+          await setDailyGoal(minutes);
+          setShowGoalModal(false);
+        }}
+        onClose={() => setShowGoalModal(false)}
       />
     </View>
   );
