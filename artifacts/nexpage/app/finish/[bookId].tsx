@@ -1,5 +1,5 @@
-import React from 'react';
-import { View, Text, ScrollView, TouchableOpacity, StyleSheet, Platform } from 'react-native';
+import React, { useEffect, useRef, useState } from 'react';
+import { Animated, View, Text, ScrollView, TouchableOpacity, StyleSheet, Platform } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -13,8 +13,30 @@ export default function FinishScreen() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
   const { bookId } = useLocalSearchParams<{ bookId: string }>();
-  const { getBook, finishBook, useStreakFreeze, streak, sessions, books } = useStore();
+  const { getBook, finishBook, useStreakFreeze, streak, sessions, books, pendingFreezeEarned, clearPendingFreezeEarned } = useStore();
   const book = getBook(bookId ?? '');
+
+  const toastOpacity = useRef(new Animated.Value(0)).current;
+  const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [showToast, setShowToast] = useState(false);
+
+  useEffect(() => {
+    if (!pendingFreezeEarned) return;
+    clearPendingFreezeEarned();
+    setShowToast(true);
+    if (toastTimer.current) clearTimeout(toastTimer.current);
+    const anim = Animated.sequence([
+      Animated.timing(toastOpacity, { toValue: 1, duration: 220, useNativeDriver: true }),
+      Animated.delay(2200),
+      Animated.timing(toastOpacity, { toValue: 0, duration: 300, useNativeDriver: true }),
+    ]);
+    anim.start();
+    toastTimer.current = setTimeout(() => setShowToast(false), 2720);
+    return () => {
+      anim.stop();
+      if (toastTimer.current) clearTimeout(toastTimer.current);
+    };
+  }, [pendingFreezeEarned]);
 
   const bookSessions = sessions.filter(s => s.bookId === bookId);
   const totalMin = bookSessions.reduce((a, s) => a + s.durationMinutes, 0);
@@ -47,6 +69,16 @@ export default function FinishScreen() {
 
   return (
     <View style={[styles.root, { backgroundColor: colors.background }]}>
+      {showToast && (
+        <Animated.View
+          style={[styles.freezeToast, { backgroundColor: colors.card, borderColor: colors.primary, opacity: toastOpacity }]}
+          pointerEvents="none"
+        >
+          <Text style={[styles.freezeToastText, { color: colors.foreground, fontFamily: 'Inter_600SemiBold' }]}>
+            ❄️ You earned a streak freeze! ({streak.freezesLeft} left)
+          </Text>
+        </Animated.View>
+      )}
       <TouchableOpacity
         style={[styles.closeBtn, { top: closeBtnTop }]}
         onPress={() => router.replace('/(tabs)')}
@@ -216,4 +248,22 @@ const styles = StyleSheet.create({
   alreadyFinished: { flexDirection: 'row', alignItems: 'center', gap: 8, padding: 14, borderRadius: 12, justifyContent: 'center' },
   alreadyText: { fontSize: 15 },
   backText: { fontSize: 14, textAlign: 'center' },
+  freezeToast: {
+    position: 'absolute',
+    bottom: 40,
+    left: 20,
+    right: 20,
+    zIndex: 20,
+    borderRadius: 14,
+    borderWidth: 1.5,
+    paddingVertical: 14,
+    paddingHorizontal: 18,
+    alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.12,
+    shadowRadius: 12,
+    elevation: 6,
+  },
+  freezeToastText: { fontSize: 15, letterSpacing: -0.1 },
 });

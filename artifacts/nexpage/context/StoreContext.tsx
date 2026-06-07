@@ -97,6 +97,8 @@ export interface SuggestedFriend {
   genre: string;
 }
 
+const MAX_FREEZES = 3;
+
 interface StoreContextType {
   books: Book[];
   sessions: ReadingSession[];
@@ -107,6 +109,8 @@ interface StoreContextType {
   recommendedBooks: RecommendedBook[];
   suggestedFriends: SuggestedFriend[];
   isLoaded: boolean;
+  pendingFreezeEarned: boolean;
+  clearPendingFreezeEarned: () => void;
   logSession: (bookId: string, durationMinutes: number, startPage: number, endPage: number) => Promise<void>;
   finishBook: (bookId: string, favoriteQuote?: string) => void;
   useStreakFreeze: () => void;
@@ -349,7 +353,12 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
   const [profile, setProfile] = useState<UserProfile>(INITIAL_PROFILE);
   const [reminder, setReminderState] = useState<ReminderSettings>(DEFAULT_REMINDER);
   const [isLoaded, setIsLoaded] = useState(false);
+  const [pendingFreezeEarned, setPendingFreezeEarned] = useState(false);
   const cloudSyncedRef = useRef(false);
+
+  function clearPendingFreezeEarned() {
+    setPendingFreezeEarned(false);
+  }
 
   useEffect(() => {
     (async () => {
@@ -501,10 +510,12 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
       b.id === bookId ? { ...b, currentPage: Math.min(endPage, b.totalPages) } : b
     );
     const newStreak = { ...streak, todayMinutes: streak.todayMinutes + durationMinutes };
+    let earnedFreeze = false;
     if (!newStreak.checkedDays.includes(todayStr())) {
       const yesterday = new Date();
       yesterday.setDate(yesterday.getDate() - 1);
       const yStr = yesterday.toISOString().split('T')[0];
+      const previousStreak = newStreak.currentStreak;
       if (newStreak.lastReadDate === yStr || newStreak.lastReadDate === todayStr()) {
         if (newStreak.lastReadDate !== todayStr()) newStreak.currentStreak += 1;
       } else {
@@ -512,6 +523,14 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
       }
       newStreak.checkedDays = [...newStreak.checkedDays, todayStr()];
       newStreak.lastReadDate = todayStr();
+      if (
+        newStreak.currentStreak > previousStreak &&
+        newStreak.currentStreak % 7 === 0 &&
+        newStreak.freezesLeft < MAX_FREEZES
+      ) {
+        newStreak.freezesLeft = Math.min(newStreak.freezesLeft + 1, MAX_FREEZES);
+        earnedFreeze = true;
+      }
     }
     const dayIdx = new Date().getDay() === 0 ? 6 : new Date().getDay() - 1;
     const newWeekly = [...profile.weeklyMinutes];
@@ -528,6 +547,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
     setBooks(newBooks);
     setStreak(newStreak);
     setProfile(newProfile);
+    if (earnedFreeze) setPendingFreezeEarned(true);
     await persist(newBooks, newSessions, newStreak, newProfile, reminder);
     const updatedBook = newBooks.find(b => b.id === bookId);
     if (updatedBook) syncBooksToCloud([updatedBook]);
@@ -542,11 +562,19 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
       b.id === bookId ? { ...b, finishedAt: Date.now(), favoriteQuote: favoriteQuote ?? b.favoriteQuote } : b
     );
     const newProfile = { ...profile, booksFinished: profile.booksFinished + 1 };
+    const newStreak: StreakData =
+      streak.freezesLeft < MAX_FREEZES
+        ? { ...streak, freezesLeft: Math.min(streak.freezesLeft + 1, MAX_FREEZES) }
+        : streak;
+    const earnedFreeze = newStreak.freezesLeft > streak.freezesLeft;
     setBooks(newBooks);
     setProfile(newProfile);
-    persist(newBooks, sessions, streak, newProfile, reminder);
+    setStreak(newStreak);
+    if (earnedFreeze) setPendingFreezeEarned(true);
+    persist(newBooks, sessions, newStreak, newProfile, reminder);
     const finishedBook = newBooks.find(b => b.id === bookId);
     if (finishedBook) syncBooksToCloud([finishedBook]);
+    if (earnedFreeze) syncStreakToCloud(newStreak);
   }
 
   function useStreakFreeze() {
@@ -602,6 +630,8 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
       recommendedBooks: RECOMMENDED,
       suggestedFriends: SUGGESTED,
       isLoaded,
+      pendingFreezeEarned,
+      clearPendingFreezeEarned,
       logSession, finishBook, useStreakFreeze, addBook, updateBook, getBook, setReminder, setDailyGoal,
     }}>
       {children}

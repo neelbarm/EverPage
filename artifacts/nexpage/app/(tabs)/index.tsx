@@ -1,5 +1,5 @@
-import React, { useMemo } from 'react';
-import { View, Text, ScrollView, TouchableOpacity, StyleSheet, Platform } from 'react-native';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
+import { Animated, View, Text, ScrollView, TouchableOpacity, StyleSheet, Platform } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -28,13 +28,35 @@ export default function ShelfScreen() {
   const colors = useColors();
   const insets = useSafeAreaInsets();
   const router = useRouter();
-  const { books, streak, recommendedBooks } = useStore();
+  const { books, streak, recommendedBooks, pendingFreezeEarned, clearPendingFreezeEarned } = useStore();
   const topPad = insets.top + (Platform.OS === 'web' ? 67 : 0);
 
   const activeBooks = useMemo(() => books.filter(b => !b.finishedAt), [books]);
   const heroBook = activeBooks[0];
   const alsoReading = activeBooks.slice(1);
   const heroProgress = heroBook ? heroBook.currentPage / heroBook.totalPages : 0;
+
+  const toastOpacity = useRef(new Animated.Value(0)).current;
+  const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [showToast, setShowToast] = useState(false);
+
+  useEffect(() => {
+    if (!pendingFreezeEarned) return;
+    clearPendingFreezeEarned();
+    setShowToast(true);
+    if (toastTimer.current) clearTimeout(toastTimer.current);
+    const anim = Animated.sequence([
+      Animated.timing(toastOpacity, { toValue: 1, duration: 220, useNativeDriver: true }),
+      Animated.delay(2200),
+      Animated.timing(toastOpacity, { toValue: 0, duration: 300, useNativeDriver: true }),
+    ]);
+    anim.start();
+    toastTimer.current = setTimeout(() => setShowToast(false), 2720);
+    return () => {
+      anim.stop();
+      if (toastTimer.current) clearTimeout(toastTimer.current);
+    };
+  }, [pendingFreezeEarned]);
 
   return (
     <View style={[styles.root, { backgroundColor: colors.background }]}>
@@ -156,6 +178,17 @@ export default function ShelfScreen() {
           </>
         )}
       </ScrollView>
+
+      {showToast && (
+        <Animated.View
+          style={[styles.freezeToast, { backgroundColor: colors.card, borderColor: colors.primary, opacity: toastOpacity }]}
+          pointerEvents="none"
+        >
+          <Text style={[styles.freezeToastText, { color: colors.foreground, fontFamily: 'Inter_600SemiBold' }]}>
+            ❄️ You earned a streak freeze! ({streak.freezesLeft} left)
+          </Text>
+        </Animated.View>
+      )}
     </View>
   );
 }
@@ -211,4 +244,21 @@ const styles = StyleSheet.create({
   recTitle: { fontSize: 13, lineHeight: 17, letterSpacing: -0.2 },
   recAuthor: { fontSize: 12 },
   recReason: { fontSize: 11, marginTop: 2 },
+  freezeToast: {
+    position: 'absolute',
+    bottom: 100,
+    left: 20,
+    right: 20,
+    borderRadius: 14,
+    borderWidth: 1.5,
+    paddingVertical: 14,
+    paddingHorizontal: 18,
+    alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.12,
+    shadowRadius: 12,
+    elevation: 6,
+  },
+  freezeToastText: { fontSize: 15, letterSpacing: -0.1 },
 });
