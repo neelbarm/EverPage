@@ -1,5 +1,7 @@
-import React, { createContext, useContext, useEffect, useState } from 'react';
+import React, { createContext, useContext, useEffect, useRef, useState } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import * as SecureStore from 'expo-secure-store';
+import { useAuth } from '@/lib/auth';
 
 export interface Book {
   id: string;
@@ -109,6 +111,8 @@ interface StoreContextType {
 }
 
 const StoreContext = createContext<StoreContextType | null>(null);
+
+const AUTH_TOKEN_KEY = 'auth_session_token';
 
 function todayStr(): string {
   return new Date().toISOString().split('T')[0];
@@ -263,6 +267,7 @@ const SUGGESTED: SuggestedFriend[] = [
 ];
 
 const STORAGE_KEY = 'nexpage_v1';
+const CLOUD_INIT_KEY = 'nexpage_cloud_initialized';
 
 const DEFAULT_REMINDER: ReminderSettings = {
   enabled: false,
@@ -270,7 +275,66 @@ const DEFAULT_REMINDER: ReminderSettings = {
   minute: 0,
 };
 
+function getApiBase(): string {
+  const domain = (process.env.EXPO_PUBLIC_DOMAIN ?? '').trim();
+  if (domain) return `https://${domain}/api`;
+  return '/api';
+}
+
+async function getAuthToken(): Promise<string | null> {
+  try {
+    return await SecureStore.getItemAsync(AUTH_TOKEN_KEY);
+  } catch {
+    return null;
+  }
+}
+
+async function apiFetch<T>(path: string, options: RequestInit = {}): Promise<T> {
+  const token = await getAuthToken();
+  const headers: Record<string, string> = {
+    'Content-Type': 'application/json',
+    ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    ...(options.headers as Record<string, string> | undefined ?? {}),
+  };
+  const res = await fetch(`${getApiBase()}${path}`, { ...options, headers, credentials: 'include' });
+  if (!res.ok) {
+    const err = await res.text().catch(() => res.statusText);
+    throw new Error(`API ${res.status}: ${err}`);
+  }
+  return res.json() as Promise<T>;
+}
+
+function rowToBook(row: any): Book {
+  return {
+    id: row.id,
+    title: row.title,
+    author: row.author,
+    totalPages: row.totalPages ?? row.total_pages ?? 0,
+    currentPage: row.currentPage ?? row.current_page ?? 0,
+    coverColor: row.coverColor ?? row.cover_color ?? '#5C849E',
+    coverImageUri: row.coverImageUri ?? row.cover_image_uri ?? undefined,
+    genre: row.genre ?? '',
+    addedAt: row.addedAt ?? row.added_at ?? Date.now(),
+    finishedAt: row.finishedAt ?? row.finished_at ?? undefined,
+    favoriteQuote: row.favoriteQuote ?? row.favorite_quote ?? undefined,
+    friendsReading: row.friendsReading ?? [],
+  };
+}
+
+function rowToSession(row: any): ReadingSession {
+  return {
+    id: row.id,
+    bookId: row.bookId ?? row.book_id,
+    durationMinutes: row.durationMinutes ?? row.duration_minutes ?? 0,
+    startPage: row.startPage ?? row.start_page ?? 0,
+    endPage: row.endPage ?? row.end_page ?? 0,
+    date: row.date,
+    createdAt: row.createdAt ?? row.created_at ?? Date.now(),
+  };
+}
+
 export function StoreProvider({ children }: { children: React.ReactNode }) {
+  const { isAuthenticated, isLoading: authLoading } = useAuth();
   const [books, setBooks] = useState<Book[]>(MOCK_BOOKS);
   const [sessions, setSessions] = useState<ReadingSession[]>([]);
   const [friends] = useState<Friend[]>(MOCK_FRIENDS);
@@ -278,6 +342,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
   const [profile, setProfile] = useState<UserProfile>(INITIAL_PROFILE);
   const [reminder, setReminderState] = useState<ReminderSettings>(DEFAULT_REMINDER);
   const [isLoaded, setIsLoaded] = useState(false);
+  const cloudSyncedRef = useRef(false);
 
   useEffect(() => {
     (async () => {
@@ -298,10 +363,91 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
     })();
   }, []);
 
+  useEffect(() => {
+    if (authLoading || !isLoaded) return;
+    if (!isAuthenticated) {
+      cloudSyncedRef.current = false;
+      return;
+    }
+    if (cloudSyncedRef.current) return;
+    cloudSyncedRef.current = true;
+    hydrateFromCloud();
+  }, [isAuthenticated, authLoading, isLoaded]);
+
+  async function hydrateFromCloud() {
+    try {
+      const data = await apiFetch<{ books: any[]; sessions: any[]; streak: any | null }>('/bookshelf');
+
+      const cloudHasData = data.books.length > 0 || data.sessions.length > 0 || data.streak !== null;
+
+      if (cloudHasData) {
+        const cloudBooks = data.books.map(rowToBook);
+        const cloudSessions = data.sessions.map(rowToSession);
+        const cloudStreak = data.streak ?? undefined;
+
+        if (cloudBooks.length > 0) setBooks(cloudBooks);
+        if (cloudSessions.length > 0) setSessions(cloudSessions);
+        if (cloudStreak) setStreak(cloudStreak);
+
+        await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify({
+          books: cloudBooks.length > 0 ? cloudBooks : books,
+          sessions: cloudSessions.length > 0 ? cloudSessions : sessions,
+          streak: cloudStreak ?? streak,
+          profile,
+          reminder,
+        }));
+      } else {
+        const alreadyInitialized = await AsyncStorage.getItem(CLOUD_INIT_KEY);
+        if (!alreadyInitialized) {
+          await AsyncStorage.setItem(CLOUD_INIT_KEY, '1');
+          syncBooksToCloud(books);
+          await Promise.all(sessions.map(s => syncSessionToCloud(s)));
+          syncStreakToCloud(streak);
+        }
+      }
+    } catch {
+      // offline or unauthenticated — keep local data
+    }
+  }
+
   async function persist(b: Book[], se: ReadingSession[], st: StreakData, p: UserProfile, r: ReminderSettings) {
     try {
       await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify({ books: b, sessions: se, streak: st, profile: p, reminder: r }));
     } catch { /* ignore */ }
+  }
+
+  async function syncBooksToCloud(booksToSync: Book[]) {
+    if (!isAuthenticated) return;
+    try {
+      await Promise.all(
+        booksToSync.map(book =>
+          apiFetch('/bookshelf/books', {
+            method: 'POST',
+            body: JSON.stringify(book),
+          }).catch(() => { /* non-blocking */ }),
+        ),
+      );
+    } catch { /* non-blocking */ }
+  }
+
+  async function syncSessionToCloud(session: ReadingSession) {
+    if (!isAuthenticated) return;
+    try {
+      await apiFetch('/bookshelf/sessions', {
+        method: 'POST',
+        body: JSON.stringify(session),
+      });
+    } catch { /* non-blocking */ }
+  }
+
+  async function syncStreakToCloud(st: StreakData) {
+    if (!isAuthenticated) return;
+    try {
+      await apiFetch('/bookshelf/streak', {
+        method: 'PUT',
+        body: JSON.stringify(st),
+      });
+    } catch { /* non-blocking */ }
   }
 
   async function setReminder(settings: ReminderSettings) {
@@ -352,6 +498,10 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
     setStreak(newStreak);
     setProfile(newProfile);
     await persist(newBooks, newSessions, newStreak, newProfile, reminder);
+    const updatedBook = newBooks.find(b => b.id === bookId);
+    if (updatedBook) syncBooksToCloud([updatedBook]);
+    syncSessionToCloud(session);
+    syncStreakToCloud(newStreak);
   }
 
   function finishBook(bookId: string, favoriteQuote?: string) {
@@ -362,6 +512,8 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
     setBooks(newBooks);
     setProfile(newProfile);
     persist(newBooks, sessions, streak, newProfile, reminder);
+    const finishedBook = newBooks.find(b => b.id === bookId);
+    if (finishedBook) syncBooksToCloud([finishedBook]);
   }
 
   function useStreakFreeze() {
@@ -376,6 +528,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
     };
     setStreak(newStreak);
     persist(books, sessions, newStreak, profile, reminder);
+    syncStreakToCloud(newStreak);
   }
 
   function addBook(title: string, author: string, totalPages: number, genre: string, coverImageUri?: string) {
@@ -395,12 +548,15 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
     const newBooks = [...books, newBook];
     setBooks(newBooks);
     persist(newBooks, sessions, streak, profile, reminder);
+    syncBooksToCloud([newBook]);
   }
 
   function updateBook(id: string, updates: Partial<Pick<Book, 'title' | 'author' | 'totalPages' | 'genre' | 'coverImageUri'>>) {
     const newBooks = books.map(b => b.id === id ? { ...b, ...updates } : b);
     setBooks(newBooks);
     persist(newBooks, sessions, streak, profile, reminder);
+    const updatedBook = newBooks.find(b => b.id === id);
+    if (updatedBook) syncBooksToCloud([updatedBook]);
   }
 
   function getBook(id: string) {
