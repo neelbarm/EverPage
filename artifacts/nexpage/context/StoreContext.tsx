@@ -75,6 +75,7 @@ export interface RecommendedBook {
   title: string;
   author: string;
   coverColor: string;
+  coverImageUri?: string;
   reason: string;
   friendsCount: number;
 }
@@ -250,10 +251,10 @@ const INITIAL_PROFILE: UserProfile = {
 };
 
 const RECOMMENDED: RecommendedBook[] = [
-  { id: 'rec1', title: 'Demon Copperhead', author: 'Barbara Kingsolver', coverColor: '#B85C38', reason: 'Because you read Pachinko', friendsCount: 3 },
-  { id: 'rec2', title: 'Normal People', author: 'Sally Rooney', coverColor: '#4A7A9E', reason: 'Popular in your circle', friendsCount: 2 },
-  { id: 'rec3', title: 'Educated', author: 'Tara Westover', coverColor: '#C09B3A', reason: 'Loved by Maya', friendsCount: 1 },
-  { id: 'rec4', title: 'Lincoln in the Bardo', author: 'George Saunders', coverColor: '#5E4A7A', reason: 'Matches your taste', friendsCount: 0 },
+  { id: 'rec1', title: 'Demon Copperhead', author: 'Barbara Kingsolver', coverColor: '#B85C38', coverImageUri: 'https://covers.openlibrary.org/b/isbn/9780063251922-M.jpg', reason: 'Because you read Pachinko', friendsCount: 3 },
+  { id: 'rec2', title: 'Normal People', author: 'Sally Rooney', coverColor: '#4A7A9E', coverImageUri: 'https://covers.openlibrary.org/b/isbn/9780571334650-M.jpg', reason: 'Popular in your circle', friendsCount: 2 },
+  { id: 'rec3', title: 'Educated', author: 'Tara Westover', coverColor: '#C09B3A', coverImageUri: 'https://covers.openlibrary.org/b/isbn/9780399590504-M.jpg', reason: 'Loved by Maya', friendsCount: 1 },
+  { id: 'rec4', title: 'Lincoln in the Bardo', author: 'George Saunders', coverColor: '#5E4A7A', coverImageUri: 'https://covers.openlibrary.org/b/isbn/9780812985405-M.jpg', reason: 'Matches your taste', friendsCount: 0 },
 ];
 
 const SUGGESTED: SuggestedFriend[] = [

@@ -28,7 +28,7 @@ export default function ShelfScreen() {
   const colors = useColors();
   const insets = useSafeAreaInsets();
   const router = useRouter();
-  const { books, streak } = useStore();
+  const { books, streak, recommendedBooks } = useStore();
   const topPad = insets.top + (Platform.OS === 'web' ? 67 : 0);
 
   const activeBooks = useMemo(() => books.filter(b => !b.finishedAt), [books]);
@@ -135,6 +135,24 @@ export default function ShelfScreen() {
                 })}
               </View>
             )}
+
+            {recommendedBooks.length > 0 && (
+              <View style={styles.recSection}>
+                <Text style={[styles.recLabel, { color: colors.mutedForeground, fontFamily: 'Inter_600SemiBold' }]}>PICKED FOR YOU</Text>
+                <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 12, paddingVertical: 2 }}>
+                  {recommendedBooks.map(book => (
+                    <View key={book.id} style={[styles.recCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
+                      <BookCover bookId={book.id} coverColor={book.coverColor} coverImageUri={book.coverImageUri} width={140} height={90} borderRadius={0} />
+                      <View style={styles.recBody}>
+                        <Text style={[styles.recTitle, { color: colors.foreground, fontFamily: 'Inter_600SemiBold' }]} numberOfLines={2}>{book.title}</Text>
+                        <Text style={[styles.recAuthor, { color: colors.mutedForeground, fontFamily: 'Inter_400Regular' }]} numberOfLines={1}>{book.author}</Text>
+                        <Text style={[styles.recReason, { color: colors.accent, fontFamily: 'Inter_400Regular' }]} numberOfLines={1}>{book.reason}</Text>
+                      </View>
+                    </View>
+                  ))}
+                </ScrollView>
+              </View>
+            )}
           </>
         )}
       </ScrollView>
@@ -186,4 +204,11 @@ const styles = StyleSheet.create({
   },
   emptyTitle: { fontSize: 18 },
   emptySub: { fontSize: 14, textAlign: 'center', lineHeight: 20 },
+  recSection: { marginTop: 16, marginHorizontal: 16, gap: 10 },
+  recLabel: { fontSize: 11, letterSpacing: 1.5 },
+  recCard: { width: 140, borderRadius: 12, borderWidth: 1, overflow: 'hidden', shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.06, shadowRadius: 6, elevation: 2 },
+  recBody: { padding: 10, gap: 2 },
+  recTitle: { fontSize: 13, lineHeight: 17, letterSpacing: -0.2 },
+  recAuthor: { fontSize: 12 },
+  recReason: { fontSize: 11, marginTop: 2 },
 });

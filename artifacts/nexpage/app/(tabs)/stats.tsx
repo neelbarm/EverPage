@@ -7,6 +7,7 @@ import { useColors } from '@/hooks/useColors';
 import { useStore } from '@/context/StoreContext';
 import { useSocial, LeaderboardEntry } from '@/context/SocialContext';
 import RegisterModal from '@/components/RegisterModal';
+import { BookCover } from '@/components/BookCover';
 
 function StreakDot({ checked, day }: { checked: boolean; day: string }) {
   const colors = useColors();
@@ -233,9 +234,7 @@ export default function StatsScreen() {
             <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 12, paddingVertical: 2 }}>
               {recommendedBooks.map(book => (
                 <View key={book.id} style={[styles.recCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
-                  <View style={[styles.recCover, { backgroundColor: book.coverColor }]}>
-                    <View style={{ position: 'absolute', left: 0, top: 0, bottom: 0, width: 6, backgroundColor: 'rgba(0,0,0,0.2)' }} />
-                  </View>
+                  <BookCover bookId={book.id} coverColor={book.coverColor} coverImageUri={book.coverImageUri} width={158} height={100} borderRadius={0} />
                   <View style={styles.recBody}>
                     <Text style={[styles.recTitle, { color: colors.foreground, fontFamily: 'Inter_600SemiBold' }]} numberOfLines={2}>{book.title}</Text>
                     <Text style={[styles.recAuthor, { color: colors.mutedForeground, fontFamily: 'Inter_400Regular' }]} numberOfLines={1}>{book.author}</Text>
@@ -359,7 +358,6 @@ const styles = StyleSheet.create({
   percentilePill: { borderRadius: 8, paddingHorizontal: 14, paddingVertical: 8, alignSelf: 'flex-start' },
   percentileText: { fontSize: 13 },
   recCard: { width: 158, borderRadius: 14, borderWidth: 1, overflow: 'hidden', shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.06, shadowRadius: 6, elevation: 2 },
-  recCover: { height: 100 },
   recBody: { padding: 12, gap: 3 },
   recTitle: { fontSize: 13, lineHeight: 18 },
   recAuthor: { fontSize: 12 },
