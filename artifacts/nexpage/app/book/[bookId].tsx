@@ -1,5 +1,8 @@
-import React from 'react';
-import { View, Text, ScrollView, TouchableOpacity, StyleSheet, Platform } from 'react-native';
+import React, { useState } from 'react';
+import {
+  View, Text, ScrollView, TouchableOpacity, StyleSheet, Platform,
+  Modal, KeyboardAvoidingView, TextInput,
+} from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -7,6 +10,8 @@ import * as Haptics from 'expo-haptics';
 import { useColors } from '@/hooks/useColors';
 import { useStore } from '@/context/StoreContext';
 import { BookCover } from '@/components/BookCover';
+
+const GENRES = ['Literary Fiction', 'Historical Fiction', 'Non-Fiction', 'Science Fiction', 'Mystery', 'Biography', 'Other'];
 
 function ProgressBar({ progress, height = 6 }: { progress: number; height?: number }) {
   const colors = useColors();
@@ -22,8 +27,40 @@ export default function BookDetailScreen() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
   const { bookId } = useLocalSearchParams<{ bookId: string }>();
-  const { getBook, friends } = useStore();
+  const { getBook, updateBook, friends } = useStore();
   const book = getBook(bookId ?? '');
+
+  const [showEdit, setShowEdit] = useState(false);
+  const [editTitle, setEditTitle] = useState('');
+  const [editAuthor, setEditAuthor] = useState('');
+  const [editPages, setEditPages] = useState('');
+  const [editGenre, setEditGenre] = useState('Literary Fiction');
+  const [editCoverUri, setEditCoverUri] = useState<string | undefined>(undefined);
+
+  function openEdit() {
+    if (!book) return;
+    setEditTitle(book.title);
+    setEditAuthor(book.author);
+    setEditPages(String(book.totalPages));
+    setEditGenre(book.genre);
+    setEditCoverUri(book.coverImageUri);
+    setShowEdit(true);
+  }
+
+  function handleSave() {
+    if (!book) return;
+    const pageCount = parseInt(editPages, 10);
+    if (!editTitle.trim() || !editAuthor.trim() || !pageCount) return;
+    updateBook(book.id, {
+      title: editTitle.trim(),
+      author: editAuthor.trim(),
+      totalPages: pageCount,
+      genre: editGenre,
+      coverImageUri: editCoverUri,
+    });
+    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+    setShowEdit(false);
+  }
 
   if (!book) {
     return (
@@ -53,6 +90,7 @@ export default function BookDetailScreen() {
   const pagesGap = leadAbove && youEntry ? leadAbove.weekPages - youEntry.weekPages : 0;
 
   const backBtnTop = insets.top + (Platform.OS === 'web' ? 67 : 8);
+  const canSave = !!editTitle.trim() && !!editAuthor.trim() && !!editPages.trim() && !!parseInt(editPages, 10);
 
   return (
     <View style={[styles.root, { backgroundColor: colors.background }]}>
@@ -62,6 +100,14 @@ export default function BookDetailScreen() {
         activeOpacity={0.7}
       >
         <Ionicons name="arrow-back" size={24} color={colors.foreground} />
+      </TouchableOpacity>
+
+      <TouchableOpacity
+        style={[styles.editBtn, { top: backBtnTop }]}
+        onPress={openEdit}
+        activeOpacity={0.7}
+      >
+        <Ionicons name="pencil-outline" size={20} color={colors.foreground} />
       </TouchableOpacity>
 
       <ScrollView
@@ -167,6 +213,83 @@ export default function BookDetailScreen() {
           </View>
         )}
       </ScrollView>
+
+      {/* Edit Modal */}
+      <Modal
+        visible={showEdit}
+        animationType="slide"
+        presentationStyle="pageSheet"
+        onRequestClose={() => setShowEdit(false)}
+      >
+        <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
+          <ScrollView
+            style={[styles.modal, { backgroundColor: colors.background }]}
+            contentContainerStyle={{ paddingBottom: 60 }}
+            keyboardShouldPersistTaps="handled"
+          >
+            <View style={[styles.modalHandle, { backgroundColor: colors.border }]} />
+            <View style={styles.modalHeader}>
+              <Text style={[styles.modalTitle, { color: colors.foreground, fontFamily: 'Inter_700Bold' }]}>Edit book</Text>
+              <TouchableOpacity onPress={() => setShowEdit(false)} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
+                <Ionicons name="close" size={24} color={colors.mutedForeground} />
+              </TouchableOpacity>
+            </View>
+
+            <View style={styles.fields}>
+              {[
+                { label: 'Title', value: editTitle, setter: setEditTitle, placeholder: 'Book title', kb: 'default' as const },
+                { label: 'Author', value: editAuthor, setter: setEditAuthor, placeholder: 'Author name', kb: 'default' as const },
+                { label: 'Total pages', value: editPages, setter: setEditPages, placeholder: '300', kb: 'number-pad' as const },
+                { label: 'Cover image URL', value: editCoverUri ?? '', setter: (v: string) => setEditCoverUri(v || undefined), placeholder: 'https://...', kb: 'url' as const },
+              ].map(({ label, value, setter, placeholder, kb }) => (
+                <View key={label} style={styles.field}>
+                  <Text style={[styles.fieldLabel, { color: colors.mutedForeground, fontFamily: 'Inter_500Medium' }]}>{label}</Text>
+                  <TextInput
+                    style={[styles.input, { backgroundColor: colors.muted, color: colors.foreground, borderColor: colors.border, fontFamily: 'Inter_400Regular' }]}
+                    value={value}
+                    onChangeText={setter}
+                    placeholder={placeholder}
+                    placeholderTextColor={colors.mutedForeground}
+                    keyboardType={kb}
+                    autoCorrect={false}
+                    autoCapitalize={kb === 'url' ? 'none' : 'sentences'}
+                  />
+                </View>
+              ))}
+
+              <View style={styles.field}>
+                <Text style={[styles.fieldLabel, { color: colors.mutedForeground, fontFamily: 'Inter_500Medium' }]}>Genre</Text>
+                <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8 }}>
+                  {GENRES.map(g => (
+                    <TouchableOpacity
+                      key={g}
+                      style={[
+                        styles.genreChip,
+                        { backgroundColor: editGenre === g ? colors.primary : colors.muted, borderColor: editGenre === g ? colors.primary : colors.border },
+                      ]}
+                      onPress={() => setEditGenre(g)}
+                      activeOpacity={0.8}
+                    >
+                      <Text style={[styles.genreText, { color: editGenre === g ? '#fff' : colors.foreground, fontFamily: editGenre === g ? 'Inter_600SemiBold' : 'Inter_400Regular' }]}>
+                        {g}
+                      </Text>
+                    </TouchableOpacity>
+                  ))}
+                </ScrollView>
+              </View>
+            </View>
+
+            <TouchableOpacity
+              style={[styles.submitBtn, { backgroundColor: colors.primary, opacity: canSave ? 1 : 0.45 }]}
+              onPress={handleSave}
+              disabled={!canSave}
+              activeOpacity={0.85}
+            >
+              <Text style={[styles.submitText, { color: '#fff', fontFamily: 'Inter_600SemiBold' }]}>Save changes</Text>
+            </TouchableOpacity>
+          </ScrollView>
+        </KeyboardAvoidingView>
+      </Modal>
     </View>
   );
 }
@@ -174,6 +297,7 @@ export default function BookDetailScreen() {
 const styles = StyleSheet.create({
   root: { flex: 1 },
   backBtn: { position: 'absolute', left: 20, zIndex: 10, padding: 8 },
+  editBtn: { position: 'absolute', right: 20, zIndex: 10, padding: 8 },
   bookHero: { flexDirection: 'row', gap: 20, alignItems: 'flex-start' },
   bookMeta: { flex: 1, gap: 7, paddingTop: 4 },
   bookTitle: { fontSize: 22, letterSpacing: -0.5, lineHeight: 28 },
@@ -210,4 +334,16 @@ const styles = StyleSheet.create({
   secondaryBtnText: { fontSize: 15 },
   finishedBadge: { flexDirection: 'row', alignItems: 'center', gap: 8, padding: 14, borderRadius: 14, justifyContent: 'center' },
   finishedText: { fontSize: 15 },
+  modal: { flex: 1 },
+  modalHandle: { width: 36, height: 4, borderRadius: 2, alignSelf: 'center', marginTop: 12, marginBottom: 8 },
+  modalHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 20, paddingVertical: 16 },
+  modalTitle: { fontSize: 22, letterSpacing: -0.5 },
+  fields: { paddingHorizontal: 20, gap: 20 },
+  field: { gap: 8 },
+  fieldLabel: { fontSize: 13 },
+  input: { borderRadius: 10, borderWidth: 1, paddingHorizontal: 14, paddingVertical: 13, fontSize: 15 },
+  genreChip: { paddingHorizontal: 14, paddingVertical: 8, borderRadius: 20, borderWidth: 1 },
+  genreText: { fontSize: 13 },
+  submitBtn: { marginHorizontal: 20, marginTop: 32, paddingVertical: 16, borderRadius: 14, alignItems: 'center' },
+  submitText: { fontSize: 16 },
 });

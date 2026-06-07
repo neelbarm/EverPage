@@ -102,6 +102,7 @@ interface StoreContextType {
   finishBook: (bookId: string, favoriteQuote?: string) => void;
   useStreakFreeze: () => void;
   addBook: (title: string, author: string, totalPages: number, genre: string, coverImageUri?: string) => void;
+  updateBook: (id: string, updates: Partial<Pick<Book, 'title' | 'author' | 'totalPages' | 'genre' | 'coverImageUri'>>) => void;
   getBook: (id: string) => Book | undefined;
   setReminder: (settings: ReminderSettings) => Promise<void>;
 }
@@ -395,6 +396,12 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
     persist(newBooks, sessions, streak, profile, reminder);
   }
 
+  function updateBook(id: string, updates: Partial<Pick<Book, 'title' | 'author' | 'totalPages' | 'genre' | 'coverImageUri'>>) {
+    const newBooks = books.map(b => b.id === id ? { ...b, ...updates } : b);
+    setBooks(newBooks);
+    persist(newBooks, sessions, streak, profile, reminder);
+  }
+
   function getBook(id: string) {
     return books.find(b => b.id === id);
   }
@@ -405,7 +412,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
       recommendedBooks: RECOMMENDED,
       suggestedFriends: SUGGESTED,
       isLoaded,
-      logSession, finishBook, useStreakFreeze, addBook, getBook, setReminder,
+      logSession, finishBook, useStreakFreeze, addBook, updateBook, getBook, setReminder,
     }}>
       {children}
     </StoreContext.Provider>
