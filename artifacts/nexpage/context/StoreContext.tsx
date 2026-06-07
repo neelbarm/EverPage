@@ -50,6 +50,12 @@ export interface StreakData {
   freezesLeft: number;
 }
 
+export interface ReminderSettings {
+  enabled: boolean;
+  hour: number;
+  minute: number;
+}
+
 export interface UserProfile {
   name: string;
   initial: string;
@@ -88,6 +94,7 @@ interface StoreContextType {
   friends: Friend[];
   streak: StreakData;
   profile: UserProfile;
+  reminder: ReminderSettings;
   recommendedBooks: RecommendedBook[];
   suggestedFriends: SuggestedFriend[];
   isLoaded: boolean;
@@ -96,6 +103,7 @@ interface StoreContextType {
   useStreakFreeze: () => void;
   addBook: (title: string, author: string, totalPages: number, genre: string, coverImageUri?: string) => void;
   getBook: (id: string) => Book | undefined;
+  setReminder: (settings: ReminderSettings) => Promise<void>;
 }
 
 const StoreContext = createContext<StoreContextType | null>(null);
@@ -254,12 +262,19 @@ const SUGGESTED: SuggestedFriend[] = [
 
 const STORAGE_KEY = 'nexpage_v1';
 
+const DEFAULT_REMINDER: ReminderSettings = {
+  enabled: false,
+  hour: 21,
+  minute: 0,
+};
+
 export function StoreProvider({ children }: { children: React.ReactNode }) {
   const [books, setBooks] = useState<Book[]>(MOCK_BOOKS);
   const [sessions, setSessions] = useState<ReadingSession[]>([]);
   const [friends] = useState<Friend[]>(MOCK_FRIENDS);
   const [streak, setStreak] = useState<StreakData>(INITIAL_STREAK);
   const [profile, setProfile] = useState<UserProfile>(INITIAL_PROFILE);
+  const [reminder, setReminderState] = useState<ReminderSettings>(DEFAULT_REMINDER);
   const [isLoaded, setIsLoaded] = useState(false);
 
   useEffect(() => {
@@ -272,6 +287,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
           if (s.sessions) setSessions(s.sessions);
           if (s.streak) setStreak(s.streak);
           if (s.profile) setProfile(s.profile);
+          if (s.reminder) setReminderState(s.reminder);
         }
       } catch {
         // use defaults
@@ -280,10 +296,15 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
     })();
   }, []);
 
-  async function persist(b: Book[], se: ReadingSession[], st: StreakData, p: UserProfile) {
+  async function persist(b: Book[], se: ReadingSession[], st: StreakData, p: UserProfile, r: ReminderSettings) {
     try {
-      await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify({ books: b, sessions: se, streak: st, profile: p }));
+      await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify({ books: b, sessions: se, streak: st, profile: p, reminder: r }));
     } catch { /* ignore */ }
+  }
+
+  async function setReminder(settings: ReminderSettings) {
+    setReminderState(settings);
+    await persist(books, sessions, streak, profile, settings);
   }
 
   async function logSession(bookId: string, durationMinutes: number, startPage: number, endPage: number) {
@@ -328,7 +349,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
     setBooks(newBooks);
     setStreak(newStreak);
     setProfile(newProfile);
-    await persist(newBooks, newSessions, newStreak, newProfile);
+    await persist(newBooks, newSessions, newStreak, newProfile, reminder);
   }
 
   function finishBook(bookId: string, favoriteQuote?: string) {
@@ -338,7 +359,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
     const newProfile = { ...profile, booksFinished: profile.booksFinished + 1 };
     setBooks(newBooks);
     setProfile(newProfile);
-    persist(newBooks, sessions, streak, newProfile);
+    persist(newBooks, sessions, streak, newProfile, reminder);
   }
 
   function useStreakFreeze() {
@@ -352,7 +373,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
         : [...streak.checkedDays, todayStr()],
     };
     setStreak(newStreak);
-    persist(books, sessions, newStreak, profile);
+    persist(books, sessions, newStreak, profile, reminder);
   }
 
   function addBook(title: string, author: string, totalPages: number, genre: string, coverImageUri?: string) {
@@ -371,7 +392,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
     };
     const newBooks = [...books, newBook];
     setBooks(newBooks);
-    persist(newBooks, sessions, streak, profile);
+    persist(newBooks, sessions, streak, profile, reminder);
   }
 
   function getBook(id: string) {
@@ -380,11 +401,11 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
 
   return (
     <StoreContext.Provider value={{
-      books, sessions, friends, streak, profile,
+      books, sessions, friends, streak, profile, reminder,
       recommendedBooks: RECOMMENDED,
       suggestedFriends: SUGGESTED,
       isLoaded,
-      logSession, finishBook, useStreakFreeze, addBook, getBook,
+      logSession, finishBook, useStreakFreeze, addBook, getBook, setReminder,
     }}>
       {children}
     </StoreContext.Provider>

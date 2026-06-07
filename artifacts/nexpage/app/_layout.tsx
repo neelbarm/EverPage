@@ -12,11 +12,16 @@ import React, { useEffect } from "react";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { KeyboardProvider } from "react-native-keyboard-controller";
 import { SafeAreaProvider } from "react-native-safe-area-context";
+import { Platform } from "react-native";
 
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { StoreProvider } from "@/context/StoreContext";
 import { SocialProvider } from "@/context/SocialContext";
 import { AuthProvider } from "@/lib/auth";
+import {
+  requestNotificationPermissions,
+  setupNotificationResponseHandler,
+} from "@/lib/notifications";
 
 SplashScreen.preventAutoHideAsync();
 
@@ -59,6 +64,13 @@ export default function RootLayout() {
       SplashScreen.hideAsync();
     }
   }, [fontsLoaded, fontError]);
+
+  useEffect(() => {
+    if (Platform.OS === "web") return;
+    requestNotificationPermissions();
+    const cleanup = setupNotificationResponseHandler();
+    return cleanup;
+  }, []);
 
   if (!fontsLoaded && !fontError) return null;
 

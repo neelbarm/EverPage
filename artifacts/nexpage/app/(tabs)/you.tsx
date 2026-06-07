@@ -1,15 +1,188 @@
-import React from 'react';
-import { View, Text, ScrollView, TouchableOpacity, StyleSheet, Platform } from 'react-native';
+import React, { useState } from 'react';
+import {
+  View,
+  Text,
+  ScrollView,
+  TouchableOpacity,
+  StyleSheet,
+  Platform,
+  Modal,
+  Switch,
+} from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Feather, Ionicons } from '@expo/vector-icons';
 import { useColors } from '@/hooks/useColors';
 import { useStore } from '@/context/StoreContext';
+import { scheduleDailyReminder, cancelDailyReminder } from '@/lib/notifications';
+
+function formatReminderTime(hour: number, minute: number): string {
+  const h = hour === 0 ? 12 : hour > 12 ? hour - 12 : hour;
+  const m = minute.toString().padStart(2, '0');
+  const ampm = hour >= 12 ? 'PM' : 'AM';
+  return `${h}:${m} ${ampm}`;
+}
+
+function ReminderModal({
+  visible,
+  initialHour,
+  initialMinute,
+  initialEnabled,
+  streakDays,
+  onSave,
+  onClose,
+}: {
+  visible: boolean;
+  initialHour: number;
+  initialMinute: number;
+  initialEnabled: boolean;
+  streakDays: number;
+  onSave: (enabled: boolean, hour: number, minute: number) => void;
+  onClose: () => void;
+}) {
+  const colors = useColors();
+  const insets = useSafeAreaInsets();
+  const [enabled, setEnabled] = useState(initialEnabled);
+  const [hour, setHour] = useState(initialHour);
+  const [minute, setMinute] = useState(initialMinute);
+
+  const hours = Array.from({ length: 24 }, (_, i) => i);
+  const minutes = [0, 5, 10, 15, 20, 25, 30, 35, 40, 45, 50, 55];
+
+  function formatHourLabel(h: number): string {
+    const display = h === 0 ? 12 : h > 12 ? h - 12 : h;
+    const ampm = h >= 12 ? 'PM' : 'AM';
+    return `${display} ${ampm}`;
+  }
+
+  return (
+    <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
+      <View style={styles.modalOverlay}>
+        <View
+          style={[
+            styles.modalSheet,
+            { backgroundColor: colors.card, paddingBottom: insets.bottom + 16 },
+          ]}
+        >
+          <View style={[styles.modalHandle, { backgroundColor: colors.border }]} />
+          <Text style={[styles.modalTitle, { color: colors.foreground, fontFamily: 'Inter_700Bold' }]}>
+            Reading Reminder
+          </Text>
+
+          <View style={[styles.toggleRow, { borderColor: colors.border }]}>
+            <View style={[styles.settingsIconSm, { backgroundColor: colors.muted }]}>
+              <Feather name="bell" size={15} color={colors.mutedForeground} />
+            </View>
+            <Text style={[styles.toggleLabel, { color: colors.foreground, fontFamily: 'Inter_500Medium' }]}>
+              Daily reminder
+            </Text>
+            <Switch
+              value={enabled}
+              onValueChange={setEnabled}
+              trackColor={{ false: colors.border, true: colors.primary }}
+              thumbColor="#fff"
+            />
+          </View>
+
+          {enabled && (
+            <>
+              <Text style={[styles.pickerLabel, { color: colors.mutedForeground, fontFamily: 'Inter_600SemiBold' }]}>
+                HOUR
+              </Text>
+              <ScrollView
+                horizontal
+                showsHorizontalScrollIndicator={false}
+                contentContainerStyle={styles.pickerRow}
+              >
+                {hours.map(h => (
+                  <TouchableOpacity
+                    key={h}
+                    onPress={() => setHour(h)}
+                    style={[
+                      styles.pickerChip,
+                      {
+                        backgroundColor: h === hour ? colors.primary : colors.muted,
+                        borderColor: h === hour ? colors.primary : colors.border,
+                      },
+                    ]}
+                    activeOpacity={0.7}
+                  >
+                    <Text
+                      style={[
+                        styles.pickerChipText,
+                        {
+                          color: h === hour ? '#fff' : colors.foreground,
+                          fontFamily: 'Inter_500Medium',
+                        },
+                      ]}
+                    >
+                      {formatHourLabel(h)}
+                    </Text>
+                  </TouchableOpacity>
+                ))}
+              </ScrollView>
+
+              <Text style={[styles.pickerLabel, { color: colors.mutedForeground, fontFamily: 'Inter_600SemiBold' }]}>
+                MINUTE
+              </Text>
+              <View style={styles.minuteRow}>
+                {minutes.map(m => (
+                  <TouchableOpacity
+                    key={m}
+                    onPress={() => setMinute(m)}
+                    style={[
+                      styles.minuteChip,
+                      {
+                        backgroundColor: m === minute ? colors.primary : colors.muted,
+                        borderColor: m === minute ? colors.primary : colors.border,
+                      },
+                    ]}
+                    activeOpacity={0.7}
+                  >
+                    <Text
+                      style={[
+                        styles.minuteChipText,
+                        {
+                          color: m === minute ? '#fff' : colors.foreground,
+                          fontFamily: 'Inter_500Medium',
+                        },
+                      ]}
+                    >
+                      :{m.toString().padStart(2, '0')}
+                    </Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+
+              <View style={[styles.previewRow, { backgroundColor: colors.muted, borderRadius: 12 }]}>
+                <Ionicons name="flame" size={16} color={colors.primary} />
+                <Text style={[styles.previewText, { color: colors.mutedForeground, fontFamily: 'Inter_400Regular' }]}>
+                  {`"${formatReminderTime(hour, minute)} — time to read. Your ${streakDays}-day streak is waiting."`}
+                </Text>
+              </View>
+            </>
+          )}
+
+          <TouchableOpacity
+            style={[styles.saveBtn, { backgroundColor: colors.primary }]}
+            onPress={() => onSave(enabled, hour, minute)}
+            activeOpacity={0.8}
+          >
+            <Text style={[styles.saveBtnText, { fontFamily: 'Inter_600SemiBold' }]}>
+              Save
+            </Text>
+          </TouchableOpacity>
+        </View>
+      </View>
+    </Modal>
+  );
+}
 
 export default function YouScreen() {
   const colors = useColors();
   const insets = useSafeAreaInsets();
-  const { profile, streak } = useStore();
+  const { profile, streak, reminder, setReminder } = useStore();
   const topPad = insets.top + (Platform.OS === 'web' ? 67 : 0);
+  const [showReminderModal, setShowReminderModal] = useState(false);
 
   const totalHours = Math.floor(profile.totalMinutes / 60);
 
@@ -20,10 +193,40 @@ export default function YouScreen() {
     { label: 'best streak', value: String(profile.longestStreak) },
   ];
 
+  const reminderDisplayValue = reminder.enabled
+    ? formatReminderTime(reminder.hour, reminder.minute)
+    : 'Off';
+
+  async function handleSaveReminder(enabled: boolean, hour: number, minute: number) {
+    const newSettings = { enabled, hour, minute };
+    await setReminder(newSettings);
+    if (enabled && Platform.OS !== 'web') {
+      await scheduleDailyReminder(hour, minute, streak.currentStreak);
+    } else if (!enabled) {
+      await cancelDailyReminder();
+    }
+    setShowReminderModal(false);
+  }
+
   const settingsRows = [
-    { icon: 'target' as const, label: 'Daily reading goal', value: `${streak.dailyGoalMinutes} min` },
-    { icon: 'bell' as const, label: 'Reading reminders', value: '9:00 PM' },
-    { icon: 'shield' as const, label: 'Streak freezes', value: `${streak.freezesLeft} left` },
+    {
+      icon: 'target' as const,
+      label: 'Daily reading goal',
+      value: `${streak.dailyGoalMinutes} min`,
+      onPress: undefined as (() => void) | undefined,
+    },
+    {
+      icon: 'bell' as const,
+      label: 'Reading reminders',
+      value: reminderDisplayValue,
+      onPress: () => setShowReminderModal(true),
+    },
+    {
+      icon: 'shield' as const,
+      label: 'Streak freezes',
+      value: `${streak.freezesLeft} left`,
+      onPress: undefined as (() => void) | undefined,
+    },
   ];
 
   const maxGenreCount = profile.genres[0]?.count ?? 1;
@@ -103,18 +306,30 @@ export default function YouScreen() {
                 styles.settingsRow,
                 i < settingsRows.length - 1 && { borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: colors.border },
               ]}
-              activeOpacity={0.7}
+              activeOpacity={row.onPress ? 0.7 : 1}
+              onPress={row.onPress}
+              disabled={!row.onPress}
             >
               <View style={[styles.settingsIcon, { backgroundColor: colors.muted }]}>
                 <Feather name={row.icon} size={15} color={colors.mutedForeground} />
               </View>
               <Text style={[styles.settingsLabel, { color: colors.foreground, fontFamily: 'Inter_400Regular' }]}>{row.label}</Text>
               <Text style={[styles.settingsValue, { color: colors.mutedForeground, fontFamily: 'Inter_400Regular' }]}>{row.value}</Text>
-              <Feather name="chevron-right" size={16} color={colors.mutedForeground} />
+              {row.onPress && <Feather name="chevron-right" size={16} color={colors.mutedForeground} />}
             </TouchableOpacity>
           ))}
         </View>
       </ScrollView>
+
+      <ReminderModal
+        visible={showReminderModal}
+        initialHour={reminder.hour}
+        initialMinute={reminder.minute}
+        initialEnabled={reminder.enabled}
+        streakDays={streak.currentStreak}
+        onSave={handleSaveReminder}
+        onClose={() => setShowReminderModal(false)}
+      />
     </View>
   );
 }
@@ -159,4 +374,70 @@ const styles = StyleSheet.create({
   settingsIcon: { width: 32, height: 32, borderRadius: 8, alignItems: 'center', justifyContent: 'center' },
   settingsLabel: { flex: 1, fontSize: 14 },
   settingsValue: { fontSize: 14 },
+  modalOverlay: {
+    flex: 1,
+    justifyContent: 'flex-end',
+    backgroundColor: 'rgba(0,0,0,0.4)',
+  },
+  modalSheet: {
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    paddingHorizontal: 20,
+    paddingTop: 12,
+    gap: 16,
+  },
+  modalHandle: {
+    width: 36,
+    height: 4,
+    borderRadius: 2,
+    alignSelf: 'center',
+    marginBottom: 4,
+  },
+  modalTitle: { fontSize: 20, letterSpacing: -0.5 },
+  toggleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    paddingVertical: 12,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+  },
+  settingsIconSm: { width: 32, height: 32, borderRadius: 8, alignItems: 'center', justifyContent: 'center' },
+  toggleLabel: { flex: 1, fontSize: 15 },
+  pickerLabel: { fontSize: 11, letterSpacing: 1.5, marginTop: 4 },
+  pickerRow: { gap: 8, paddingVertical: 4 },
+  pickerChip: {
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: 20,
+    borderWidth: 1,
+  },
+  pickerChipText: { fontSize: 13 },
+  minuteRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+    paddingVertical: 4,
+  },
+  minuteChip: {
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: 20,
+    borderWidth: 1,
+  },
+  minuteChipText: { fontSize: 13 },
+  previewRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 8,
+    padding: 14,
+    marginTop: 4,
+  },
+  previewText: { flex: 1, fontSize: 13, lineHeight: 19, fontStyle: 'italic' },
+  saveBtn: {
+    borderRadius: 14,
+    paddingVertical: 15,
+    alignItems: 'center',
+    marginTop: 4,
+  },
+  saveBtnText: { color: '#fff', fontSize: 16 },
 });
