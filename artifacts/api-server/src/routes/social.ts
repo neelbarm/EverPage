@@ -5,6 +5,8 @@ import { eq, ilike, or, and, ne, sql, desc, not, inArray } from "drizzle-orm";
 
 const router: IRouter = Router();
 
+const EXPO_PUSH_URL = "https://exp.host/--/api/v2/push/send";
+
 function generateId(): string {
   return Date.now().toString(36) + Math.random().toString(36).substring(2, 9);
 }
@@ -21,6 +23,10 @@ function formatUser(u: typeof npUsers.$inferSelect) {
   return { id: u.id, username: u.username, displayName: u.displayName, color: u.color, initial: u.initial };
 }
 
+function formatMe(u: typeof npUsers.$inferSelect) {
+  return { id: u.id, username: u.username, displayName: u.displayName, color: u.color, initial: u.initial, nudgesEnabled: u.nudgesEnabled };
+}
+
 async function getSocialProfile(userId: string) {
   const rows = await db.select().from(npUsers).where(eq(npUsers.id, userId)).limit(1);
   return rows[0] ?? null;
@@ -30,7 +36,7 @@ router.get("/social/me", async (req, res) => {
   const userId = requireAuth(req, res);
   if (!userId) return;
   const profile = await getSocialProfile(userId);
-  res.json(profile ? formatUser(profile) : null);
+  res.json(profile ? formatMe(profile) : null);
 });
 
 router.post("/social/users", async (req, res) => {
@@ -60,7 +66,7 @@ router.post("/social/users", async (req, res) => {
       .set({ username, displayName, color: color ?? existing.color, initial: initial ?? existing.initial, updatedAt: new Date() })
       .where(eq(npUsers.id, userId))
       .returning();
-    res.json(formatUser(updated[0]));
+    res.json(formatMe(updated[0]));
     return;
   }
 
@@ -78,7 +84,7 @@ router.post("/social/users", async (req, res) => {
     .insert(npUsers)
     .values({ id: userId, username, displayName, color: color ?? "#1C3A5A", initial: initial ?? displayName[0].toUpperCase() })
     .returning();
-  res.status(201).json(formatUser(rows[0]));
+  res.status(201).json(formatMe(rows[0]));
 });
 
 router.get("/social/users/search", async (req, res) => {
@@ -274,6 +280,98 @@ router.get("/social/suggested", async (req, res) => {
     )
     .limit(10);
   res.json(rows.map(formatUser));
+});
+
+router.post("/social/push-token", async (req, res) => {
+  const userId = requireAuth(req, res);
+  if (!userId) return;
+  const { token } = req.body ?? {};
+  if (!token || typeof token !== "string") {
+    res.status(400).json({ error: "token required" });
+    return;
+  }
+  await db
+    .update(npUsers)
+    .set({ pushToken: token, updatedAt: new Date() })
+    .where(eq(npUsers.id, userId));
+  res.json({ ok: true });
+});
+
+router.patch("/social/me/settings", async (req, res) => {
+  const userId = requireAuth(req, res);
+  if (!userId) return;
+  const { nudgesEnabled } = req.body ?? {};
+  if (typeof nudgesEnabled !== "boolean") {
+    res.status(400).json({ error: "nudgesEnabled (boolean) required" });
+    return;
+  }
+  await db
+    .update(npUsers)
+    .set({ nudgesEnabled, updatedAt: new Date() })
+    .where(eq(npUsers.id, userId));
+  res.json({ ok: true });
+});
+
+router.post("/social/nudge/:userId", async (req, res) => {
+  const senderId = requireAuth(req, res);
+  if (!senderId) return;
+
+  const targetUserId = req.params.userId;
+  if (targetUserId === senderId) {
+    res.status(400).json({ error: "Cannot nudge yourself" });
+    return;
+  }
+
+  const sender = await getSocialProfile(senderId);
+  if (!sender) {
+    res.status(404).json({ error: "Create your social profile first" });
+    return;
+  }
+
+  const isFollowing = await db
+    .select({ followerId: npFollows.followerId })
+    .from(npFollows)
+    .where(and(eq(npFollows.followerId, senderId), eq(npFollows.followingId, targetUserId)))
+    .limit(1);
+  if (isFollowing.length === 0) {
+    res.status(403).json({ error: "You can only nudge people you follow" });
+    return;
+  }
+
+  const targets = await db.select().from(npUsers).where(eq(npUsers.id, targetUserId)).limit(1);
+  const target = targets[0];
+  if (!target) {
+    res.status(404).json({ error: "User not found" });
+    return;
+  }
+
+  if (!target.nudgesEnabled) {
+    res.json({ ok: true, skipped: "nudges_disabled" });
+    return;
+  }
+
+  if (!target.pushToken) {
+    res.json({ ok: true, skipped: "no_push_token" });
+    return;
+  }
+
+  try {
+    const pushRes = await fetch(EXPO_PUSH_URL, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "Accept": "application/json", "Accept-Encoding": "gzip, deflate" },
+      body: JSON.stringify({
+        to: target.pushToken,
+        title: `${sender.displayName} nudged you 👋`,
+        body: "Don't let your reading streak slip! Open the app and log a session.",
+        data: { navigateTo: "log" },
+        sound: "default",
+      }),
+    });
+    const result = await pushRes.json();
+    res.json({ ok: true, result });
+  } catch (err: any) {
+    res.status(500).json({ error: "Failed to send push notification", detail: err?.message });
+  }
 });
 
 export default router;

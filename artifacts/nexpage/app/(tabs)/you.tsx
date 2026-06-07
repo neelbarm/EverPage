@@ -13,6 +13,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Feather, Ionicons } from '@expo/vector-icons';
 import { useColors } from '@/hooks/useColors';
 import { useStore } from '@/context/StoreContext';
+import { useSocial } from '@/context/SocialContext';
 import { scheduleDailyReminder, cancelDailyReminder } from '@/lib/notifications';
 
 function formatReminderTime(hour: number, minute: number): string {
@@ -181,8 +182,10 @@ export default function YouScreen() {
   const colors = useColors();
   const insets = useSafeAreaInsets();
   const { profile, streak, reminder, setReminder } = useStore();
+  const { socialProfile, setNudgesEnabled, isRegistered } = useSocial();
   const topPad = insets.top + (Platform.OS === 'web' ? 67 : 0);
   const [showReminderModal, setShowReminderModal] = useState(false);
+  const [togglingNudges, setTogglingNudges] = useState(false);
 
   const totalHours = Math.floor(profile.totalMinutes / 60);
 
@@ -206,6 +209,16 @@ export default function YouScreen() {
       await cancelDailyReminder();
     }
     setShowReminderModal(false);
+  }
+
+  async function handleToggleNudges(value: boolean) {
+    if (togglingNudges) return;
+    setTogglingNudges(true);
+    try {
+      await setNudgesEnabled(value);
+    } catch { /* ignore */ } finally {
+      setTogglingNudges(false);
+    }
   }
 
   const settingsRows = [
@@ -319,6 +332,33 @@ export default function YouScreen() {
             </TouchableOpacity>
           ))}
         </View>
+
+        {/* Social settings */}
+        {isRegistered && (
+          <>
+            <Text style={[styles.sectionLabel, { color: colors.mutedForeground, fontFamily: 'Inter_600SemiBold' }]}>SOCIAL</Text>
+            <View style={[styles.settingsCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
+              <View style={[styles.settingsRow]}>
+                <View style={[styles.settingsIcon, { backgroundColor: colors.muted }]}>
+                  <Ionicons name="hand-left-outline" size={15} color={colors.mutedForeground} />
+                </View>
+                <View style={{ flex: 1 }}>
+                  <Text style={[styles.settingsLabel, { color: colors.foreground, fontFamily: 'Inter_400Regular' }]}>Allow nudges</Text>
+                  <Text style={[{ fontSize: 12, color: colors.mutedForeground, fontFamily: 'Inter_400Regular' }]}>
+                    Let friends nudge you to keep your streak alive
+                  </Text>
+                </View>
+                <Switch
+                  value={socialProfile?.nudgesEnabled ?? true}
+                  onValueChange={handleToggleNudges}
+                  disabled={togglingNudges}
+                  trackColor={{ false: colors.border, true: colors.primary }}
+                  thumbColor="#fff"
+                />
+              </View>
+            </View>
+          </>
+        )}
       </ScrollView>
 
       <ReminderModal

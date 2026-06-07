@@ -47,7 +47,7 @@ export interface LeaderboardEntry {
 }
 
 interface SocialContextType {
-  socialProfile: SocialUser | null;
+  socialProfile: (SocialUser & { nudgesEnabled: boolean }) | null;
   isRegistered: boolean;
   following: SocialUser[];
   feed: ActivityItem[];
@@ -61,6 +61,9 @@ interface SocialContextType {
   postActivity: (bookTitle: string, bookAuthor: string, durationMinutes: number, pagesRead: number) => Promise<void>;
   refreshFeed: () => Promise<void>;
   isFollowing: (userId: string) => boolean;
+  sendNudge: (userId: string) => Promise<void>;
+  registerPushToken: (token: string) => Promise<void>;
+  setNudgesEnabled: (enabled: boolean) => Promise<void>;
 }
 
 const SocialContext = createContext<SocialContextType | null>(null);
@@ -99,7 +102,7 @@ async function apiFetch<T>(
 
 export function SocialProvider({ children }: { children: React.ReactNode }) {
   const { isAuthenticated, isLoading: authLoading } = useAuth();
-  const [socialProfile, setSocialProfile] = useState<SocialUser | null>(null);
+  const [socialProfile, setSocialProfile] = useState<(SocialUser & { nudgesEnabled: boolean }) | null>(null);
   const [following, setFollowing] = useState<SocialUser[]>([]);
   const [feed, setFeed] = useState<ActivityItem[]>([]);
   const [leaderboard, setLeaderboard] = useState<LeaderboardEntry[]>([]);
@@ -126,7 +129,7 @@ export function SocialProvider({ children }: { children: React.ReactNode }) {
 
   async function loadProfile() {
     try {
-      const profile = await apiFetch<SocialUser | null>('/social/me');
+      const profile = await apiFetch<(SocialUser & { nudgesEnabled: boolean }) | null>('/social/me');
       setSocialProfile(profile);
       if (profile) {
         loadSocialData();
@@ -158,7 +161,7 @@ export function SocialProvider({ children }: { children: React.ReactNode }) {
     color: string,
   ) => {
     const initial = (displayName.trim()[0] ?? 'U').toUpperCase();
-    const profile = await apiFetch<SocialUser>('/social/users', {
+    const profile = await apiFetch<SocialUser & { nudgesEnabled: boolean }>('/social/users', {
       method: 'POST',
       body: JSON.stringify({ username: username.trim().toLowerCase(), displayName: displayName.trim(), color, initial }),
     });
@@ -215,6 +218,27 @@ export function SocialProvider({ children }: { children: React.ReactNode }) {
     return following.some(u => u.id === userId);
   }, [following]);
 
+  const sendNudge = useCallback(async (userId: string) => {
+    await apiFetch(`/social/nudge/${userId}`, { method: 'POST' });
+  }, []);
+
+  const registerPushToken = useCallback(async (token: string) => {
+    try {
+      await apiFetch('/social/push-token', {
+        method: 'POST',
+        body: JSON.stringify({ token }),
+      });
+    } catch { /* non-blocking */ }
+  }, []);
+
+  const setNudgesEnabled = useCallback(async (enabled: boolean) => {
+    await apiFetch('/social/me/settings', {
+      method: 'PATCH',
+      body: JSON.stringify({ nudgesEnabled: enabled }),
+    });
+    setSocialProfile(prev => prev ? { ...prev, nudgesEnabled: enabled } : prev);
+  }, []);
+
   const isRegistered = socialProfile !== null;
 
   return (
@@ -233,6 +257,9 @@ export function SocialProvider({ children }: { children: React.ReactNode }) {
       postActivity,
       refreshFeed,
       isFollowing,
+      sendNudge,
+      registerPushToken,
+      setNudgesEnabled,
     }}>
       {children}
     </SocialContext.Provider>

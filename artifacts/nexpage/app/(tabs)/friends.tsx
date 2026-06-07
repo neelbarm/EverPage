@@ -1,7 +1,7 @@
 import React, { useState, useCallback, useEffect } from 'react';
 import {
   View, Text, FlatList, TouchableOpacity, StyleSheet,
-  Platform, TextInput, ActivityIndicator, Modal, ScrollView,
+  Platform, TextInput, ActivityIndicator, Modal, ScrollView, Alert,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -28,7 +28,58 @@ function timeAgo(iso: string): string {
   return `${Math.floor(h / 24)}d ago`;
 }
 
-function ActivityCard({ item }: { item: ActivityItem }) {
+function isToday(iso: string): boolean {
+  const d = new Date(iso);
+  const now = new Date();
+  return d.getFullYear() === now.getFullYear()
+    && d.getMonth() === now.getMonth()
+    && d.getDate() === now.getDate();
+}
+
+function NudgeButton({ userId, displayName }: { userId: string; displayName: string }) {
+  const colors = useColors();
+  const { sendNudge } = useSocial();
+  const [sending, setSending] = useState(false);
+  const [sent, setSent] = useState(false);
+
+  async function handleNudge() {
+    if (sent || sending) return;
+    setSending(true);
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    try {
+      await sendNudge(userId);
+      setSent(true);
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+    } catch {
+      Alert.alert('Could not send nudge', 'Please try again later.');
+    } finally {
+      setSending(false);
+    }
+  }
+
+  return (
+    <TouchableOpacity
+      style={[
+        styles.nudgeBtn,
+        sent
+          ? { backgroundColor: colors.muted, borderColor: colors.border }
+          : { backgroundColor: colors.primary, borderColor: colors.primary },
+      ]}
+      onPress={handleNudge}
+      disabled={sending || sent}
+      activeOpacity={0.8}
+    >
+      {sending
+        ? <ActivityIndicator size="small" color="#fff" />
+        : sent
+          ? <Text style={[styles.nudgeBtnText, { color: colors.mutedForeground, fontFamily: 'Inter_600SemiBold' }]}>Nudged ✓</Text>
+          : <Text style={[styles.nudgeBtnText, { color: '#fff', fontFamily: 'Inter_600SemiBold' }]}>👋 Nudge</Text>
+      }
+    </TouchableOpacity>
+  );
+}
+
+function ActivityCard({ item, readToday }: { item: ActivityItem; readToday: boolean }) {
   const colors = useColors();
   return (
     <View style={[styles.card, { borderBottomColor: colors.border }]}>
@@ -46,18 +97,52 @@ function ActivityCard({ item }: { item: ActivityItem }) {
           {item.bookTitle}
           {item.bookAuthor ? ` · ${item.bookAuthor}` : ''}
         </Text>
-        <View style={styles.statsRow}>
-          {item.durationMinutes > 0 && (
-            <Text style={[styles.statText, { color: colors.mutedForeground, fontFamily: 'Inter_400Regular' }]}>
-              {item.durationMinutes} min
-            </Text>
-          )}
-          {item.pagesRead > 0 && (
-            <Text style={[styles.statText, { color: colors.mutedForeground, fontFamily: 'Inter_400Regular' }]}>
-              {item.durationMinutes > 0 ? ' · ' : ''}{item.pagesRead} pages
-            </Text>
+        <View style={styles.cardBottom}>
+          <View style={styles.statsRow}>
+            {item.durationMinutes > 0 && (
+              <Text style={[styles.statText, { color: colors.mutedForeground, fontFamily: 'Inter_400Regular' }]}>
+                {item.durationMinutes} min
+              </Text>
+            )}
+            {item.pagesRead > 0 && (
+              <Text style={[styles.statText, { color: colors.mutedForeground, fontFamily: 'Inter_400Regular' }]}>
+                {item.durationMinutes > 0 ? ' · ' : ''}{item.pagesRead} pages
+              </Text>
+            )}
+          </View>
+          {!readToday && (
+            <NudgeButton userId={item.userId} displayName={item.displayName} />
           )}
         </View>
+      </View>
+    </View>
+  );
+}
+
+function FriendRow({ user, readToday }: { user: SocialUser; readToday: boolean }) {
+  const colors = useColors();
+  return (
+    <View style={[styles.card, { borderBottomColor: colors.border }]}>
+      <AvatarCircle initial={user.initial} color={user.color} />
+      <View style={styles.cardInfo}>
+        <View style={styles.cardNameRow}>
+          <Text style={[styles.friendName, { color: colors.foreground, fontFamily: 'Inter_600SemiBold' }]}>
+            {user.displayName}
+          </Text>
+          {readToday && (
+            <View style={[styles.readBadge, { backgroundColor: colors.muted }]}>
+              <Text style={[styles.readBadgeText, { color: colors.mutedForeground, fontFamily: 'Inter_600SemiBold' }]}>✓ Read today</Text>
+            </View>
+          )}
+        </View>
+        <Text style={[styles.bookTitle, { color: colors.mutedForeground, fontFamily: 'Inter_400Regular' }]}>
+          @{user.username}
+        </Text>
+        {!readToday && (
+          <View style={{ marginTop: 6 }}>
+            <NudgeButton userId={user.id} displayName={user.displayName} />
+          </View>
+        )}
       </View>
     </View>
   );
@@ -188,6 +273,14 @@ export default function FriendsScreen() {
     return showWeek ? age <= sevenDaysMs : age <= oneDayMs;
   });
 
+  const usersReadToday = new Set(
+    feed
+      .filter(item => isToday(item.createdAt))
+      .map(item => item.userId)
+  );
+
+  const friendsAtRisk = following.filter(u => !usersReadToday.has(u.id));
+
   if (!isRegistered) {
     return (
       <View style={[styles.root, { backgroundColor: colors.background }]}>
@@ -276,25 +369,49 @@ export default function FriendsScreen() {
             </Text>
           </TouchableOpacity>
         </View>
-      ) : filteredFeed.length === 0 ? (
-        <View style={styles.empty}>
-          <Ionicons name="book-outline" size={48} color={colors.mutedForeground} />
-          <Text style={[styles.emptyTitle, { color: colors.foreground, fontFamily: 'Inter_600SemiBold' }]}>
-            {showWeek ? 'No activity this week' : 'No activity today'}
-          </Text>
-          <Text style={[styles.emptyText, { color: colors.mutedForeground, fontFamily: 'Inter_400Regular' }]}>
-            Your friends haven't logged any reading {showWeek ? 'this week' : 'today'} yet.
-          </Text>
-        </View>
       ) : (
         <FlatList
           data={filteredFeed}
           keyExtractor={f => f.id}
-          renderItem={({ item }) => <ActivityCard item={item} />}
+          renderItem={({ item }) => (
+            <ActivityCard item={item} readToday={usersReadToday.has(item.userId)} />
+          )}
           onRefresh={refreshFeed}
           refreshing={isLoading}
           contentContainerStyle={{ paddingBottom: Platform.OS === 'web' ? 100 : 20 }}
           showsVerticalScrollIndicator={false}
+          ListHeaderComponent={
+            !showWeek && friendsAtRisk.length > 0 ? (
+              <View>
+                <View style={[styles.sectionHeader, { borderBottomColor: colors.border }]}>
+                  <Text style={[styles.sectionLabel, { color: colors.mutedForeground, fontFamily: 'Inter_600SemiBold' }]}>
+                    STREAK AT RISK
+                  </Text>
+                </View>
+                {friendsAtRisk.map(user => (
+                  <FriendRow key={user.id} user={user} readToday={false} />
+                ))}
+                {filteredFeed.length > 0 && (
+                  <View style={[styles.sectionHeader, { borderBottomColor: colors.border }]}>
+                    <Text style={[styles.sectionLabel, { color: colors.mutedForeground, fontFamily: 'Inter_600SemiBold' }]}>
+                      ACTIVITY TODAY
+                    </Text>
+                  </View>
+                )}
+              </View>
+            ) : null
+          }
+          ListEmptyComponent={
+            <View style={styles.empty}>
+              <Ionicons name="book-outline" size={48} color={colors.mutedForeground} />
+              <Text style={[styles.emptyTitle, { color: colors.foreground, fontFamily: 'Inter_600SemiBold' }]}>
+                {showWeek ? 'No activity this week' : 'No activity today'}
+              </Text>
+              <Text style={[styles.emptyText, { color: colors.mutedForeground, fontFamily: 'Inter_400Regular' }]}>
+                Your friends haven't logged any reading {showWeek ? 'this week' : 'today'} yet.
+              </Text>
+            </View>
+          }
         />
       )}
 
@@ -313,16 +430,23 @@ const styles = StyleSheet.create({
   toggle: { flexDirection: 'row', borderRadius: 10, padding: 3, alignSelf: 'flex-start' },
   toggleBtn: { paddingHorizontal: 16, paddingVertical: 7, borderRadius: 8 },
   toggleText: { fontSize: 14 },
-  card: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 20, paddingVertical: 15, gap: 14, borderBottomWidth: StyleSheet.hairlineWidth },
+  sectionHeader: { paddingHorizontal: 20, paddingVertical: 10, borderBottomWidth: StyleSheet.hairlineWidth },
+  sectionLabel: { fontSize: 11, letterSpacing: 1.5 },
+  card: { flexDirection: 'row', alignItems: 'flex-start', paddingHorizontal: 20, paddingVertical: 15, gap: 14, borderBottomWidth: StyleSheet.hairlineWidth },
   cardInfo: { flex: 1, gap: 3 },
-  cardNameRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  cardNameRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 4 },
+  cardBottom: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginTop: 4 },
   friendName: { fontSize: 15, letterSpacing: -0.2 },
   timeAgo: { fontSize: 12 },
   bookTitle: { fontSize: 13 },
-  statsRow: { flexDirection: 'row', alignItems: 'center', marginTop: 2 },
+  statsRow: { flexDirection: 'row', alignItems: 'center' },
   statText: { fontSize: 12 },
+  readBadge: { paddingHorizontal: 8, paddingVertical: 3, borderRadius: 10 },
+  readBadgeText: { fontSize: 11 },
+  nudgeBtn: { paddingHorizontal: 12, paddingVertical: 5, borderRadius: 16, borderWidth: 1.5, minWidth: 80, alignItems: 'center' },
+  nudgeBtnText: { fontSize: 12 },
   loadingContainer: { flex: 1, alignItems: 'center', justifyContent: 'center' },
-  empty: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 40, gap: 12 },
+  empty: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 40, gap: 12, paddingVertical: 60 },
   emptyTitle: { fontSize: 18 },
   emptyText: { fontSize: 14, textAlign: 'center', lineHeight: 20 },
   ctaBtn: { marginTop: 8, paddingHorizontal: 28, paddingVertical: 12, borderRadius: 24 },

@@ -13,11 +13,12 @@ import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { KeyboardProvider } from "react-native-keyboard-controller";
 import { SafeAreaProvider } from "react-native-safe-area-context";
 import { Platform } from "react-native";
+import * as Notifications from "expo-notifications";
 
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { StoreProvider } from "@/context/StoreContext";
-import { SocialProvider } from "@/context/SocialContext";
-import { AuthProvider } from "@/lib/auth";
+import { SocialProvider, useSocial } from "@/context/SocialContext";
+import { AuthProvider, useAuth } from "@/lib/auth";
 import {
   requestNotificationPermissions,
   setupNotificationResponseHandler,
@@ -26,6 +27,31 @@ import {
 SplashScreen.preventAutoHideAsync();
 
 const queryClient = new QueryClient();
+
+function PushTokenRegistrar() {
+  const { isAuthenticated } = useAuth();
+  const { isRegistered, registerPushToken } = useSocial();
+
+  useEffect(() => {
+    if (Platform.OS === "web") return;
+    if (!isAuthenticated || !isRegistered) return;
+
+    async function register() {
+      try {
+        const granted = await requestNotificationPermissions();
+        if (!granted) return;
+        const tokenData = await Notifications.getExpoPushTokenAsync();
+        await registerPushToken(tokenData.data);
+      } catch {
+        // non-blocking
+      }
+    }
+
+    register();
+  }, [isAuthenticated, isRegistered]);
+
+  return null;
+}
 
 function RootLayoutNav() {
   return (
@@ -83,6 +109,7 @@ export default function RootLayout() {
               <AuthProvider>
                 <StoreProvider>
                   <SocialProvider>
+                    <PushTokenRegistrar />
                     <RootLayoutNav />
                   </SocialProvider>
                 </StoreProvider>
