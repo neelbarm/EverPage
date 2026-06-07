@@ -73,6 +73,10 @@ function RootLayoutNav() {
         name="finish/[bookId]"
         options={{ headerShown: false, presentation: "modal" }}
       />
+      <Stack.Screen
+        name="profile/[userId]"
+        options={{ headerShown: false }}
+      />
     </Stack>
   );
 }

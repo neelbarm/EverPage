@@ -6,6 +6,7 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
+import { useRouter } from 'expo-router';
 import { useColors } from '@/hooks/useColors';
 import { useSocial, ActivityItem, SocialUser } from '@/context/SocialContext';
 import RegisterModal from '@/components/RegisterModal';
@@ -81,14 +82,24 @@ function NudgeButton({ userId, displayName }: { userId: string; displayName: str
 
 function ActivityCard({ item, readToday }: { item: ActivityItem; readToday: boolean }) {
   const colors = useColors();
+  const router = useRouter();
+
+  function goToProfile() {
+    router.push(`/profile/${item.userId}` as any);
+  }
+
   return (
     <View style={[styles.card, { borderBottomColor: colors.border }]}>
-      <AvatarCircle initial={item.initial} color={item.color} />
+      <TouchableOpacity onPress={goToProfile} activeOpacity={0.75}>
+        <AvatarCircle initial={item.initial} color={item.color} />
+      </TouchableOpacity>
       <View style={styles.cardInfo}>
         <View style={styles.cardNameRow}>
-          <Text style={[styles.friendName, { color: colors.foreground, fontFamily: 'Inter_600SemiBold' }]}>
-            {item.displayName}
-          </Text>
+          <TouchableOpacity onPress={goToProfile} activeOpacity={0.75}>
+            <Text style={[styles.friendName, { color: colors.foreground, fontFamily: 'Inter_600SemiBold' }]}>
+              {item.displayName}
+            </Text>
+          </TouchableOpacity>
           <Text style={[styles.timeAgo, { color: colors.mutedForeground, fontFamily: 'Inter_400Regular' }]}>
             {timeAgo(item.createdAt)}
           </Text>
@@ -121,14 +132,24 @@ function ActivityCard({ item, readToday }: { item: ActivityItem; readToday: bool
 
 function FriendRow({ user, readToday }: { user: SocialUser; readToday: boolean }) {
   const colors = useColors();
+  const router = useRouter();
+
+  function goToProfile() {
+    router.push(`/profile/${user.id}` as any);
+  }
+
   return (
     <View style={[styles.card, { borderBottomColor: colors.border }]}>
-      <AvatarCircle initial={user.initial} color={user.color} />
+      <TouchableOpacity onPress={goToProfile} activeOpacity={0.75}>
+        <AvatarCircle initial={user.initial} color={user.color} />
+      </TouchableOpacity>
       <View style={styles.cardInfo}>
         <View style={styles.cardNameRow}>
-          <Text style={[styles.friendName, { color: colors.foreground, fontFamily: 'Inter_600SemiBold' }]}>
-            {user.displayName}
-          </Text>
+          <TouchableOpacity onPress={goToProfile} activeOpacity={0.75}>
+            <Text style={[styles.friendName, { color: colors.foreground, fontFamily: 'Inter_600SemiBold' }]}>
+              {user.displayName}
+            </Text>
+          </TouchableOpacity>
           {readToday && (
             <View style={[styles.readBadge, { backgroundColor: colors.muted }]}>
               <Text style={[styles.readBadgeText, { color: colors.mutedForeground, fontFamily: 'Inter_600SemiBold' }]}>✓ Read today</Text>

@@ -260,6 +260,84 @@ router.get("/social/leaderboard", async (req, res) => {
   })));
 });
 
+router.get("/social/users/:id/profile", async (req, res) => {
+  const currentUserId = requireAuth(req, res);
+  if (!currentUserId) return;
+
+  const targetId = req.params.id;
+
+  const userRows = await db.select().from(npUsers).where(eq(npUsers.id, targetId)).limit(1);
+  const user = userRows[0];
+  if (!user) {
+    res.status(404).json({ error: "User not found" });
+    return;
+  }
+
+  const activity = await db
+    .select()
+    .from(npActivity)
+    .where(eq(npActivity.userId, targetId))
+    .orderBy(desc(npActivity.createdAt))
+    .limit(50);
+
+  const weekStart = new Date();
+  weekStart.setDate(weekStart.getDate() - 6);
+  weekStart.setHours(0, 0, 0, 0);
+
+  const weekPages = activity
+    .filter(a => new Date(a.createdAt as any) >= weekStart)
+    .reduce((sum, a) => sum + (a.pagesRead ?? 0), 0);
+
+  const activityDays = new Set(
+    activity.map(a => {
+      const d = new Date(a.createdAt as any);
+      return `${d.getFullYear()}-${d.getMonth()}-${d.getDate()}`;
+    })
+  );
+
+  let streakDays = 0;
+  const today = new Date();
+  for (let i = 0; i < 365; i++) {
+    const d = new Date(today);
+    d.setDate(d.getDate() - i);
+    const key = `${d.getFullYear()}-${d.getMonth()}-${d.getDate()}`;
+    if (activityDays.has(key)) {
+      streakDays++;
+    } else {
+      break;
+    }
+  }
+
+  const seenBooks = new Set<string>();
+  const currentBooks: { title: string; author: string }[] = [];
+  for (const a of activity) {
+    if (!seenBooks.has(a.bookTitle)) {
+      seenBooks.add(a.bookTitle);
+      currentBooks.push({ title: a.bookTitle, author: a.bookAuthor ?? "" });
+      if (currentBooks.length >= 5) break;
+    }
+  }
+
+  res.json({
+    id: user.id,
+    username: user.username,
+    displayName: user.displayName,
+    color: user.color,
+    initial: user.initial,
+    streakDays,
+    weekPages,
+    currentBooks,
+    recentActivity: activity.slice(0, 10).map(a => ({
+      id: a.id,
+      bookTitle: a.bookTitle,
+      bookAuthor: a.bookAuthor,
+      durationMinutes: a.durationMinutes,
+      pagesRead: a.pagesRead,
+      createdAt: a.createdAt,
+    })),
+  });
+});
+
 router.get("/social/suggested", async (req, res) => {
   const userId = requireAuth(req, res);
   if (!userId) return;
