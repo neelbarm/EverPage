@@ -139,7 +139,9 @@ export default function LogScreen() {
 
   const hasReadToday = sessions.some(s => s.date === todayStr());
   const showFreezeBanner = !hasReadToday && streak.freezesLeft > 0;
+  const showNoFreezeNotice = !hasReadToday && streak.freezesLeft === 0;
   const [bannerDismissed, setBannerDismissed] = useState(false);
+  const [noFreezeNoticeDismissed, setNoFreezeNoticeDismissed] = useState(false);
 
   const [freezeToastText, setFreezeToastText] = useState('');
   const freezeToastOpacity = useRef(new Animated.Value(0)).current;
@@ -289,6 +291,21 @@ export default function LogScreen() {
           }}
           onDismiss={() => setBannerDismissed(true)}
         />
+      )}
+
+      {showNoFreezeNotice && !noFreezeNoticeDismissed && (
+        <View style={[styles.noFreezeNotice, { backgroundColor: colors.muted, borderColor: colors.border }]}>
+          <Ionicons name="snow-outline" size={16} color={colors.mutedForeground} />
+          <Text style={[styles.noFreezeText, { color: colors.mutedForeground, fontFamily: 'Inter_400Regular' }]}>
+            No freezes left — log any reading to protect your streak.
+          </Text>
+          <TouchableOpacity
+            onPress={() => setNoFreezeNoticeDismissed(true)}
+            hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+          >
+            <Ionicons name="close" size={16} color={colors.mutedForeground} />
+          </TouchableOpacity>
+        </View>
       )}
 
       {activeBooks.length === 0 ? (
@@ -535,4 +552,10 @@ const styles = StyleSheet.create({
     elevation: 6,
   },
   freezeToastText: { fontSize: 14, letterSpacing: -0.1 },
+  noFreezeNotice: {
+    flexDirection: 'row', alignItems: 'center', gap: 8,
+    marginHorizontal: 16, marginBottom: 10, borderRadius: 12,
+    borderWidth: 1, paddingVertical: 10, paddingHorizontal: 14,
+  },
+  noFreezeText: { flex: 1, fontSize: 13, lineHeight: 18 },
 });
