@@ -77,6 +77,14 @@ function RootLayoutNav() {
         name="profile/[userId]"
         options={{ headerShown: false }}
       />
+      <Stack.Screen
+        name="wrapped/[year]"
+        options={{ headerShown: false, presentation: "fullScreenModal", animation: "slide_from_bottom" }}
+      />
+      <Stack.Screen
+        name="room/[roomId]"
+        options={{ headerShown: false }}
+      />
     </Stack>
   );
 }

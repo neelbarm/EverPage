@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { View, Text, TouchableOpacity, StyleSheet, Platform } from 'react-native';
+import { View, Text, TouchableOpacity, StyleSheet, Platform, TextInput, KeyboardAvoidingView, ScrollView } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import * as Haptics from 'expo-haptics';
@@ -7,6 +7,8 @@ import { useColors } from '@/hooks/useColors';
 import { useStore } from '@/context/StoreContext';
 import { useSocial } from '@/context/SocialContext';
 import { BookCover } from '@/components/BookCover';
+import { useAuth } from '@/lib/auth';
+import { apiFetch } from '@/lib/api';
 
 export default function SessionLogScreen() {
   const colors = useColors();
@@ -15,11 +17,13 @@ export default function SessionLogScreen() {
   const { bookId, minutes, startPage } = useLocalSearchParams<{ bookId: string; minutes: string; startPage: string }>();
   const { getBook, logSession } = useStore();
   const { postActivity } = useSocial();
+  const { isAuthenticated } = useAuth();
   const book = getBook(bookId ?? '');
 
   const durationMin = Math.max(1, parseInt(minutes ?? '1', 10));
   const startPg = parseInt(startPage ?? '0', 10);
   const [pagesRead, setPagesRead] = useState(Math.max(1, Math.round(durationMin * 0.6)));
+  const [noteText, setNoteText] = useState('');
 
   const endPage = Math.min(startPg + pagesRead, book?.totalPages ?? 9999);
   const pace = pagesRead > 0 ? (durationMin / pagesRead).toFixed(1) : '--';
@@ -36,6 +40,19 @@ export default function SessionLogScreen() {
     Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     await logSession(book.id, durationMin, startPg, endPage);
     postActivity(book.title, book.author, durationMin, pagesRead).catch(() => {});
+
+    if (isAuthenticated && noteText.trim()) {
+      apiFetch('/notes', {
+        method: 'POST',
+        body: JSON.stringify({
+          bookTitle: book.title,
+          bookAuthor: book.author,
+          page: endPage,
+          noteText: noteText.trim(),
+        }),
+      }).catch(() => {});
+    }
+
     const finished = endPage >= book.totalPages;
     if (finished) {
       router.replace({ pathname: '/finish/[bookId]', params: { bookId: book.id } });
@@ -49,8 +66,15 @@ export default function SessionLogScreen() {
   const topPad = insets.top + (Platform.OS === 'web' ? 80 : 24);
 
   return (
-    <View style={[styles.root, { backgroundColor: colors.background }]}>
-      <View style={[styles.content, { paddingTop: topPad }]}>
+    <KeyboardAvoidingView
+      style={[styles.root, { backgroundColor: colors.background }]}
+      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+    >
+      <ScrollView
+        contentContainerStyle={[styles.content, { paddingTop: topPad }]}
+        keyboardShouldPersistTaps="handled"
+        showsVerticalScrollIndicator={false}
+      >
         <View style={styles.headerBlock}>
           <Text style={[styles.niceLabel, { color: colors.mutedForeground, fontFamily: 'Inter_400Regular' }]}>
             Nice session — you read for
@@ -111,7 +135,27 @@ export default function SessionLogScreen() {
             </Text>
           </View>
         </View>
-      </View>
+
+        {isAuthenticated && (
+          <View style={styles.noteSection}>
+            <Text style={[styles.notePrompt, { color: colors.foreground, fontFamily: 'Inter_600SemiBold' }]}>
+              Add a margin note
+            </Text>
+            <Text style={[styles.noteHint, { color: colors.mutedForeground, fontFamily: 'Inter_400Regular' }]}>
+              Optional — friends see it once they reach p. {endPage}
+            </Text>
+            <TextInput
+              style={[styles.noteInput, { backgroundColor: colors.muted, color: colors.foreground, borderColor: colors.border, fontFamily: 'Inter_400Regular' }]}
+              placeholder="What struck you about this section?"
+              placeholderTextColor={colors.mutedForeground}
+              value={noteText}
+              onChangeText={setNoteText}
+              multiline
+              maxLength={300}
+            />
+          </View>
+        )}
+      </ScrollView>
 
       <View style={[styles.footer, { paddingBottom: insets.bottom + (Platform.OS === 'web' ? 34 : 20) }]}>
         <TouchableOpacity
@@ -122,13 +166,13 @@ export default function SessionLogScreen() {
           <Text style={[styles.logBtnText, { color: colors.primaryForeground, fontFamily: 'Inter_700Bold' }]}>Log session</Text>
         </TouchableOpacity>
       </View>
-    </View>
+    </KeyboardAvoidingView>
   );
 }
 
 const styles = StyleSheet.create({
   root: { flex: 1 },
-  content: { flex: 1, paddingHorizontal: 24, gap: 24 },
+  content: { paddingHorizontal: 24, paddingBottom: 24, gap: 24 },
   headerBlock: { gap: 4 },
   niceLabel: { fontSize: 16 },
   durationText: { fontSize: 32, letterSpacing: -1, lineHeight: 38 },
@@ -146,6 +190,13 @@ const styles = StyleSheet.create({
   statLabel: { fontSize: 12 },
   statVal: { fontSize: 15 },
   statDivider: { width: 1 },
+  noteSection: { gap: 6 },
+  notePrompt: { fontSize: 16 },
+  noteHint: { fontSize: 12, lineHeight: 16 },
+  noteInput: {
+    borderRadius: 12, borderWidth: 1, paddingHorizontal: 14, paddingVertical: 12,
+    fontSize: 14, minHeight: 80, textAlignVertical: 'top',
+  },
   footer: { paddingHorizontal: 24, paddingTop: 12 },
   logBtn: { borderRadius: 16, paddingVertical: 18, alignItems: 'center' },
   logBtnText: { fontSize: 17 },

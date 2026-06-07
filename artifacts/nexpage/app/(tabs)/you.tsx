@@ -9,6 +9,7 @@ import {
   Modal,
   Switch,
 } from 'react-native';
+import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Feather, Ionicons } from '@expo/vector-icons';
 import { useColors } from '@/hooks/useColors';
@@ -266,6 +267,7 @@ function DailyGoalModal({
 export default function YouScreen() {
   const colors = useColors();
   const insets = useSafeAreaInsets();
+  const router = useRouter();
   const { profile, streak, reminder, setReminder, setDailyGoal } = useStore();
   const { socialProfile, setNudgesEnabled, isRegistered } = useSocial();
   const topPad = insets.top + (Platform.OS === 'web' ? 67 : 0);
@@ -370,6 +372,23 @@ export default function YouScreen() {
             </React.Fragment>
           ))}
         </View>
+
+        {/* Wrapped */}
+        <TouchableOpacity
+          style={[styles.wrappedCard, { backgroundColor: colors.primary }]}
+          onPress={() => router.push({ pathname: '/wrapped/[year]', params: { year: String(new Date().getFullYear()) } })}
+          activeOpacity={0.88}
+        >
+          <View style={{ flex: 1, gap: 3 }}>
+            <Text style={[styles.wrappedTitle, { fontFamily: 'Inter_700Bold' }]}>
+              {new Date().getFullYear()} Reading Wrapped
+            </Text>
+            <Text style={[styles.wrappedSub, { fontFamily: 'Inter_400Regular' }]}>
+              Books, hours, streak — your year in review
+            </Text>
+          </View>
+          <Ionicons name="chevron-forward" size={18} color="rgba(255,255,255,0.7)" />
+        </TouchableOpacity>
 
         {/* Reading taste */}
         <Text style={[styles.sectionLabel, { color: colors.mutedForeground, fontFamily: 'Inter_600SemiBold' }]}>READING TASTE</Text>
@@ -576,4 +595,10 @@ const styles = StyleSheet.create({
     marginTop: 4,
   },
   saveBtnText: { color: '#fff', fontSize: 16 },
+  wrappedCard: {
+    flexDirection: 'row', alignItems: 'center', gap: 12,
+    borderRadius: 16, padding: 18,
+  },
+  wrappedTitle: { fontSize: 16, color: '#fff' },
+  wrappedSub: { fontSize: 13, color: 'rgba(255,255,255,0.72)', marginTop: 2 },
 });

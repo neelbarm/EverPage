@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View, Text, ScrollView, TouchableOpacity, StyleSheet, Platform,
   Modal, KeyboardAvoidingView, TextInput, Alert, ActivityIndicator,
@@ -11,6 +11,8 @@ import { useColors } from '@/hooks/useColors';
 import { useStore } from '@/context/StoreContext';
 import { BookCover } from '@/components/BookCover';
 import { useSocial } from '@/context/SocialContext';
+import { useAuth } from '@/lib/auth';
+import { apiFetch } from '@/lib/api';
 
 const GENRES = ['Literary Fiction', 'Historical Fiction', 'Non-Fiction', 'Science Fiction', 'Mystery', 'Biography', 'Other'];
 
@@ -40,6 +42,12 @@ export default function BookDetailScreen() {
   const [editCoverUri, setEditCoverUri] = useState<string | undefined>(undefined);
   const [sharing, setSharing] = useState(false);
   const [shared, setShared] = useState(false);
+  const { isAuthenticated } = useAuth();
+  const [notes, setNotes] = useState<Array<{ id: string; userId: string; page: number; noteText: string; displayName: string; initial: string; color: string; isOwnNote: boolean }>>([]);
+  const [showJoinModal, setShowJoinModal] = useState(false);
+  const [joinCode, setJoinCode] = useState('');
+  const [joiningRoom, setJoiningRoom] = useState(false);
+  const [creatingRoom, setCreatingRoom] = useState(false);
 
   async function handleShare() {
     if (!book || sharing || shared) return;
@@ -79,6 +87,46 @@ export default function BookDetailScreen() {
     });
     Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     setShowEdit(false);
+  }
+
+  useEffect(() => {
+    if (!book || !isAuthenticated) return;
+    apiFetch<Array<{ id: string; userId: string; page: number; noteText: string; displayName: string; initial: string; color: string; isOwnNote: boolean }>>(
+      `/notes?bookTitle=${encodeURIComponent(book.title)}&upToPage=${book.currentPage}`,
+    ).then(data => setNotes(data)).catch(() => {});
+  }, [book?.title, book?.currentPage, isAuthenticated]);
+
+  async function handleCreateRoom() {
+    if (!book || creatingRoom) return;
+    setCreatingRoom(true);
+    try {
+      const { code } = await apiFetch<{ code: string }>('/rooms', {
+        method: 'POST',
+        body: JSON.stringify({ bookTitle: book.title, bookAuthor: book.author }),
+      });
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      router.push({ pathname: '/room/[roomId]', params: { roomId: code } });
+    } catch {
+      Alert.alert('Could not create room', 'Please try again.');
+    } finally {
+      setCreatingRoom(false);
+    }
+  }
+
+  async function handleJoinRoom() {
+    const code = joinCode.trim().toUpperCase();
+    if (!code || joiningRoom) return;
+    setJoiningRoom(true);
+    try {
+      await apiFetch(`/rooms/${code}/join`, { method: 'POST' });
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      setShowJoinModal(false);
+      router.push({ pathname: '/room/[roomId]', params: { roomId: code } });
+    } catch {
+      Alert.alert('Room not found', 'Check the code and try again.');
+    } finally {
+      setJoiningRoom(false);
+    }
   }
 
   if (!book) {
@@ -260,6 +308,72 @@ export default function BookDetailScreen() {
             )}
           </TouchableOpacity>
         )}
+
+        {/* Reading Room */}
+        {isAuthenticated && (
+          <View style={[styles.roomCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
+            <View style={styles.roomHeader}>
+              <Ionicons name="people-outline" size={18} color={colors.foreground} />
+              <Text style={[styles.roomTitle, { color: colors.foreground, fontFamily: 'Inter_700Bold' }]}>Reading Room</Text>
+            </View>
+            <Text style={[styles.roomDesc, { color: colors.mutedForeground, fontFamily: 'Inter_400Regular' }]}>
+              Read together. Share progress. Spoiler-safe discussion.
+            </Text>
+            <View style={styles.roomBtns}>
+              <TouchableOpacity
+                style={[styles.roomBtn, { backgroundColor: colors.primary }]}
+                onPress={handleCreateRoom}
+                disabled={creatingRoom}
+                activeOpacity={0.85}
+              >
+                {creatingRoom
+                  ? <ActivityIndicator size="small" color="#fff" />
+                  : <Text style={[styles.roomBtnText, { color: '#fff', fontFamily: 'Inter_600SemiBold' }]}>Create room</Text>
+                }
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.roomBtnOutline, { borderColor: colors.border }]}
+                onPress={() => setShowJoinModal(true)}
+                activeOpacity={0.8}
+              >
+                <Text style={[styles.roomBtnText, { color: colors.foreground, fontFamily: 'Inter_500Medium' }]}>Join with code</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        )}
+
+        {/* Margin Notes */}
+        {isAuthenticated && notes.length > 0 && (
+          <>
+            <Text style={[styles.bookSectionLabel, { color: colors.mutedForeground, fontFamily: 'Inter_600SemiBold' }]}>
+              NOTES FROM FRIENDS
+            </Text>
+            <View style={[styles.notesCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
+              {notes.map((note, i) => (
+                <View
+                  key={note.id}
+                  style={[
+                    styles.noteRow,
+                    i < notes.length - 1 && { borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: colors.border },
+                  ]}
+                >
+                  <View style={[styles.noteAvatar, { backgroundColor: note.isOwnNote ? colors.primary : note.color }]}>
+                    <Text style={[styles.noteInitial, { fontFamily: 'Inter_700Bold' }]}>{note.isOwnNote ? 'Y' : note.initial}</Text>
+                  </View>
+                  <View style={styles.noteContent}>
+                    <View style={styles.noteHeaderRow}>
+                      <Text style={[styles.noteName, { color: colors.foreground, fontFamily: 'Inter_600SemiBold' }]}>
+                        {note.isOwnNote ? 'You' : note.displayName}
+                      </Text>
+                      <Text style={[styles.notePage, { color: colors.mutedForeground, fontFamily: 'Inter_500Medium' }]}>p. {note.page}</Text>
+                    </View>
+                    <Text style={[styles.noteText, { color: colors.mutedForeground, fontFamily: 'Inter_400Regular' }]}>{note.noteText}</Text>
+                  </View>
+                </View>
+              ))}
+            </View>
+          </>
+        )}
       </ScrollView>
 
       {/* Edit Modal */}
@@ -338,6 +452,49 @@ export default function BookDetailScreen() {
           </ScrollView>
         </KeyboardAvoidingView>
       </Modal>
+
+      {/* Join Room Modal */}
+      <Modal
+        visible={showJoinModal}
+        animationType="slide"
+        presentationStyle="pageSheet"
+        onRequestClose={() => setShowJoinModal(false)}
+      >
+        <View style={[styles.modal, { backgroundColor: colors.background, flex: 1 }]}>
+          <View style={[styles.modalHandle, { backgroundColor: colors.border }]} />
+          <View style={styles.modalHeader}>
+            <Text style={[styles.modalTitle, { color: colors.foreground, fontFamily: 'Inter_700Bold' }]}>Join a Room</Text>
+            <TouchableOpacity onPress={() => setShowJoinModal(false)} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
+              <Ionicons name="close" size={24} color={colors.mutedForeground} />
+            </TouchableOpacity>
+          </View>
+          <View style={{ paddingHorizontal: 20, gap: 16 }}>
+            <Text style={[{ color: colors.mutedForeground, fontFamily: 'Inter_400Regular', fontSize: 14, lineHeight: 20 }]}>
+              Enter the 6-character code shared by a friend.
+            </Text>
+            <TextInput
+              style={[styles.input, { backgroundColor: colors.muted, color: colors.foreground, borderColor: colors.border, fontFamily: 'Inter_700Bold', fontSize: 22, textAlign: 'center', letterSpacing: 4 }]}
+              value={joinCode}
+              onChangeText={t => setJoinCode(t.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 6))}
+              placeholder="ABCDEF"
+              placeholderTextColor={colors.mutedForeground}
+              autoCapitalize="characters"
+              maxLength={6}
+            />
+            <TouchableOpacity
+              style={[styles.submitBtn, { backgroundColor: colors.primary, opacity: joinCode.trim().length === 6 ? 1 : 0.45 }]}
+              onPress={handleJoinRoom}
+              disabled={joiningRoom || joinCode.trim().length < 6}
+              activeOpacity={0.85}
+            >
+              {joiningRoom
+                ? <ActivityIndicator color="#fff" />
+                : <Text style={[styles.submitText, { color: '#fff', fontFamily: 'Inter_600SemiBold' }]}>Join room</Text>
+              }
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 }
@@ -396,4 +553,22 @@ const styles = StyleSheet.create({
   genreText: { fontSize: 13 },
   submitBtn: { marginHorizontal: 20, marginTop: 32, paddingVertical: 16, borderRadius: 14, alignItems: 'center' },
   submitText: { fontSize: 16 },
+  roomCard: { borderRadius: 16, borderWidth: 1, padding: 16, gap: 12 },
+  roomHeader: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  roomTitle: { fontSize: 16 },
+  roomDesc: { fontSize: 13, lineHeight: 18 },
+  roomBtns: { flexDirection: 'row', gap: 10 },
+  roomBtn: { flex: 1, paddingVertical: 11, borderRadius: 10, alignItems: 'center' },
+  roomBtnOutline: { flex: 1, paddingVertical: 11, borderRadius: 10, alignItems: 'center', borderWidth: 1 },
+  roomBtnText: { fontSize: 14 },
+  bookSectionLabel: { fontSize: 11, letterSpacing: 1.5 },
+  notesCard: { borderRadius: 16, borderWidth: 1, overflow: 'hidden' },
+  noteRow: { flexDirection: 'row', gap: 12, padding: 14, alignItems: 'flex-start' },
+  noteAvatar: { width: 34, height: 34, borderRadius: 17, alignItems: 'center', justifyContent: 'center' },
+  noteInitial: { color: '#fff', fontSize: 14 },
+  noteContent: { flex: 1, gap: 4 },
+  noteHeaderRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
+  noteName: { fontSize: 14 },
+  notePage: { fontSize: 12 },
+  noteText: { fontSize: 13, lineHeight: 18 },
 });
