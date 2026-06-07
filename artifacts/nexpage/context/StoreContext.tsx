@@ -2,6 +2,12 @@ import React, { createContext, useContext, useEffect, useRef, useState } from 'r
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as SecureStore from 'expo-secure-store';
 import { useAuth } from '@/lib/auth';
+import {
+  cancelStreakRescueNotification,
+  getStreakRescueScheduledDate,
+  rescheduleStreakRescueForTomorrow,
+  scheduleStreakRescueNotification,
+} from '@/lib/notifications';
 
 export interface Book {
   id: string;
@@ -375,6 +381,23 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
     hydrateFromCloud();
   }, [isAuthenticated, authLoading, isLoaded]);
 
+  useEffect(() => {
+    if (!isLoaded) return;
+    const today = todayStr();
+    const hasReadToday = sessions.some(s => s.date === today);
+    (async () => {
+      const rescueDate = await getStreakRescueScheduledDate();
+      if (rescueDate && rescueDate > today) {
+        return;
+      }
+      if (hasReadToday) {
+        cancelStreakRescueNotification();
+      } else {
+        scheduleStreakRescueNotification();
+      }
+    })();
+  }, [isLoaded, sessions]);
+
   async function hydrateFromCloud() {
     try {
       const data = await apiFetch<{ books: any[]; sessions: any[]; streak: any | null }>('/bookshelf');
@@ -510,6 +533,8 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
     if (updatedBook) syncBooksToCloud([updatedBook]);
     syncSessionToCloud(session);
     syncStreakToCloud(newStreak);
+    await cancelStreakRescueNotification();
+    rescheduleStreakRescueForTomorrow();
   }
 
   function finishBook(bookId: string, favoriteQuote?: string) {
