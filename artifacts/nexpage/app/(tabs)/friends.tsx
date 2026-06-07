@@ -83,6 +83,7 @@ function NudgeButton({ userId, displayName }: { userId: string; displayName: str
 function ActivityCard({ item, readToday }: { item: ActivityItem; readToday: boolean }) {
   const colors = useColors();
   const router = useRouter();
+  const isRecommendation = item.activityType === 'recommendation';
 
   function goToProfile() {
     router.push(`/profile/${item.userId}` as any);
@@ -104,24 +105,32 @@ function ActivityCard({ item, readToday }: { item: ActivityItem; readToday: bool
             {timeAgo(item.createdAt)}
           </Text>
         </View>
+        {isRecommendation ? (
+          <View style={[styles.recommendBadge, { backgroundColor: colors.muted }]}>
+            <Ionicons name="star" size={11} color={colors.accent} />
+            <Text style={[styles.recommendLabel, { color: colors.accent, fontFamily: 'Inter_600SemiBold' }]}>
+              recommends
+            </Text>
+          </View>
+        ) : null}
         <Text style={[styles.bookTitle, { color: colors.mutedForeground, fontFamily: 'Inter_400Regular' }]} numberOfLines={1}>
           {item.bookTitle}
           {item.bookAuthor ? ` · ${item.bookAuthor}` : ''}
         </Text>
         <View style={styles.cardBottom}>
           <View style={styles.statsRow}>
-            {item.durationMinutes > 0 && (
+            {!isRecommendation && item.durationMinutes > 0 && (
               <Text style={[styles.statText, { color: colors.mutedForeground, fontFamily: 'Inter_400Regular' }]}>
                 {item.durationMinutes} min
               </Text>
             )}
-            {item.pagesRead > 0 && (
+            {!isRecommendation && item.pagesRead > 0 && (
               <Text style={[styles.statText, { color: colors.mutedForeground, fontFamily: 'Inter_400Regular' }]}>
                 {item.durationMinutes > 0 ? ' · ' : ''}{item.pagesRead} pages
               </Text>
             )}
           </View>
-          {!readToday && (
+          {!readToday && !isRecommendation && (
             <NudgeButton userId={item.userId} displayName={item.displayName} />
           )}
         </View>
@@ -466,6 +475,8 @@ const styles = StyleSheet.create({
   readBadgeText: { fontSize: 11 },
   nudgeBtn: { paddingHorizontal: 12, paddingVertical: 5, borderRadius: 16, borderWidth: 1.5, minWidth: 80, alignItems: 'center' },
   nudgeBtnText: { fontSize: 12 },
+  recommendBadge: { flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 7, paddingVertical: 3, borderRadius: 8, alignSelf: 'flex-start' },
+  recommendLabel: { fontSize: 11 },
   loadingContainer: { flex: 1, alignItems: 'center', justifyContent: 'center' },
   empty: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 40, gap: 12, paddingVertical: 60 },
   emptyTitle: { fontSize: 18 },

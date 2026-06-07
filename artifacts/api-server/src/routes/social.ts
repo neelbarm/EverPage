@@ -176,6 +176,7 @@ router.get("/social/feed", async (req, res) => {
       bookAuthor: npActivity.bookAuthor,
       durationMinutes: npActivity.durationMinutes,
       pagesRead: npActivity.pagesRead,
+      activityType: npActivity.activityType,
       createdAt: npActivity.createdAt,
     })
     .from(npActivity)
@@ -194,11 +195,13 @@ router.post("/social/activity", async (req, res) => {
     res.status(404).json({ error: "Create your social profile first" });
     return;
   }
-  const { bookTitle, bookAuthor, durationMinutes, pagesRead } = req.body ?? {};
+  const { bookTitle, bookAuthor, durationMinutes, pagesRead, activityType } = req.body ?? {};
   if (!bookTitle) {
     res.status(400).json({ error: "bookTitle required" });
     return;
   }
+  const validTypes = ["session", "recommendation"];
+  const resolvedType = validTypes.includes(activityType) ? activityType : "session";
   const id = generateId();
   const rows = await db
     .insert(npActivity)
@@ -209,6 +212,7 @@ router.post("/social/activity", async (req, res) => {
       bookAuthor: bookAuthor ?? "",
       durationMinutes: durationMinutes ?? 0,
       pagesRead: pagesRead ?? 0,
+      activityType: resolvedType,
     })
     .returning();
   res.status(201).json(rows[0]);

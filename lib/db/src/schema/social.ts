@@ -39,6 +39,7 @@ export const npActivity = pgTable("np_activity", {
   bookAuthor: text("book_author").notNull().default(""),
   durationMinutes: integer("duration_minutes").notNull().default(0),
   pagesRead: integer("pages_read").notNull().default(0),
+  activityType: text("activity_type").notNull().default("session"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 

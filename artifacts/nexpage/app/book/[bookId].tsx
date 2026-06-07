@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import {
   View, Text, ScrollView, TouchableOpacity, StyleSheet, Platform,
-  Modal, KeyboardAvoidingView, TextInput,
+  Modal, KeyboardAvoidingView, TextInput, Alert, ActivityIndicator,
 } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -10,6 +10,7 @@ import * as Haptics from 'expo-haptics';
 import { useColors } from '@/hooks/useColors';
 import { useStore } from '@/context/StoreContext';
 import { BookCover } from '@/components/BookCover';
+import { useSocial } from '@/context/SocialContext';
 
 const GENRES = ['Literary Fiction', 'Historical Fiction', 'Non-Fiction', 'Science Fiction', 'Mystery', 'Biography', 'Other'];
 
@@ -28,6 +29,7 @@ export default function BookDetailScreen() {
   const router = useRouter();
   const { bookId } = useLocalSearchParams<{ bookId: string }>();
   const { getBook, updateBook, friends } = useStore();
+  const { isRegistered, postRecommendation } = useSocial();
   const book = getBook(bookId ?? '');
 
   const [showEdit, setShowEdit] = useState(false);
@@ -36,6 +38,23 @@ export default function BookDetailScreen() {
   const [editPages, setEditPages] = useState('');
   const [editGenre, setEditGenre] = useState('Literary Fiction');
   const [editCoverUri, setEditCoverUri] = useState<string | undefined>(undefined);
+  const [sharing, setSharing] = useState(false);
+  const [shared, setShared] = useState(false);
+
+  async function handleShare() {
+    if (!book || sharing || shared) return;
+    setSharing(true);
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    try {
+      await postRecommendation(book.title, book.author);
+      setShared(true);
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+    } catch {
+      Alert.alert('Could not share', 'Please try again later.');
+    } finally {
+      setSharing(false);
+    }
+  }
 
   function openEdit() {
     if (!book) return;
@@ -212,6 +231,35 @@ export default function BookDetailScreen() {
             <Text style={[styles.finishedText, { color: colors.foreground, fontFamily: 'Inter_600SemiBold' }]}>Finished</Text>
           </View>
         )}
+
+        {/* Share recommendation */}
+        {isRegistered && (
+          <TouchableOpacity
+            style={[
+              styles.shareBtn,
+              shared
+                ? { backgroundColor: colors.muted, borderColor: colors.border }
+                : { backgroundColor: colors.card, borderColor: colors.border },
+            ]}
+            onPress={handleShare}
+            disabled={sharing || shared}
+            activeOpacity={0.8}
+          >
+            {sharing ? (
+              <ActivityIndicator size="small" color={colors.mutedForeground} />
+            ) : shared ? (
+              <>
+                <Ionicons name="checkmark-circle" size={16} color={colors.accent} />
+                <Text style={[styles.shareBtnText, { color: colors.accent, fontFamily: 'Inter_600SemiBold' }]}>Shared with followers</Text>
+              </>
+            ) : (
+              <>
+                <Ionicons name="star-outline" size={16} color={colors.foreground} />
+                <Text style={[styles.shareBtnText, { color: colors.foreground, fontFamily: 'Inter_500Medium' }]}>Share with followers</Text>
+              </>
+            )}
+          </TouchableOpacity>
+        )}
       </ScrollView>
 
       {/* Edit Modal */}
@@ -334,6 +382,8 @@ const styles = StyleSheet.create({
   secondaryBtnText: { fontSize: 15 },
   finishedBadge: { flexDirection: 'row', alignItems: 'center', gap: 8, padding: 14, borderRadius: 14, justifyContent: 'center' },
   finishedText: { fontSize: 15 },
+  shareBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, borderRadius: 14, borderWidth: 1, paddingVertical: 13 },
+  shareBtnText: { fontSize: 14 },
   modal: { flex: 1 },
   modalHandle: { width: 36, height: 4, borderRadius: 2, alignSelf: 'center', marginTop: 12, marginBottom: 8 },
   modalHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 20, paddingVertical: 16 },

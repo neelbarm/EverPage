@@ -30,6 +30,7 @@ export interface ActivityItem {
   bookAuthor: string;
   durationMinutes: number;
   pagesRead: number;
+  activityType: 'session' | 'recommendation';
   createdAt: string;
 }
 
@@ -58,7 +59,8 @@ interface SocialContextType {
   followUser: (userId: string) => Promise<void>;
   unfollowUser: (userId: string) => Promise<void>;
   searchUsers: (query: string) => Promise<SocialUser[]>;
-  postActivity: (bookTitle: string, bookAuthor: string, durationMinutes: number, pagesRead: number) => Promise<void>;
+  postActivity: (bookTitle: string, bookAuthor: string, durationMinutes: number, pagesRead: number, activityType?: 'session' | 'recommendation') => Promise<void>;
+  postRecommendation: (bookTitle: string, bookAuthor: string) => Promise<void>;
   refreshFeed: () => Promise<void>;
   isFollowing: (userId: string) => boolean;
   sendNudge: (userId: string) => Promise<void>;
@@ -200,14 +202,26 @@ export function SocialProvider({ children }: { children: React.ReactNode }) {
     bookAuthor: string,
     durationMinutes: number,
     pagesRead: number,
+    activityType: 'session' | 'recommendation' = 'session',
   ) => {
     if (!socialProfile) return;
     try {
       await apiFetch('/social/activity', {
         method: 'POST',
-        body: JSON.stringify({ bookTitle, bookAuthor, durationMinutes, pagesRead }),
+        body: JSON.stringify({ bookTitle, bookAuthor, durationMinutes, pagesRead, activityType }),
       });
     } catch { /* non-blocking */ }
+  }, [socialProfile]);
+
+  const postRecommendation = useCallback(async (
+    bookTitle: string,
+    bookAuthor: string,
+  ) => {
+    if (!socialProfile) return;
+    await apiFetch('/social/activity', {
+      method: 'POST',
+      body: JSON.stringify({ bookTitle, bookAuthor, durationMinutes: 0, pagesRead: 0, activityType: 'recommendation' }),
+    });
   }, [socialProfile]);
 
   const refreshFeed = useCallback(async () => {
@@ -255,6 +269,7 @@ export function SocialProvider({ children }: { children: React.ReactNode }) {
       unfollowUser,
       searchUsers,
       postActivity,
+      postRecommendation,
       refreshFeed,
       isFollowing,
       sendNudge,
