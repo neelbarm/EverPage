@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import {
   View, Text, FlatList, TouchableOpacity, Modal,
   TextInput, StyleSheet, Platform, KeyboardAvoidingView, ScrollView,
-  ActivityIndicator, Image,
+  ActivityIndicator, Image, Animated,
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -89,12 +89,57 @@ function SearchResultRow({
   );
 }
 
+function todayStr() {
+  return new Date().toISOString().split('T')[0];
+}
+
+function FreezeBanner({ onUse, onDismiss }: { onUse: () => void; onDismiss: () => void }) {
+  const colors = useColors();
+  const opacity = useRef(new Animated.Value(1)).current;
+
+  function handleUse() {
+    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+    Animated.timing(opacity, { toValue: 0, duration: 250, useNativeDriver: true }).start(onUse);
+  }
+
+  function handleDismiss() {
+    Animated.timing(opacity, { toValue: 0, duration: 200, useNativeDriver: true }).start(onDismiss);
+  }
+
+  return (
+    <Animated.View style={[styles.freezeBanner, { backgroundColor: colors.card, borderColor: colors.primary, opacity }]}>
+      <View style={styles.freezeIcon}>
+        <Text style={styles.freezeEmoji}>🧊</Text>
+      </View>
+      <View style={styles.freezeBody}>
+        <Text style={[styles.freezeText, { color: colors.foreground, fontFamily: 'Inter_500Medium' }]}>
+          No reading yet today — use a streak freeze?
+        </Text>
+      </View>
+      <TouchableOpacity
+        style={[styles.freezeBtn, { backgroundColor: colors.primary }]}
+        onPress={handleUse}
+        activeOpacity={0.8}
+      >
+        <Text style={[styles.freezeBtnText, { fontFamily: 'Inter_600SemiBold' }]}>Use</Text>
+      </TouchableOpacity>
+      <TouchableOpacity onPress={handleDismiss} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }} style={{ marginLeft: 4 }}>
+        <Ionicons name="close" size={18} color={colors.mutedForeground} />
+      </TouchableOpacity>
+    </Animated.View>
+  );
+}
+
 export default function LogScreen() {
   const colors = useColors();
   const insets = useSafeAreaInsets();
   const router = useRouter();
-  const { books, addBook } = useStore();
+  const { books, sessions, streak, useStreakFreeze, addBook } = useStore();
   const topPad = insets.top + (Platform.OS === 'web' ? 67 : 0);
+
+  const hasReadToday = sessions.some(s => s.date === todayStr());
+  const showFreezeBanner = !hasReadToday && streak.freezesLeft > 0;
+  const [bannerDismissed, setBannerDismissed] = useState(false);
 
   const [showModal, setShowModal] = useState(false);
 
@@ -217,6 +262,13 @@ export default function LogScreen() {
           <Text style={[styles.addBtnText, { color: '#fff', fontFamily: 'Inter_600SemiBold' }]}>Add book</Text>
         </TouchableOpacity>
       </View>
+
+      {showFreezeBanner && !bannerDismissed && (
+        <FreezeBanner
+          onUse={() => { useStreakFreeze(); setBannerDismissed(true); }}
+          onDismiss={() => setBannerDismissed(true)}
+        />
+      )}
 
       {activeBooks.length === 0 ? (
         <View style={styles.empty}>
@@ -388,6 +440,13 @@ export default function LogScreen() {
 const styles = StyleSheet.create({
   root: { flex: 1 },
   header: { paddingHorizontal: 20, paddingBottom: 12, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
+  freezeBanner: { flexDirection: 'row', alignItems: 'center', marginHorizontal: 16, marginBottom: 10, borderRadius: 14, borderWidth: 1.5, paddingVertical: 12, paddingHorizontal: 14, gap: 10 },
+  freezeIcon: { width: 32, height: 32, alignItems: 'center', justifyContent: 'center' },
+  freezeEmoji: { fontSize: 20 },
+  freezeBody: { flex: 1 },
+  freezeText: { fontSize: 13.5, lineHeight: 18 },
+  freezeBtn: { paddingHorizontal: 14, paddingVertical: 7, borderRadius: 20 },
+  freezeBtnText: { fontSize: 13, color: '#fff' },
   screenTitle: { fontSize: 26, letterSpacing: -0.5 },
   addBtn: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 14, paddingVertical: 9, borderRadius: 20 },
   addBtnText: { fontSize: 14 },
