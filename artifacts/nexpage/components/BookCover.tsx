@@ -10,17 +10,27 @@ const COVER_IMAGES: Record<string, ReturnType<typeof require>> = {
 interface BookCoverProps {
   bookId: string;
   coverColor: string;
+  coverImageUri?: string;
   width: number;
   height: number;
   borderRadius?: number;
 }
 
-export function BookCover({ bookId, coverColor, width, height, borderRadius = 6 }: BookCoverProps) {
-  const source = COVER_IMAGES[bookId];
-  if (source) {
+export function BookCover({ bookId, coverColor, coverImageUri, width, height, borderRadius = 6 }: BookCoverProps) {
+  const localSource = COVER_IMAGES[bookId];
+  if (localSource) {
     return (
       <Image
-        source={source}
+        source={localSource}
+        style={[styles.image, { width, height, borderRadius }]}
+        resizeMode="cover"
+      />
+    );
+  }
+  if (coverImageUri) {
+    return (
+      <Image
+        source={{ uri: coverImageUri }}
         style={[styles.image, { width, height, borderRadius }]}
         resizeMode="cover"
       />

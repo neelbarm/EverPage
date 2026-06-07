@@ -8,6 +8,7 @@ export interface Book {
   totalPages: number;
   currentPage: number;
   coverColor: string;
+  coverImageUri?: string;
   genre: string;
   addedAt: number;
   finishedAt?: number;
@@ -93,7 +94,7 @@ interface StoreContextType {
   logSession: (bookId: string, durationMinutes: number, startPage: number, endPage: number) => Promise<void>;
   finishBook: (bookId: string, favoriteQuote?: string) => void;
   useStreakFreeze: () => void;
-  addBook: (title: string, author: string, totalPages: number, genre: string) => void;
+  addBook: (title: string, author: string, totalPages: number, genre: string, coverImageUri?: string) => void;
   getBook: (id: string) => Book | undefined;
 }
 
@@ -354,7 +355,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
     persist(books, sessions, newStreak, profile);
   }
 
-  function addBook(title: string, author: string, totalPages: number, genre: string) {
+  function addBook(title: string, author: string, totalPages: number, genre: string, coverImageUri?: string) {
     const colors = ['#5C849E', '#B54935', '#3A6645', '#8B5E9E', '#B08A3C', '#4A7A52'];
     const newBook: Book = {
       id: generateId(),
@@ -363,6 +364,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
       totalPages,
       currentPage: 0,
       coverColor: colors[Math.floor(Math.random() * colors.length)],
+      coverImageUri,
       genre,
       addedAt: Date.now(),
       friendsReading: [],

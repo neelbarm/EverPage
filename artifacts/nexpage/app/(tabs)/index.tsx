@@ -81,7 +81,7 @@ export default function ShelfScreen() {
               >
                 <Text style={[styles.continueLabel, { color: colors.accent, fontFamily: 'Inter_700Bold' }]}>CONTINUE</Text>
                 <View style={styles.heroContent}>
-                  <BookCover bookId={heroBook.id} coverColor={heroBook.coverColor} width={82} height={120} borderRadius={8} />
+                  <BookCover bookId={heroBook.id} coverColor={heroBook.coverColor} coverImageUri={heroBook.coverImageUri} width={82} height={120} borderRadius={8} />
                   <View style={styles.heroInfo}>
                     <Text style={[styles.heroTitle, { color: colors.foreground, fontFamily: 'Inter_700Bold' }]} numberOfLines={2}>
                       {heroBook.title}
@@ -120,7 +120,7 @@ export default function ShelfScreen() {
                       onPress={() => router.push(`/book/${book.id}`)}
                       activeOpacity={0.8}
                     >
-                      <BookCover bookId={book.id} coverColor={book.coverColor} width={40} height={56} borderRadius={4} />
+                      <BookCover bookId={book.id} coverColor={book.coverColor} coverImageUri={book.coverImageUri} width={40} height={56} borderRadius={4} />
                       <View style={styles.alsoInfo}>
                         <Text style={[styles.alsoTitle, { color: colors.foreground, fontFamily: 'Inter_600SemiBold' }]} numberOfLines={1}>
                           {book.title}

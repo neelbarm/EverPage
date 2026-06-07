@@ -1,7 +1,8 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   View, Text, FlatList, TouchableOpacity, Modal,
   TextInput, StyleSheet, Platform, KeyboardAvoidingView, ScrollView,
+  ActivityIndicator, Image,
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -13,6 +14,14 @@ import { BookCover } from '@/components/BookCover';
 
 const GENRES = ['Literary Fiction', 'Historical Fiction', 'Non-Fiction', 'Science Fiction', 'Mystery', 'Biography', 'Other'];
 
+interface OpenLibResult {
+  title: string;
+  author: string;
+  pages: number;
+  coverId?: number;
+  coverUri?: string;
+}
+
 function BookRow({ book, onPress }: { book: Book; onPress: () => void }) {
   const colors = useColors();
   const pct = Math.round((book.currentPage / book.totalPages) * 100);
@@ -22,7 +31,7 @@ function BookRow({ book, onPress }: { book: Book; onPress: () => void }) {
       onPress={onPress}
       activeOpacity={0.8}
     >
-      <BookCover bookId={book.id} coverColor={book.coverColor} width={48} height={68} borderRadius={5} />
+      <BookCover bookId={book.id} coverColor={book.coverColor} coverImageUri={book.coverImageUri} width={48} height={68} borderRadius={5} />
       <View style={styles.bookInfo}>
         <Text style={[styles.bookTitle, { color: colors.foreground, fontFamily: 'Inter_600SemiBold' }]} numberOfLines={1}>
           {book.title}
@@ -41,6 +50,45 @@ function BookRow({ book, onPress }: { book: Book; onPress: () => void }) {
   );
 }
 
+function SearchResultRow({
+  result,
+  onSelect,
+}: {
+  result: OpenLibResult;
+  onSelect: () => void;
+}) {
+  const colors = useColors();
+  return (
+    <TouchableOpacity
+      style={[styles.searchResult, { borderBottomColor: colors.border }]}
+      onPress={onSelect}
+      activeOpacity={0.75}
+    >
+      {result.coverUri ? (
+        <Image
+          source={{ uri: result.coverUri }}
+          style={styles.searchCover}
+          resizeMode="cover"
+        />
+      ) : (
+        <View style={[styles.searchCoverFallback, { backgroundColor: colors.muted }]}>
+          <Ionicons name="book-outline" size={18} color={colors.mutedForeground} />
+        </View>
+      )}
+      <View style={styles.searchInfo}>
+        <Text style={[styles.searchTitle, { color: colors.foreground, fontFamily: 'Inter_600SemiBold' }]} numberOfLines={2}>
+          {result.title}
+        </Text>
+        <Text style={[styles.searchAuthor, { color: colors.mutedForeground, fontFamily: 'Inter_400Regular' }]} numberOfLines={1}>
+          {result.author}
+          {result.pages ? ` · ${result.pages} pages` : ''}
+        </Text>
+      </View>
+      <Ionicons name="add-circle-outline" size={22} color={colors.primary} />
+    </TouchableOpacity>
+  );
+}
+
 export default function LogScreen() {
   const colors = useColors();
   const insets = useSafeAreaInsets();
@@ -49,10 +97,20 @@ export default function LogScreen() {
   const topPad = insets.top + (Platform.OS === 'web' ? 67 : 0);
 
   const [showModal, setShowModal] = useState(false);
+
+  const [searchQuery, setSearchQuery] = useState('');
+  const [searchResults, setSearchResults] = useState<OpenLibResult[]>([]);
+  const [searching, setSearching] = useState(false);
+  const [searchError, setSearchError] = useState('');
+  const [selectedResult, setSelectedResult] = useState<OpenLibResult | null>(null);
+
   const [title, setTitle] = useState('');
   const [author, setAuthor] = useState('');
   const [pages, setPages] = useState('');
   const [genre, setGenre] = useState('Literary Fiction');
+  const [coverImageUri, setCoverImageUri] = useState<string | undefined>(undefined);
+
+  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const activeBooks = books.filter(b => !b.finishedAt);
 
@@ -64,18 +122,92 @@ export default function LogScreen() {
   function handleAddBook() {
     const pageCount = parseInt(pages, 10);
     if (!title.trim() || !author.trim() || !pageCount) return;
-    addBook(title.trim(), author.trim(), pageCount, genre);
+    addBook(title.trim(), author.trim(), pageCount, genre, coverImageUri);
     Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-    setTitle(''); setAuthor(''); setPages(''); setGenre('Literary Fiction');
+    resetModal();
     setShowModal(false);
   }
 
+  function resetModal() {
+    setSearchQuery('');
+    setSearchResults([]);
+    setSearchError('');
+    setSelectedResult(null);
+    setTitle('');
+    setAuthor('');
+    setPages('');
+    setGenre('Literary Fiction');
+    setCoverImageUri(undefined);
+  }
+
+  function handleSelectResult(result: OpenLibResult) {
+    setSelectedResult(result);
+    setTitle(result.title);
+    setAuthor(result.author);
+    setPages(result.pages ? String(result.pages) : '');
+    setCoverImageUri(result.coverUri);
+    setSearchResults([]);
+    setSearchQuery('');
+    Haptics.selectionAsync();
+  }
+
+  function handleClearSelection() {
+    setSelectedResult(null);
+    setTitle('');
+    setAuthor('');
+    setPages('');
+    setCoverImageUri(undefined);
+  }
+
+  useEffect(() => {
+    const q = searchQuery.trim();
+    if (!q) {
+      setSearchResults([]);
+      setSearchError('');
+      return;
+    }
+    if (debounceRef.current) clearTimeout(debounceRef.current);
+    debounceRef.current = setTimeout(async () => {
+      setSearching(true);
+      setSearchError('');
+      try {
+        const url = `https://openlibrary.org/search.json?title=${encodeURIComponent(q)}&limit=8&fields=title,author_name,number_of_pages_median,cover_i`;
+        const res = await fetch(url);
+        if (!res.ok) throw new Error('Network error');
+        const data = await res.json();
+        const results: OpenLibResult[] = (data.docs ?? [])
+          .filter((d: Record<string, unknown>) => d.title)
+          .map((d: Record<string, unknown>) => {
+            const coverId = typeof d.cover_i === 'number' ? d.cover_i : undefined;
+            return {
+              title: d.title as string,
+              author: Array.isArray(d.author_name) ? (d.author_name as string[])[0] ?? 'Unknown' : 'Unknown',
+              pages: typeof d.number_of_pages_median === 'number' ? d.number_of_pages_median : 0,
+              coverId,
+              coverUri: coverId ? `https://covers.openlibrary.org/b/id/${coverId}-M.jpg` : undefined,
+            };
+          });
+        setSearchResults(results);
+        if (results.length === 0) setSearchError('No books found. Try a different title.');
+      } catch {
+        setSearchError('Search unavailable. Fill in details manually below.');
+        setSearchResults([]);
+      } finally {
+        setSearching(false);
+      }
+    }, 500);
+    return () => {
+      if (debounceRef.current) clearTimeout(debounceRef.current);
+    };
+  }, [searchQuery]);
+
   const canSubmit = !!title.trim() && !!author.trim() && !!pages.trim();
+  const showResults = searchResults.length > 0 && !selectedResult;
 
   return (
     <View style={[styles.root, { backgroundColor: colors.background }]}>
       <View style={[styles.header, { paddingTop: topPad + 12 }]}>
-        <Text style={[styles.title, { color: colors.foreground, fontFamily: 'Inter_700Bold' }]}>Start reading</Text>
+        <Text style={[styles.screenTitle, { color: colors.foreground, fontFamily: 'Inter_700Bold' }]}>Start reading</Text>
         <TouchableOpacity
           style={[styles.addBtn, { backgroundColor: colors.primary }]}
           onPress={() => setShowModal(true)}
@@ -111,7 +243,7 @@ export default function LogScreen() {
         visible={showModal}
         animationType="slide"
         presentationStyle="pageSheet"
-        onRequestClose={() => setShowModal(false)}
+        onRequestClose={() => { resetModal(); setShowModal(false); }}
       >
         <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
           <ScrollView
@@ -122,12 +254,82 @@ export default function LogScreen() {
             <View style={[styles.modalHandle, { backgroundColor: colors.border }]} />
             <View style={styles.modalHeader}>
               <Text style={[styles.modalTitle, { color: colors.foreground, fontFamily: 'Inter_700Bold' }]}>Add a book</Text>
-              <TouchableOpacity onPress={() => setShowModal(false)} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
+              <TouchableOpacity onPress={() => { resetModal(); setShowModal(false); }} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
                 <Ionicons name="close" size={24} color={colors.mutedForeground} />
               </TouchableOpacity>
             </View>
 
             <View style={styles.fields}>
+              <View style={styles.field}>
+                <Text style={[styles.fieldLabel, { color: colors.mutedForeground, fontFamily: 'Inter_500Medium' }]}>Search by title</Text>
+                <View style={[styles.searchRow, { backgroundColor: colors.muted, borderColor: colors.border }]}>
+                  <Ionicons name="search-outline" size={18} color={colors.mutedForeground} style={{ marginLeft: 12 }} />
+                  <TextInput
+                    style={[styles.searchInput, { color: colors.foreground, fontFamily: 'Inter_400Regular' }]}
+                    value={searchQuery}
+                    onChangeText={setSearchQuery}
+                    placeholder="e.g. The Midnight Library"
+                    placeholderTextColor={colors.mutedForeground}
+                    returnKeyType="search"
+                    autoCorrect={false}
+                  />
+                  {(searching) && (
+                    <ActivityIndicator size="small" color={colors.primary} style={{ marginRight: 12 }} />
+                  )}
+                  {searchQuery.length > 0 && !searching && (
+                    <TouchableOpacity onPress={() => { setSearchQuery(''); setSearchResults([]); setSearchError(''); }} style={{ marginRight: 12 }}>
+                      <Ionicons name="close-circle" size={18} color={colors.mutedForeground} />
+                    </TouchableOpacity>
+                  )}
+                </View>
+
+                {showResults && (
+                  <View style={[styles.resultsContainer, { backgroundColor: colors.card, borderColor: colors.border }]}>
+                    {searchResults.map((result, idx) => (
+                      <SearchResultRow
+                        key={`${result.title}-${idx}`}
+                        result={result}
+                        onSelect={() => handleSelectResult(result)}
+                      />
+                    ))}
+                  </View>
+                )}
+
+                {searchError.length > 0 && searchQuery.length > 0 && (
+                  <Text style={[styles.searchError, { color: colors.mutedForeground, fontFamily: 'Inter_400Regular' }]}>
+                    {searchError}
+                  </Text>
+                )}
+              </View>
+
+              {selectedResult && (
+                <View style={[styles.selectedCard, { backgroundColor: colors.card, borderColor: colors.primary }]}>
+                  {selectedResult.coverUri ? (
+                    <Image source={{ uri: selectedResult.coverUri }} style={styles.selectedCover} resizeMode="cover" />
+                  ) : (
+                    <View style={[styles.selectedCoverFallback, { backgroundColor: colors.muted }]}>
+                      <Ionicons name="book" size={24} color={colors.mutedForeground} />
+                    </View>
+                  )}
+                  <View style={styles.selectedInfo}>
+                    <Text style={[styles.selectedTitle, { color: colors.foreground, fontFamily: 'Inter_600SemiBold' }]} numberOfLines={2}>
+                      {selectedResult.title}
+                    </Text>
+                    <Text style={[styles.selectedAuthor, { color: colors.mutedForeground, fontFamily: 'Inter_400Regular' }]} numberOfLines={1}>
+                      {selectedResult.author}
+                    </Text>
+                    {selectedResult.pages > 0 && (
+                      <Text style={[styles.selectedPages, { color: colors.accent, fontFamily: 'Inter_500Medium' }]}>
+                        {selectedResult.pages} pages
+                      </Text>
+                    )}
+                  </View>
+                  <TouchableOpacity onPress={handleClearSelection} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+                    <Ionicons name="close-circle" size={20} color={colors.mutedForeground} />
+                  </TouchableOpacity>
+                </View>
+              )}
+
               {[
                 { label: 'Title', value: title, setter: setTitle, placeholder: 'Book title', kb: 'default' as const },
                 { label: 'Author', value: author, setter: setAuthor, placeholder: 'Author name', kb: 'default' as const },
@@ -186,7 +388,7 @@ export default function LogScreen() {
 const styles = StyleSheet.create({
   root: { flex: 1 },
   header: { paddingHorizontal: 20, paddingBottom: 12, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
-  title: { fontSize: 26, letterSpacing: -0.5 },
+  screenTitle: { fontSize: 26, letterSpacing: -0.5 },
   addBtn: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 14, paddingVertical: 9, borderRadius: 20 },
   addBtnText: { fontSize: 14 },
   bookRow: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 20, paddingVertical: 14, gap: 14, borderBottomWidth: StyleSheet.hairlineWidth },
@@ -205,6 +407,23 @@ const styles = StyleSheet.create({
   fields: { paddingHorizontal: 20, gap: 20 },
   field: { gap: 8 },
   fieldLabel: { fontSize: 13 },
+  searchRow: { flexDirection: 'row', alignItems: 'center', borderRadius: 10, borderWidth: 1, gap: 8 },
+  searchInput: { flex: 1, paddingVertical: 13, paddingRight: 8, fontSize: 15 },
+  searchError: { fontSize: 13, marginTop: 4 },
+  resultsContainer: { borderRadius: 12, borderWidth: 1, marginTop: 4, overflow: 'hidden' },
+  searchResult: { flexDirection: 'row', alignItems: 'center', padding: 12, gap: 12, borderBottomWidth: StyleSheet.hairlineWidth },
+  searchCover: { width: 38, height: 54, borderRadius: 4 },
+  searchCoverFallback: { width: 38, height: 54, borderRadius: 4, alignItems: 'center', justifyContent: 'center' },
+  searchInfo: { flex: 1, gap: 3 },
+  searchTitle: { fontSize: 14, letterSpacing: -0.1 },
+  searchAuthor: { fontSize: 12 },
+  selectedCard: { flexDirection: 'row', alignItems: 'center', padding: 12, borderRadius: 12, borderWidth: 1.5, gap: 12 },
+  selectedCover: { width: 44, height: 64, borderRadius: 5 },
+  selectedCoverFallback: { width: 44, height: 64, borderRadius: 5, alignItems: 'center', justifyContent: 'center' },
+  selectedInfo: { flex: 1, gap: 3 },
+  selectedTitle: { fontSize: 14, letterSpacing: -0.1 },
+  selectedAuthor: { fontSize: 12 },
+  selectedPages: { fontSize: 12 },
   input: { borderRadius: 10, borderWidth: 1, paddingHorizontal: 14, paddingVertical: 13, fontSize: 15 },
   genreChip: { paddingHorizontal: 14, paddingVertical: 8, borderRadius: 20, borderWidth: 1 },
   genreText: { fontSize: 13 },

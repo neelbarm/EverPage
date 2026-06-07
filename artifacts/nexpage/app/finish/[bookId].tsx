@@ -68,7 +68,7 @@ export default function FinishScreen() {
 
         {/* Book summary */}
         <View style={[styles.bookCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
-          <BookCover bookId={book.id} coverColor={book.coverColor} width={72} height={104} borderRadius={8} />
+          <BookCover bookId={book.id} coverColor={book.coverColor} coverImageUri={book.coverImageUri} width={72} height={104} borderRadius={8} />
           <View style={styles.bookInfo}>
             <Text style={[styles.bookTitle, { color: colors.foreground, fontFamily: 'Inter_700Bold' }]} numberOfLines={2}>
               {book.title}
