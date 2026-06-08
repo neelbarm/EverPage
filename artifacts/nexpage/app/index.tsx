@@ -124,17 +124,19 @@ export default function LandingScreen() {
 
         {/* Mock shelf preview */}
         <View style={styles.shelfPreview}>
-          {[
-            { color: '#5C849E', pct: 0.61 },
-            { color: '#B54935', pct: 0.33 },
-            { color: '#3A6645', pct: 0.12 },
-            { color: '#8B5E9E', pct: 0.78 },
-            { color: '#B08A3C', pct: 0.45 },
-          ].map((b, i) => (
-            <View key={i} style={[styles.bookSpine, { backgroundColor: b.color }]}>
-              <View style={[styles.bookProgress, { height: `${b.pct * 100}%` }]} />
-            </View>
-          ))}
+          <View style={styles.shelfBooks}>
+            {[
+              { color: '#5C849E', h: 108 },
+              { color: '#B54935', h: 90 },
+              { color: '#3A6645', h: 120 },
+              { color: '#8B5E9E', h: 96 },
+              { color: '#B08A3C', h: 114 },
+              { color: '#4A7A52', h: 84 },
+              { color: '#5E7A9E', h: 102 },
+            ].map((b, i) => (
+              <View key={i} style={[styles.bookSpine, { backgroundColor: b.color, height: b.h }]} />
+            ))}
+          </View>
           <View style={styles.shelfFloor} />
         </View>
         <Text style={styles.shelfCaption}>Track every book you read</Text>
@@ -213,41 +215,34 @@ const styles = StyleSheet.create({
   },
 
   shelfPreview: {
-    flexDirection: 'row',
-    alignItems: 'flex-end',
-    gap: 6,
-    height: 120,
     backgroundColor: PALETTE.card,
     borderRadius: 16,
-    padding: 20,
-    paddingBottom: 10,
+    paddingHorizontal: 16,
+    paddingTop: 16,
+    paddingBottom: 0,
     width: '100%',
     borderWidth: 1,
     borderColor: PALETTE.border,
     marginBottom: 8,
     overflow: 'hidden',
   },
-  bookSpine: {
-    flex: 1,
-    height: 90,
-    borderRadius: 4,
-    overflow: 'hidden',
-    justifyContent: 'flex-end',
+  shelfBooks: {
+    flexDirection: 'row',
+    alignItems: 'flex-end',
+    gap: 5,
+    justifyContent: 'center',
   },
-  bookProgress: {
-    width: '100%',
-    backgroundColor: 'rgba(255,255,255,0.25)',
-    position: 'absolute',
-    bottom: 0,
+  bookSpine: {
+    width: 34,
+    borderTopLeftRadius: 3,
+    borderTopRightRadius: 3,
   },
   shelfFloor: {
-    position: 'absolute',
-    bottom: 10,
-    left: 20,
-    right: 20,
-    height: 2,
+    marginTop: 4,
+    height: 8,
     backgroundColor: PALETTE.border,
-    borderRadius: 1,
+    borderRadius: 0,
+    marginHorizontal: -16,
   },
   shelfCaption: {
     fontSize: 13,
