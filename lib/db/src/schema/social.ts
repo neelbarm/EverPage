@@ -4,6 +4,8 @@ import { z } from "zod/v4";
 
 export const npUsers = pgTable("np_users", {
   id: text("id").primaryKey(),
+  email: text("email").unique(),
+  passwordHash: text("password_hash"),
   username: text("username").notNull().unique(),
   displayName: text("display_name").notNull(),
   color: text("color").notNull().default("#1C3A5A"),

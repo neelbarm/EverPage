@@ -13,6 +13,7 @@ import { useStore } from '@/context/StoreContext';
 import { useSocial } from '@/context/SocialContext';
 import { useAuth } from '@/lib/auth';
 import { scheduleDailyReminder, cancelDailyReminder } from '@/lib/notifications';
+import RegisterModal from '@/components/RegisterModal';
 
 const APP_VERSION = '1.0.0';
 
@@ -214,7 +215,7 @@ export default function SettingsScreen() {
   const router = useRouter();
   const { profile, streak, reminder, setReminder, setDailyGoal, updateProfile } = useStore();
   const { socialProfile, isRegistered, setNudgesEnabled } = useSocial();
-  const { user, isAuthenticated, login, logout } = useAuth();
+  const { user, isAuthenticated, logout } = useAuth();
 
   const [name, setName] = useState(profile.name);
   const [selectedColor, setSelectedColor] = useState(profile.color);
@@ -224,6 +225,7 @@ export default function SettingsScreen() {
   const [showGoalModal, setShowGoalModal] = useState(false);
   const [showReminderModal, setShowReminderModal] = useState(false);
   const [signingOut, setSigningOut] = useState(false);
+  const [showAuthModal, setShowAuthModal] = useState(false);
 
   const topPad = insets.top + (Platform.OS === 'web' ? 67 : 0);
   const hasProfileChanges = name !== profile.name || selectedColor !== profile.color;
@@ -288,7 +290,7 @@ export default function SettingsScreen() {
   }
 
   function handleSignIn() {
-    login();
+    setShowAuthModal(true);
   }
 
   return (
@@ -416,7 +418,7 @@ export default function SettingsScreen() {
             <>
               <SettingsRow
                 icon="user"
-                label="Replit account"
+                label="Account"
                 value={user.email ?? user.firstName ?? 'Connected'}
               />
               <SettingsRow
@@ -432,7 +434,7 @@ export default function SettingsScreen() {
           ) : (
             <SettingsRow
               icon="log-in"
-              label="Sign in with Replit"
+              label="Sign in"
               value="Sync & social features"
               onPress={handleSignIn}
               isLast
@@ -477,6 +479,10 @@ export default function SettingsScreen() {
         streakDays={streak.currentStreak}
         onSave={handleSaveReminder}
         onClose={() => setShowReminderModal(false)}
+      />
+      <RegisterModal
+        visible={showAuthModal}
+        onClose={() => setShowAuthModal(false)}
       />
     </KeyboardAvoidingView>
   );
