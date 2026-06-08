@@ -105,7 +105,7 @@ export default function LandingScreen() {
       <ScrollView
         contentContainerStyle={[
           styles.scroll,
-          { paddingTop: insets.top + 16, paddingBottom: insets.bottom + 24 },
+          { paddingTop: Math.max(insets.top, 44) + 32, paddingBottom: insets.bottom + 24 },
         ]}
         showsVerticalScrollIndicator={false}
       >
@@ -118,7 +118,7 @@ export default function LandingScreen() {
           </View>
           <Text style={styles.appName}>NexPage</Text>
           <Text style={styles.tagline}>
-            The social reading app for people who love books.
+            Read together. Track everything.{'\n'}Build your streak.
           </Text>
         </View>
 
