@@ -17,16 +17,18 @@ const AVATAR_COLORS = [
 export default function RegisterModal({
   visible,
   onClose,
+  defaultMode = 'login',
 }: {
   visible: boolean;
   onClose: () => void;
+  defaultMode?: 'login' | 'register';
 }) {
   const colors = useColors();
   const { registerUser, socialProfile } = useSocial();
   const { isAuthenticated, login, register } = useAuth();
 
   // Auth state
-  const [mode, setMode] = useState<'login' | 'register'>('login');
+  const [mode, setMode] = useState<'login' | 'register'>(defaultMode);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
@@ -43,7 +45,9 @@ export default function RegisterModal({
   const initial = (displayName.trim()[0] ?? '?').toUpperCase();
 
   useEffect(() => {
-    if (!visible) {
+    if (visible) {
+      setMode(defaultMode);
+    } else {
       // Reset on close
       setEmail('');
       setPassword('');
@@ -55,7 +59,6 @@ export default function RegisterModal({
       setSelectedColor(AVATAR_COLORS[0]);
       setSaving(false);
       setError('');
-      setMode('login');
     }
   }, [visible]);
 

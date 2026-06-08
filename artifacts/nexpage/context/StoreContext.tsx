@@ -347,7 +347,7 @@ function rowToSession(row: any): ReadingSession {
 
 export function StoreProvider({ children }: { children: React.ReactNode }) {
   const { isAuthenticated, isLoading: authLoading } = useAuth();
-  const [books, setBooks] = useState<Book[]>(MOCK_BOOKS);
+  const [books, setBooks] = useState<Book[]>([]);
   const [sessions, setSessions] = useState<ReadingSession[]>([]);
   const [friends] = useState<Friend[]>(MOCK_FRIENDS);
   const [streak, setStreak] = useState<StreakData>(INITIAL_STREAK);
