@@ -12,13 +12,13 @@ import { BookCover } from '@/components/BookCover';
 function StreakDot({ checked, day }: { checked: boolean; day: string }) {
   const colors = useColors();
   return (
-    <View style={{ alignItems: 'center', gap: 6 }}>
+    <View style={{ alignItems: 'center', gap: 5, flex: 1 }}>
       <View style={{
-        width: 38, height: 38, borderRadius: 19,
+        width: 32, height: 32, borderRadius: 16,
         backgroundColor: checked ? colors.primary : colors.muted,
         alignItems: 'center', justifyContent: 'center',
       }}>
-        {checked && <Ionicons name="checkmark" size={20} color={colors.primaryForeground} />}
+        {checked && <Ionicons name="checkmark" size={16} color={colors.primaryForeground} />}
       </View>
       <Text style={{ fontSize: 11, color: colors.mutedForeground, fontFamily: 'Inter_400Regular' }}>{day}</Text>
     </View>
@@ -174,7 +174,11 @@ export default function StatsScreen() {
                 <View style={[styles.goalFill, { width: `${goalProgress * 100}%`, backgroundColor: colors.accent }]} />
               </View>
               {remaining > 0 && (
-                <Text style={[styles.goalHint, { color: colors.mutedForeground, fontFamily: 'Inter_400Regular' }]}>
+                <Text
+                  style={[styles.goalHint, { color: colors.mutedForeground, fontFamily: 'Inter_400Regular' }]}
+                  numberOfLines={1}
+                  adjustsFontSizeToFit
+                >
                   {remaining} more minute{remaining !== 1 ? 's' : ''} keeps the streak alive
                 </Text>
               )}
@@ -338,7 +342,7 @@ const styles = StyleSheet.create({
   cardSectionLabel: { fontSize: 11, letterSpacing: 1.5, marginBottom: 8 },
   streakBigNum: { fontSize: 56, lineHeight: 60, letterSpacing: -2 },
   streakDaysLabel: { fontSize: 15, marginBottom: 20 },
-  dotRow: { flexDirection: 'row', justifyContent: 'space-between' },
+  dotRow: { flexDirection: 'row' },
   goalRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 },
   goalLabel: { fontSize: 16 },
   goalValue: { fontSize: 14 },
