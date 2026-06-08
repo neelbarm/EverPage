@@ -85,6 +85,10 @@ function RootLayoutNav() {
         name="room/[roomId]"
         options={{ headerShown: false }}
       />
+      <Stack.Screen
+        name="settings"
+        options={{ headerShown: false, presentation: "modal" }}
+      />
     </Stack>
   );
 }
