@@ -1,11 +1,11 @@
 {
   "expo": {
-    "name": "NexPage",
-    "slug": "nexpage",
+    "name": "EverPage",
+    "slug": "everpage",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
-    "scheme": "nexpage",
+    "scheme": "everpage",
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
     "splash": {

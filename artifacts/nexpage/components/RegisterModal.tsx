@@ -236,7 +236,7 @@ export default function RegisterModal({
           <View style={styles.logoWrap}>
             <Ionicons name="book-outline" size={56} color={colors.primary} />
             <Text style={[styles.logoText, { color: colors.foreground, fontFamily: 'Inter_700Bold' }]}>
-              NexPage
+              EverPage
             </Text>
             <Text style={[styles.logoSub, { color: colors.mutedForeground, fontFamily: 'Inter_400Regular' }]}>
               Your reading, your streak, your circle.

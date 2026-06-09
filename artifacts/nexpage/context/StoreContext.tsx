@@ -278,8 +278,8 @@ const SUGGESTED: SuggestedFriend[] = [
   { id: 'sf2', name: 'Sam', initial: 'S', color: '#3A8A7A', mutualCount: 1, genre: 'non-fiction' },
 ];
 
-const STORAGE_KEY = 'nexpage_v1';
-const CLOUD_INIT_KEY = 'nexpage_cloud_initialized';
+const STORAGE_KEY = 'everpage_v1';
+const CLOUD_INIT_KEY = 'everpage_cloud_initialized';
 
 const DEFAULT_REMINDER: ReminderSettings = {
   enabled: false,

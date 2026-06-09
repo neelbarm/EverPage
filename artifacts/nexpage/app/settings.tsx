@@ -461,7 +461,7 @@ export default function SettingsScreen() {
 
         <View style={{ height: 8 }} />
         <Text style={[styles.footerText, { color: colors.mutedForeground, fontFamily: 'Inter_400Regular' }]}>
-          NexPage · Your reading, your streak, your circle.
+          EverPage · Your reading, your streak, your circle.
         </Text>
       </ScrollView>
 

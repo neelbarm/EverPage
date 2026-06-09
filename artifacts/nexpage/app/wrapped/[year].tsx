@@ -55,7 +55,7 @@ export default function WrappedScreen() {
     if (!stats) return;
     try {
       await Share.share({
-        message: `My ${stats.year} Reading Wrapped — ${stats.booksFinished} books, ${stats.totalHours}h read, ${stats.longestStreak}-day best streak. Top genre: ${stats.topGenre}. I read more than ${stats.globalPercentile}% of readers. #NexPage`,
+        message: `My ${stats.year} Reading Wrapped — ${stats.booksFinished} books, ${stats.totalHours}h read, ${stats.longestStreak}-day best streak. Top genre: ${stats.topGenre}. I read more than ${stats.globalPercentile}% of readers. #EverPage`,
       });
     } catch {}
   }
@@ -125,7 +125,7 @@ export default function WrappedScreen() {
                 {stats.globalPercentile}%
               </Text>
               <Text style={[styles.percentileText, { fontFamily: 'Inter_700Bold' }]}>
-                of readers on NexPage
+                of readers on EverPage
               </Text>
             </View>
 

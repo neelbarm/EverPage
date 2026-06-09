@@ -116,7 +116,7 @@ export default function LandingScreen() {
               <Ionicons name="book" size={36} color="#fff" />
             </View>
           </View>
-          <Text style={styles.appName}>NexPage</Text>
+          <Text style={styles.appName}>EverPage</Text>
           <Text style={styles.tagline}>
             Read together. Track everything.{'\n'}Build your streak.
           </Text>
