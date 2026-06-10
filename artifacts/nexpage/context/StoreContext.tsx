@@ -230,40 +230,27 @@ const MOCK_FRIENDS: Friend[] = [
   },
 ];
 
-const buildCheckedDays = (): string[] => {
-  return Array.from({ length: 12 }, (_, i) => {
-    const d = new Date();
-    d.setDate(d.getDate() - i);
-    return d.toISOString().split('T')[0];
-  });
-};
-
 const INITIAL_STREAK: StreakData = {
-  currentStreak: 12,
-  lastReadDate: todayStr(),
-  checkedDays: buildCheckedDays(),
+  currentStreak: 0,
+  lastReadDate: '',
+  checkedDays: [],
   dailyGoalMinutes: 30,
-  todayMinutes: 20,
-  freezesLeft: 2,
+  todayMinutes: 0,
+  freezesLeft: 0,
 };
 
 const INITIAL_PROFILE: UserProfile = {
-  name: 'You',
-  initial: 'Y',
+  name: 'Reader',
+  initial: 'R',
   color: '#1C3A5A',
-  booksFinished: 8,
-  totalMinutes: 15240,
-  totalPages: 3820,
-  longestStreak: 28,
-  weeklyMinutes: [42, 35, 0, 61, 28, 20, 0],
-  weeklyPages: 186,
-  globalPercentile: 92,
-  genres: [
-    { name: 'Literary Fiction', count: 4 },
-    { name: 'Historical Fiction', count: 2 },
-    { name: 'Non-Fiction', count: 1 },
-    { name: 'Science Fiction', count: 1 },
-  ],
+  booksFinished: 0,
+  totalMinutes: 0,
+  totalPages: 0,
+  longestStreak: 0,
+  weeklyMinutes: [0, 0, 0, 0, 0, 0, 0],
+  weeklyPages: 0,
+  globalPercentile: 0,
+  genres: [],
 };
 
 const RECOMMENDED: RecommendedBook[] = [

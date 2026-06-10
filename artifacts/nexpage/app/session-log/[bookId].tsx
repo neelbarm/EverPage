@@ -22,18 +22,15 @@ export default function SessionLogScreen() {
 
   const durationMin = Math.max(1, parseInt(minutes ?? '1', 10));
   const startPg = parseInt(startPage ?? '0', 10);
-  const [pagesRead, setPagesRead] = useState(Math.max(1, Math.round(durationMin * 0.6)));
+  const estimatedEnd = Math.min(startPg + Math.max(1, Math.round(durationMin * 0.6)), book?.totalPages ?? 9999);
+  const [endPageStr, setEndPageStr] = useState(String(estimatedEnd));
   const [noteText, setNoteText] = useState('');
 
-  const endPage = Math.min(startPg + pagesRead, book?.totalPages ?? 9999);
+  const endPage = Math.min(Math.max(parseInt(endPageStr, 10) || startPg + 1, startPg + 1), book?.totalPages ?? 9999);
+  const pagesRead = Math.max(0, endPage - startPg);
   const pace = pagesRead > 0 ? (durationMin / pagesRead).toFixed(1) : '--';
   const progressBefore = book ? Math.round((startPg / book.totalPages) * 100) : 0;
   const progressAfter = book ? Math.round((endPage / book.totalPages) * 100) : 0;
-
-  function adjustPages(delta: number) {
-    setPagesRead(p => Math.max(1, Math.min(p + delta, (book?.totalPages ?? 9999) - startPg)));
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-  }
 
   async function handleLog() {
     if (!book) return;
@@ -98,27 +95,18 @@ export default function SessionLogScreen() {
 
         <View style={styles.pagesSection}>
           <Text style={[styles.pagesQuestion, { color: colors.foreground, fontFamily: 'Inter_600SemiBold' }]}>
-            How many pages?
+            What page are you on?
           </Text>
-          <View style={styles.stepper}>
-            <TouchableOpacity
-              style={[styles.stepBtn, { backgroundColor: colors.muted, borderColor: colors.border }]}
-              onPress={() => adjustPages(-1)}
-              activeOpacity={0.7}
-            >
-              <Text style={[styles.stepIcon, { color: colors.foreground, fontFamily: 'Inter_700Bold' }]}>−</Text>
-            </TouchableOpacity>
-            <Text style={[styles.pageCount, { color: colors.foreground, fontFamily: 'Inter_700Bold' }]}>{pagesRead}</Text>
-            <TouchableOpacity
-              style={[styles.stepBtn, { backgroundColor: colors.muted, borderColor: colors.border }]}
-              onPress={() => adjustPages(1)}
-              activeOpacity={0.7}
-            >
-              <Text style={[styles.stepIcon, { color: colors.foreground, fontFamily: 'Inter_700Bold' }]}>+</Text>
-            </TouchableOpacity>
-          </View>
+          <TextInput
+            style={[styles.pageInput, { color: colors.foreground, backgroundColor: colors.muted, borderColor: colors.border, fontFamily: 'Inter_700Bold' }]}
+            value={endPageStr}
+            onChangeText={setEndPageStr}
+            keyboardType="number-pad"
+            selectTextOnFocus
+            maxLength={6}
+          />
           <Text style={[styles.pageRange, { color: colors.mutedForeground, fontFamily: 'Inter_400Regular' }]}>
-            p. {startPg} → p. {endPage}
+            That's {pagesRead} page{pagesRead !== 1 ? 's' : ''} read · p. {startPg} → {endPage}
           </Text>
         </View>
 
@@ -188,11 +176,12 @@ const styles = StyleSheet.create({
   bookAuthor: { fontSize: 13 },
   pagesSection: { alignItems: 'center', gap: 16 },
   pagesQuestion: { fontSize: 18, alignSelf: 'flex-start' },
-  stepper: { flexDirection: 'row', alignItems: 'center', gap: 28 },
-  stepBtn: { width: 52, height: 52, borderRadius: 26, alignItems: 'center', justifyContent: 'center', borderWidth: 1 },
-  stepIcon: { fontSize: 26, lineHeight: 30 },
-  pageCount: { fontSize: 44, letterSpacing: -1, minWidth: 64, textAlign: 'center' },
-  pageRange: { fontSize: 14 },
+  pageInput: {
+    fontSize: 52, letterSpacing: -2, textAlign: 'center',
+    minWidth: 160, borderRadius: 16, borderWidth: 1,
+    paddingHorizontal: 20, paddingVertical: 12,
+  },
+  pageRange: { fontSize: 14, textAlign: 'center' },
   statsRow: { flexDirection: 'row', borderRadius: 14, borderWidth: 1, overflow: 'hidden', padding: 16, gap: 16 },
   statLabel: { fontSize: 12 },
   statVal: { fontSize: 15 },

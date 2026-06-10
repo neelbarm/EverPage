@@ -1,6 +1,6 @@
 import { BlurView } from "expo-blur";
 import { isLiquidGlassAvailable } from "expo-glass-effect";
-import { Redirect, Tabs } from "expo-router";
+import { Redirect, Tabs, useRouter } from "expo-router";
 import { Icon, Label, NativeTabs } from "expo-router/unstable-native-tabs";
 import { SymbolView } from "expo-symbols";
 import { Feather, Ionicons } from "@expo/vector-icons";
@@ -31,7 +31,7 @@ function NativeTabLayout() {
       </NativeTabs.Trigger>
       <NativeTabs.Trigger name="you">
         <Icon sf={{ default: "person.circle", selected: "person.circle.fill" }} />
-        <Label>You</Label>
+        <Label>Profile</Label>
       </NativeTabs.Trigger>
     </NativeTabs>
   );
@@ -40,6 +40,7 @@ function NativeTabLayout() {
 function ClassicTabLayout() {
   const colors = useColors();
   const colorScheme = useColorScheme();
+  const router = useRouter();
   const isDark = colorScheme === "dark";
   const isIOS = Platform.OS === "ios";
   const isWeb = Platform.OS === "web";
@@ -101,9 +102,9 @@ function ClassicTabLayout() {
           title: "",
           tabBarLabel: () => null,
           tabBarIcon: () => null,
-          tabBarButton: (props) => (
+          tabBarButton: () => (
             <TouchableOpacity
-              {...props}
+              onPress={() => router.push({ pathname: '/(tabs)/log', params: { addBook: 'true' } })}
               style={{ flex: 1, alignItems: "center", justifyContent: "center" }}
               activeOpacity={0.85}
             >
@@ -144,7 +145,7 @@ function ClassicTabLayout() {
       <Tabs.Screen
         name="you"
         options={{
-          title: "You",
+          title: "Profile",
           tabBarIcon: ({ color }) =>
             isIOS ? (
               <SymbolView name="person.circle" tintColor={color} size={22} />

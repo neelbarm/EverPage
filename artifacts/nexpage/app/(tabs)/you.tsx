@@ -15,6 +15,7 @@ import { Feather, Ionicons } from '@expo/vector-icons';
 import { useColors } from '@/hooks/useColors';
 import { useStore } from '@/context/StoreContext';
 import { useSocial } from '@/context/SocialContext';
+import { BookCover } from '@/components/BookCover';
 import { scheduleDailyReminder, cancelDailyReminder } from '@/lib/notifications';
 
 function formatReminderTime(hour: number, minute: number): string {
@@ -268,12 +269,14 @@ export default function YouScreen() {
   const colors = useColors();
   const insets = useSafeAreaInsets();
   const router = useRouter();
-  const { profile, streak, reminder, setReminder, setDailyGoal } = useStore();
+  const { profile, streak, reminder, setReminder, setDailyGoal, books } = useStore();
   const { socialProfile, setNudgesEnabled, isRegistered } = useSocial();
   const topPad = insets.top + (Platform.OS === 'web' ? 67 : 0);
   const [showReminderModal, setShowReminderModal] = useState(false);
   const [showGoalModal, setShowGoalModal] = useState(false);
   const [togglingNudges, setTogglingNudges] = useState(false);
+  const [showGenreModal, setShowGenreModal] = useState(false);
+  const [selectedGenre, setSelectedGenre] = useState('');
 
   const totalHours = Math.floor(profile.totalMinutes / 60);
 
@@ -335,7 +338,7 @@ export default function YouScreen() {
   return (
     <View style={[styles.root, { backgroundColor: colors.background }]}>
       <View style={[styles.header, { paddingTop: topPad + 12 }]}>
-        <Text style={[styles.title, { color: colors.foreground, fontFamily: 'Inter_700Bold' }]}>You</Text>
+        <Text style={[styles.title, { color: colors.foreground, fontFamily: 'Inter_700Bold' }]}>{profile.name}</Text>
         <TouchableOpacity onPress={() => router.push('/settings')} activeOpacity={0.7} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
           <Feather name="settings" size={22} color={colors.mutedForeground} />
         </TouchableOpacity>
@@ -393,26 +396,37 @@ export default function YouScreen() {
         {/* Reading taste */}
         <Text style={[styles.sectionLabel, { color: colors.mutedForeground, fontFamily: 'Inter_600SemiBold' }]}>READING TASTE</Text>
         <View style={[styles.genreCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
-          {profile.genres.map((g, i) => {
-            const pct = g.count / maxGenreCount;
-            return (
-              <View
-                key={g.name}
-                style={[
-                  styles.genreRow,
-                  i < profile.genres.length - 1 && { borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: colors.border },
-                ]}
-              >
-                <Text style={[styles.genreName, { color: colors.foreground, fontFamily: 'Inter_500Medium' }]}>{g.name}</Text>
-                <View style={styles.genreBarWrap}>
-                  <View style={[styles.genreTrack, { backgroundColor: colors.border }]}>
-                    <View style={[styles.genreFill, { width: `${pct * 100}%`, backgroundColor: colors.primary }]} />
+          {profile.genres.length === 0 ? (
+            <View style={[styles.genreRow]}>
+              <Text style={[styles.genreName, { color: colors.mutedForeground, fontFamily: 'Inter_400Regular' }]}>
+                Genres appear once you add books.
+              </Text>
+            </View>
+          ) : (
+            profile.genres.map((g, i) => {
+              const pct = g.count / maxGenreCount;
+              return (
+                <TouchableOpacity
+                  key={g.name}
+                  style={[
+                    styles.genreRow,
+                    i < profile.genres.length - 1 && { borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: colors.border },
+                  ]}
+                  onPress={() => { setSelectedGenre(g.name); setShowGenreModal(true); }}
+                  activeOpacity={0.7}
+                >
+                  <Text style={[styles.genreName, { color: colors.foreground, fontFamily: 'Inter_500Medium' }]}>{g.name}</Text>
+                  <View style={styles.genreBarWrap}>
+                    <View style={[styles.genreTrack, { backgroundColor: colors.border }]}>
+                      <View style={[styles.genreFill, { width: `${pct * 100}%`, backgroundColor: colors.primary }]} />
+                    </View>
+                    <Text style={[styles.genreCount, { color: colors.mutedForeground, fontFamily: 'Inter_400Regular' }]}>{g.count}</Text>
                   </View>
-                  <Text style={[styles.genreCount, { color: colors.mutedForeground, fontFamily: 'Inter_400Regular' }]}>{g.count}</Text>
-                </View>
-              </View>
-            );
-          })}
+                  <Ionicons name="chevron-forward" size={14} color={colors.mutedForeground} />
+                </TouchableOpacity>
+              );
+            })
+          )}
         </View>
 
         {/* Settings */}
@@ -485,6 +499,62 @@ export default function YouScreen() {
         }}
         onClose={() => setShowGoalModal(false)}
       />
+
+      <Modal
+        visible={showGenreModal}
+        animationType="slide"
+        transparent
+        onRequestClose={() => setShowGenreModal(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={[styles.modalSheet, { backgroundColor: colors.card, paddingBottom: insets.bottom + 24 }]}>
+            <View style={[styles.modalHandle, { backgroundColor: colors.border }]} />
+            <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+              <Text style={[styles.modalTitle, { color: colors.foreground, fontFamily: 'Inter_700Bold' }]}>
+                {selectedGenre}
+              </Text>
+              <TouchableOpacity onPress={() => setShowGenreModal(false)} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
+                <Ionicons name="close" size={24} color={colors.mutedForeground} />
+              </TouchableOpacity>
+            </View>
+            {(() => {
+              const genreBooks = books.filter(b => b.genre === selectedGenre);
+              if (genreBooks.length === 0) {
+                return (
+                  <Text style={[{ fontSize: 14, color: colors.mutedForeground, fontFamily: 'Inter_400Regular', paddingVertical: 16 }]}>
+                    No books tagged as {selectedGenre} yet.
+                  </Text>
+                );
+              }
+              return (
+                <ScrollView showsVerticalScrollIndicator={false} style={{ maxHeight: 400 }}>
+                  {genreBooks.map((b, i) => {
+                    const pct = Math.round((b.currentPage / b.totalPages) * 100);
+                    return (
+                      <View
+                        key={b.id}
+                        style={[
+                          { flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 13 },
+                          i < genreBooks.length - 1 && { borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: colors.border },
+                        ]}
+                      >
+                        <BookCover bookId={b.id} coverColor={b.coverColor} coverImageUri={b.coverImageUri} width={40} height={56} borderRadius={5} />
+                        <View style={{ flex: 1, gap: 3 }}>
+                          <Text style={[{ fontSize: 15, letterSpacing: -0.2, color: colors.foreground, fontFamily: 'Inter_600SemiBold' }]} numberOfLines={1}>{b.title}</Text>
+                          <Text style={[{ fontSize: 13, color: colors.mutedForeground, fontFamily: 'Inter_400Regular' }]}>{b.author}</Text>
+                          <Text style={[{ fontSize: 12, color: colors.mutedForeground, fontFamily: 'Inter_400Regular' }]}>
+                            {b.finishedAt ? 'Finished' : `${pct}% read`}
+                          </Text>
+                        </View>
+                      </View>
+                    );
+                  })}
+                </ScrollView>
+              );
+            })()}
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 }

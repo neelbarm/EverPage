@@ -4,7 +4,7 @@ import {
   TextInput, StyleSheet, Platform, KeyboardAvoidingView, ScrollView,
   ActivityIndicator, Image, Animated,
 } from 'react-native';
-import { useRouter } from 'expo-router';
+import { useRouter, useLocalSearchParams } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons, Feather } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
@@ -20,6 +20,20 @@ interface OpenLibResult {
   pages: number;
   coverId?: number;
   coverUri?: string;
+  subjects?: string[];
+}
+
+function mapSubjectToGenre(subjects: string[]): string {
+  const joined = subjects.join(' ').toLowerCase();
+  if (/science fiction|sci-fi|sci fi/.test(joined)) return 'Science Fiction';
+  if (/fantasy/.test(joined)) return 'Science Fiction';
+  if (/mystery|thriller|crime|detective|noir/.test(joined)) return 'Mystery';
+  if (/romance|love stor/.test(joined)) return 'Literary Fiction';
+  if (/biography|autobiography|memoir/.test(joined)) return 'Biography';
+  if (/history|historical fiction/.test(joined)) return 'Historical Fiction';
+  if (/self.help|psychology|business|personal development/.test(joined)) return 'Non-Fiction';
+  if (/non.fiction|nonfiction|essay|journalism|politics|science|economics/.test(joined)) return 'Non-Fiction';
+  return 'Literary Fiction';
 }
 
 function BookRow({ book, onPress }: { book: Book; onPress: () => void }) {
@@ -161,6 +175,13 @@ export default function LogScreen() {
 
   const [showModal, setShowModal] = useState(false);
 
+  const params = useLocalSearchParams<{ addBook?: string }>();
+  useEffect(() => {
+    if (params.addBook === 'true') {
+      setShowModal(true);
+    }
+  }, [params.addBook]);
+
   const [searchQuery, setSearchQuery] = useState('');
   const [searchResults, setSearchResults] = useState<OpenLibResult[]>([]);
   const [searching, setSearching] = useState(false);
@@ -209,6 +230,7 @@ export default function LogScreen() {
     setAuthor(result.author);
     setPages(result.pages ? String(result.pages) : '');
     setCoverImageUri(result.coverUri);
+    setGenre(mapSubjectToGenre(result.subjects ?? []));
     setSearchResults([]);
     setSearchQuery('');
     Haptics.selectionAsync();
@@ -234,7 +256,7 @@ export default function LogScreen() {
       setSearching(true);
       setSearchError('');
       try {
-        const url = `https://openlibrary.org/search.json?title=${encodeURIComponent(q)}&limit=8&fields=title,author_name,number_of_pages_median,cover_i`;
+        const url = `https://openlibrary.org/search.json?title=${encodeURIComponent(q)}&limit=8&fields=title,author_name,number_of_pages_median,cover_i,subject_facet`;
         const res = await fetch(url);
         if (!res.ok) throw new Error('Network error');
         const data = await res.json();
@@ -248,6 +270,7 @@ export default function LogScreen() {
               pages: typeof d.number_of_pages_median === 'number' ? d.number_of_pages_median : 0,
               coverId,
               coverUri: coverId ? `https://covers.openlibrary.org/b/id/${coverId}-M.jpg` : undefined,
+              subjects: Array.isArray(d.subject_facet) ? (d.subject_facet as string[]).slice(0, 15) : [],
             };
           });
         setSearchResults(results);

@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { Animated, View, Text, ScrollView, TouchableOpacity, StyleSheet, Platform } from 'react-native';
+import { Animated, View, Text, ScrollView, TouchableOpacity, StyleSheet, Platform, Modal, TextInput } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -28,7 +28,7 @@ export default function ShelfScreen() {
   const colors = useColors();
   const insets = useSafeAreaInsets();
   const router = useRouter();
-  const { books, streak, recommendedBooks, pendingFreezeEarned, clearPendingFreezeEarned } = useStore();
+  const { books, streak, recommendedBooks, addBook, pendingFreezeEarned, clearPendingFreezeEarned } = useStore();
   const topPad = insets.top + (Platform.OS === 'web' ? 67 : 0);
 
   const activeBooks = useMemo(() => books.filter(b => !b.finishedAt), [books]);
@@ -39,6 +39,8 @@ export default function ShelfScreen() {
   const toastOpacity = useRef(new Animated.Value(0)).current;
   const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [showToast, setShowToast] = useState(false);
+  const [selectedRec, setSelectedRec] = useState<typeof recommendedBooks[0] | null>(null);
+  const [recPagesStr, setRecPagesStr] = useState('');
 
   useEffect(() => {
     if (!pendingFreezeEarned) return;
@@ -163,14 +165,19 @@ export default function ShelfScreen() {
                 <Text style={[styles.recLabel, { color: colors.mutedForeground, fontFamily: 'Inter_600SemiBold' }]}>PICKED FOR YOU</Text>
                 <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 12, paddingVertical: 2 }}>
                   {recommendedBooks.map(book => (
-                    <View key={book.id} style={[styles.recCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
+                    <TouchableOpacity
+                      key={book.id}
+                      style={[styles.recCard, { backgroundColor: colors.card, borderColor: colors.border }]}
+                      onPress={() => { setSelectedRec(book); setRecPagesStr(''); }}
+                      activeOpacity={0.85}
+                    >
                       <BookCover bookId={book.id} coverColor={book.coverColor} coverImageUri={book.coverImageUri} width={140} height={90} borderRadius={0} />
                       <View style={styles.recBody}>
                         <Text style={[styles.recTitle, { color: colors.foreground, fontFamily: 'Inter_600SemiBold' }]} numberOfLines={2}>{book.title}</Text>
                         <Text style={[styles.recAuthor, { color: colors.mutedForeground, fontFamily: 'Inter_400Regular' }]} numberOfLines={1}>{book.author}</Text>
                         <Text style={[styles.recReason, { color: colors.accent, fontFamily: 'Inter_400Regular' }]} numberOfLines={1}>{book.reason}</Text>
                       </View>
-                    </View>
+                    </TouchableOpacity>
                   ))}
                 </ScrollView>
               </View>
@@ -189,6 +196,85 @@ export default function ShelfScreen() {
           </Text>
         </Animated.View>
       )}
+
+      <Modal
+        visible={!!selectedRec}
+        animationType="slide"
+        transparent
+        onRequestClose={() => setSelectedRec(null)}
+      >
+        <View style={styles.recModalOverlay}>
+          <View style={[styles.recModalSheet, { backgroundColor: colors.card }]}>
+            <View style={[styles.recModalHandle, { backgroundColor: colors.border }]} />
+            {selectedRec && (
+              <>
+                <View style={styles.recModalHeader}>
+                  <BookCover
+                    bookId={selectedRec.id}
+                    coverColor={selectedRec.coverColor}
+                    coverImageUri={selectedRec.coverImageUri}
+                    width={72}
+                    height={104}
+                    borderRadius={8}
+                  />
+                  <View style={{ flex: 1, gap: 5 }}>
+                    <Text style={[styles.recModalTitle, { color: colors.foreground, fontFamily: 'Inter_700Bold' }]} numberOfLines={3}>
+                      {selectedRec.title}
+                    </Text>
+                    <Text style={[styles.recModalAuthor, { color: colors.mutedForeground, fontFamily: 'Inter_400Regular' }]}>
+                      {selectedRec.author}
+                    </Text>
+                    <Text style={[styles.recModalReason, { color: colors.accent, fontFamily: 'Inter_400Regular' }]}>
+                      {selectedRec.reason}
+                    </Text>
+                    {selectedRec.friendsCount > 0 && (
+                      <Text style={[styles.recModalFriends, { color: colors.mutedForeground, fontFamily: 'Inter_400Regular' }]}>
+                        {selectedRec.friendsCount} friend{selectedRec.friendsCount !== 1 ? 's' : ''} reading this
+                      </Text>
+                    )}
+                  </View>
+                </View>
+                <View style={[styles.recModalPageRow, { borderColor: colors.border }]}>
+                  <Text style={[styles.recModalPageLabel, { color: colors.foreground, fontFamily: 'Inter_500Medium' }]}>
+                    Total pages
+                  </Text>
+                  <TextInput
+                    style={[styles.recModalPageInput, { color: colors.foreground, backgroundColor: colors.muted, borderColor: colors.border, fontFamily: 'Inter_400Regular' }]}
+                    value={recPagesStr}
+                    onChangeText={setRecPagesStr}
+                    keyboardType="number-pad"
+                    placeholder="e.g. 320"
+                    placeholderTextColor={colors.mutedForeground}
+                    maxLength={5}
+                  />
+                </View>
+                <View style={styles.recModalActions}>
+                  <TouchableOpacity
+                    style={[styles.recModalAddBtn, { backgroundColor: colors.primary, opacity: recPagesStr.trim() && parseInt(recPagesStr, 10) > 0 ? 1 : 0.45 }]}
+                    disabled={!recPagesStr.trim() || parseInt(recPagesStr, 10) <= 0}
+                    onPress={() => {
+                      const pages = parseInt(recPagesStr, 10);
+                      if (!pages || pages <= 0) return;
+                      addBook(selectedRec.title, selectedRec.author, pages, 'Literary Fiction', selectedRec.coverImageUri);
+                      setSelectedRec(null);
+                    }}
+                    activeOpacity={0.85}
+                  >
+                    <Text style={[styles.recModalAddText, { color: '#fff', fontFamily: 'Inter_600SemiBold' }]}>Add to my shelf</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={[styles.recModalDismissBtn, { borderColor: colors.border }]}
+                    onPress={() => setSelectedRec(null)}
+                    activeOpacity={0.7}
+                  >
+                    <Text style={[styles.recModalDismissText, { color: colors.mutedForeground, fontFamily: 'Inter_400Regular' }]}>Not for me</Text>
+                  </TouchableOpacity>
+                </View>
+              </>
+            )}
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 }
@@ -261,4 +347,49 @@ const styles = StyleSheet.create({
     elevation: 6,
   },
   freezeToastText: { fontSize: 15, letterSpacing: -0.1 },
+  recModalOverlay: {
+    flex: 1,
+    justifyContent: 'flex-end',
+    backgroundColor: 'rgba(0,0,0,0.42)',
+  },
+  recModalSheet: {
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    paddingHorizontal: 20,
+    paddingTop: 12,
+    paddingBottom: 36,
+    gap: 20,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: -4 },
+    shadowOpacity: 0.1,
+    shadowRadius: 16,
+    elevation: 12,
+  },
+  recModalHandle: {
+    width: 36, height: 4, borderRadius: 2,
+    alignSelf: 'center', marginBottom: 4,
+  },
+  recModalHeader: { flexDirection: 'row', gap: 16, alignItems: 'flex-start' },
+  recModalTitle: { fontSize: 17, lineHeight: 22, letterSpacing: -0.3 },
+  recModalAuthor: { fontSize: 14 },
+  recModalReason: { fontSize: 13, fontStyle: 'italic' },
+  recModalFriends: { fontSize: 12 },
+  recModalPageRow: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+    borderTopWidth: 1, paddingTop: 16,
+  },
+  recModalPageLabel: { fontSize: 15 },
+  recModalPageInput: {
+    borderRadius: 10, borderWidth: 1, paddingHorizontal: 14,
+    paddingVertical: 10, fontSize: 15, minWidth: 100, textAlign: 'center',
+  },
+  recModalActions: { gap: 10 },
+  recModalAddBtn: {
+    borderRadius: 14, paddingVertical: 16, alignItems: 'center',
+  },
+  recModalAddText: { fontSize: 16 },
+  recModalDismissBtn: {
+    borderRadius: 14, paddingVertical: 13, alignItems: 'center', borderWidth: 1,
+  },
+  recModalDismissText: { fontSize: 15 },
 });
