@@ -132,10 +132,12 @@ export default function BookDetailScreen() {
   if (!book) {
     return (
       <View style={[styles.root, { backgroundColor: colors.background }]}>
-        <TouchableOpacity style={[styles.backBtn, { top: insets.top + 12 }]} onPress={() => router.back()}>
-          <Ionicons name="arrow-back" size={24} color={colors.foreground} />
-        </TouchableOpacity>
-        <Text style={{ color: colors.foreground, textAlign: 'center', marginTop: 120, fontFamily: 'Inter_400Regular' }}>Book not found</Text>
+        <View style={[styles.header, { paddingTop: insets.top + (Platform.OS === 'web' ? 60 : 0) }]}>
+          <TouchableOpacity style={styles.headerBtn} onPress={() => router.back()}>
+            <Ionicons name="arrow-back" size={24} color={colors.foreground} />
+          </TouchableOpacity>
+        </View>
+        <Text style={{ color: colors.foreground, textAlign: 'center', marginTop: 60, fontFamily: 'Inter_400Regular' }}>Book not found</Text>
       </View>
     );
   }
@@ -156,30 +158,30 @@ export default function BookDetailScreen() {
   const youEntry = allReaders[youRank];
   const pagesGap = leadAbove && youEntry ? leadAbove.weekPages - youEntry.weekPages : 0;
 
-  const backBtnTop = insets.top + (Platform.OS === 'web' ? 67 : 8);
   const canSave = !!editTitle.trim() && !!editAuthor.trim() && !!editPages.trim() && !!parseInt(editPages, 10);
 
   return (
     <View style={[styles.root, { backgroundColor: colors.background }]}>
-      <TouchableOpacity
-        style={[styles.backBtn, { top: backBtnTop }]}
-        onPress={() => router.back()}
-        activeOpacity={0.7}
-      >
-        <Ionicons name="arrow-back" size={24} color={colors.foreground} />
-      </TouchableOpacity>
-
-      <TouchableOpacity
-        style={[styles.editBtn, { top: backBtnTop }]}
-        onPress={openEdit}
-        activeOpacity={0.7}
-      >
-        <Ionicons name="pencil-outline" size={20} color={colors.foreground} />
-      </TouchableOpacity>
+      <View style={[styles.header, { paddingTop: insets.top + (Platform.OS === 'web' ? 60 : 0) }]}>
+        <TouchableOpacity
+          style={styles.headerBtn}
+          onPress={() => router.back()}
+          activeOpacity={0.7}
+        >
+          <Ionicons name="arrow-back" size={24} color={colors.foreground} />
+        </TouchableOpacity>
+        <TouchableOpacity
+          style={styles.headerBtn}
+          onPress={openEdit}
+          activeOpacity={0.7}
+        >
+          <Ionicons name="pencil-outline" size={20} color={colors.foreground} />
+        </TouchableOpacity>
+      </View>
 
       <ScrollView
         contentContainerStyle={{
-          paddingTop: backBtnTop + 48,
+          paddingTop: 8,
           paddingHorizontal: 20,
           paddingBottom: Platform.OS === 'web' ? 100 : 32,
           gap: 16,
@@ -501,8 +503,14 @@ export default function BookDetailScreen() {
 
 const styles = StyleSheet.create({
   root: { flex: 1 },
-  backBtn: { position: 'absolute', left: 20, zIndex: 10, padding: 8 },
-  editBtn: { position: 'absolute', right: 20, zIndex: 10, padding: 8 },
+  header: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingHorizontal: 12,
+    paddingBottom: 4,
+  },
+  headerBtn: { padding: 8 },
   bookHero: { flexDirection: 'row', gap: 20, alignItems: 'flex-start' },
   bookMeta: { flex: 1, gap: 7, paddingTop: 4 },
   bookTitle: { fontSize: 22, letterSpacing: -0.5, lineHeight: 28 },
