@@ -164,8 +164,10 @@ export default function LandingScreen() {
             <Ionicons name="arrow-forward" size={18} color="#fff" />
           </TouchableOpacity>
           <TouchableOpacity onPress={openLogin} activeOpacity={0.7} style={styles.signinRow}>
-            <Text style={styles.signinText}>Already have an account? </Text>
-            <Text style={[styles.signinText, styles.signinLink]}>Sign in</Text>
+            <Text style={styles.signinText}>
+              Already have an account?{'  '}
+              <Text style={styles.signinLink}>Sign in</Text>
+            </Text>
           </TouchableOpacity>
         </View>
       </ScrollView>
@@ -330,7 +332,7 @@ const styles = StyleSheet.create({
     color: '#fff',
     fontFamily: 'Inter_600SemiBold',
   },
-  signinRow: { flexDirection: 'row' },
+  signinRow: { alignItems: 'center' },
   signinText: {
     fontSize: 14,
     color: PALETTE.muted,
