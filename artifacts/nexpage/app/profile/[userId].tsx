@@ -9,7 +9,7 @@ import { Ionicons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
 import { useColors } from '@/hooks/useColors';
 import { useSocial } from '@/context/SocialContext';
-import * as SecureStore from 'expo-secure-store';
+import { getItem as getStoredItem } from '@/lib/storage';
 
 const AUTH_TOKEN_KEY = 'auth_session_token';
 
@@ -21,7 +21,7 @@ function getApiBase(): string {
 
 async function apiFetch<T>(path: string, options: RequestInit = {}): Promise<T> {
   let token: string | null = null;
-  try { token = await SecureStore.getItemAsync(AUTH_TOKEN_KEY); } catch {}
+  try { token = await getStoredItem(AUTH_TOKEN_KEY); } catch {}
   const headers: Record<string, string> = {
     'Content-Type': 'application/json',
     ...(token ? { Authorization: `Bearer ${token}` } : {}),

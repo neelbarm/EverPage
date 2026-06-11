@@ -1,2 +1,3 @@
 - [lib/db rebuild pattern](lib-db-rebuild.md) — after schema changes, `tsc --build --force` is required; `--build` alone reuses stale cache
 - [Replit Auth mobile OIDC wiring](replit-auth-mobile.md) — PKCE flow in expo-auth-session → /api/mobile-auth/token-exchange → SecureStore → Bearer header pattern
+- [SecureStore native bridge fix](secure-store-wrapper.md) — expo-secure-store v15 setValueWithKeyAsync missing in some Expo Go builds; use lib/storage.ts wrapper with AsyncStorage fallback

@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useState, useEffect, useCallback, type ReactNode } from "react";
-import * as SecureStore from "expo-secure-store";
+import { setItem, getItem, deleteItem } from "@/lib/storage";
 
 const AUTH_TOKEN_KEY = "auth_session_token";
 
@@ -42,7 +42,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const fetchUser = useCallback(async () => {
     try {
-      const token = await SecureStore.getItemAsync(AUTH_TOKEN_KEY);
+      const token = await getItem(AUTH_TOKEN_KEY);
       if (!token) {
         setUser(null);
         setIsLoading(false);
@@ -58,7 +58,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       if (data.user) {
         setUser(data.user);
       } else {
-        await SecureStore.deleteItemAsync(AUTH_TOKEN_KEY);
+        await deleteItem(AUTH_TOKEN_KEY);
         setUser(null);
       }
     } catch {
@@ -88,7 +88,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
 
     if (data.token) {
-      await SecureStore.setItemAsync(AUTH_TOKEN_KEY, data.token);
+      await setItem(AUTH_TOKEN_KEY, data.token);
       setUser(data.user);
     }
   }, []);
@@ -109,14 +109,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
 
     if (data.token) {
-      await SecureStore.setItemAsync(AUTH_TOKEN_KEY, data.token);
+      await setItem(AUTH_TOKEN_KEY, data.token);
       setUser(data.user);
     }
   }, []);
 
   const logout = useCallback(async () => {
     try {
-      const token = await SecureStore.getItemAsync(AUTH_TOKEN_KEY);
+      const token = await getItem(AUTH_TOKEN_KEY);
       if (token) {
         const apiBase = getApiBaseUrl();
         await fetch(`${apiBase}/api/local-auth/logout`, {
@@ -127,7 +127,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     } catch {
       // ignore
     } finally {
-      await SecureStore.deleteItemAsync(AUTH_TOKEN_KEY);
+      await deleteItem(AUTH_TOKEN_KEY);
       setUser(null);
     }
   }, []);

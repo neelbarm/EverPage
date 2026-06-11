@@ -6,7 +6,7 @@ import React, {
   useCallback,
   useRef,
 } from 'react';
-import * as SecureStore from 'expo-secure-store';
+import { getItem as getStoredItem } from '@/lib/storage';
 import { useAuth } from '@/lib/auth';
 
 const AUTH_TOKEN_KEY = 'auth_session_token';
@@ -78,7 +78,7 @@ function getApiBase(): string {
 
 async function getAuthToken(): Promise<string | null> {
   try {
-    return await SecureStore.getItemAsync(AUTH_TOKEN_KEY);
+    return await getStoredItem(AUTH_TOKEN_KEY);
   } catch {
     return null;
   }
