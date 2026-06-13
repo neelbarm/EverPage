@@ -81,18 +81,18 @@ function FlippingBook() {
         Animated.sequence([
           Animated.timing(flipAnim, {
             toValue: 1,
-            duration: 520,
+            duration: 850,
             easing: Easing.inOut(Easing.ease),
             useNativeDriver: true,
           }),
-          Animated.delay(180),
+          Animated.delay(320),
           Animated.timing(flipAnim, {
             toValue: 0,
-            duration: 520,
+            duration: 850,
             easing: Easing.inOut(Easing.ease),
             useNativeDriver: true,
           }),
-          Animated.delay(500),
+          Animated.delay(900),
         ])
       ).start();
     }, 700);
@@ -351,7 +351,7 @@ export default function LandingScreen() {
     const t = setTimeout(() => {
       timerDoneRef.current = true;
       doTransition();
-    }, 2400);
+    }, 5000);
 
     return () => clearTimeout(t);
   }, []);

@@ -16,6 +16,7 @@ import { Platform } from "react-native";
 import * as Notifications from "expo-notifications";
 
 import { ErrorBoundary } from "@/components/ErrorBoundary";
+import { ThemeProvider } from "@/context/ThemeContext";
 import { StoreProvider } from "@/context/StoreContext";
 import { SocialProvider, useSocial } from "@/context/SocialContext";
 import { AuthProvider, useAuth } from "@/lib/auth";
@@ -123,14 +124,16 @@ export default function RootLayout() {
         <QueryClientProvider client={queryClient}>
           <GestureHandlerRootView>
             <KeyboardProvider>
-              <AuthProvider>
-                <StoreProvider>
-                  <SocialProvider>
-                    <PushTokenRegistrar />
-                    <RootLayoutNav />
-                  </SocialProvider>
-                </StoreProvider>
-              </AuthProvider>
+              <ThemeProvider>
+                <AuthProvider>
+                  <StoreProvider>
+                    <SocialProvider>
+                      <PushTokenRegistrar />
+                      <RootLayoutNav />
+                    </SocialProvider>
+                  </StoreProvider>
+                </AuthProvider>
+              </ThemeProvider>
             </KeyboardProvider>
           </GestureHandlerRootView>
         </QueryClientProvider>

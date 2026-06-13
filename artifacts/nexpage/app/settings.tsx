@@ -9,6 +9,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Feather, Ionicons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
 import { useColors } from '@/hooks/useColors';
+import { useTheme, type ThemeMode } from '@/context/ThemeContext';
 import { useStore } from '@/context/StoreContext';
 import { useSocial } from '@/context/SocialContext';
 import { useAuth } from '@/lib/auth';
@@ -216,6 +217,8 @@ export default function SettingsScreen() {
   const { profile, streak, reminder, setReminder, setDailyGoal, updateProfile } = useStore();
   const { socialProfile, isRegistered, setNudgesEnabled } = useSocial();
   const { user, isAuthenticated, logout } = useAuth();
+
+  const { themeMode, setThemeMode } = useTheme();
 
   const [name, setName] = useState(profile.name);
   const [selectedColor, setSelectedColor] = useState(profile.color);
@@ -446,11 +449,44 @@ export default function SettingsScreen() {
         <View style={{ height: 4 }} />
         <SectionLabel label="APP" />
         <SettingsGroup>
-          <SettingsRow
-            icon="sun"
-            label="Appearance"
-            value="Follows system"
-          />
+          <View style={[
+            styles.row,
+            { borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: colors.border },
+          ]}>
+            <View style={[styles.iconBox, { backgroundColor: colors.muted }]}>
+              <Feather
+                name={themeMode === 'dark' ? 'moon' : themeMode === 'light' ? 'sun' : 'monitor'}
+                size={15}
+                color={colors.mutedForeground}
+              />
+            </View>
+            <Text style={[styles.rowLabel, { color: colors.foreground, fontFamily: 'Inter_400Regular' }]}>
+              Appearance
+            </Text>
+            <View style={[styles.themePicker, { backgroundColor: colors.muted, borderColor: colors.border }]}>
+              {(['light', 'system', 'dark'] as ThemeMode[]).map((mode) => (
+                <TouchableOpacity
+                  key={mode}
+                  onPress={() => { setThemeMode(mode); Haptics.selectionAsync(); }}
+                  activeOpacity={0.8}
+                  style={[
+                    styles.themeChip,
+                    themeMode === mode && { backgroundColor: colors.card, shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.12, shadowRadius: 2, elevation: 2 },
+                  ]}
+                >
+                  <Text style={[
+                    styles.themeChipText,
+                    {
+                      fontFamily: themeMode === mode ? 'Inter_600SemiBold' : 'Inter_400Regular',
+                      color: themeMode === mode ? colors.foreground : colors.mutedForeground,
+                    },
+                  ]}>
+                    {mode.charAt(0).toUpperCase() + mode.slice(1)}
+                  </Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+          </View>
           <SettingsRow
             icon="info"
             label="Version"
@@ -547,5 +583,13 @@ const styles = StyleSheet.create({
     flexDirection: 'row', alignItems: 'center', gap: 12,
     paddingVertical: 12, borderBottomWidth: StyleSheet.hairlineWidth,
   },
+  themePicker: {
+    flexDirection: 'row', borderRadius: 10, borderWidth: 1,
+    padding: 3, gap: 2,
+  },
+  themeChip: {
+    paddingHorizontal: 10, paddingVertical: 5, borderRadius: 7,
+  },
+  themeChipText: { fontSize: 12 },
   footerText: { fontSize: 12, textAlign: 'center' },
 });
