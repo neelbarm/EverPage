@@ -1,5 +1,6 @@
-import React, { useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import {
+  Animated,
   View,
   Text,
   ScrollView,
@@ -313,7 +314,7 @@ export default function YouScreen() {
   const colors = useColors();
   const insets = useSafeAreaInsets();
   const router = useRouter();
-  const { profile, streak, reminder, setReminder, setDailyGoal, books } = useStore();
+  const { profile, streak, reminder, setReminder, setDailyGoal, books, pendingGoalMet, clearPendingGoalMet } = useStore();
   const { socialProfile, setNudgesEnabled, isRegistered } = useSocial();
   const topPad = insets.top + (Platform.OS === 'web' ? 67 : 0);
   const [showReminderModal, setShowReminderModal] = useState(false);
@@ -321,6 +322,28 @@ export default function YouScreen() {
   const [togglingNudges, setTogglingNudges] = useState(false);
   const [showGenreModal, setShowGenreModal] = useState(false);
   const [selectedGenre, setSelectedGenre] = useState('');
+
+  const goalToastOpacity = useRef(new Animated.Value(0)).current;
+  const goalToastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [showGoalToast, setShowGoalToast] = useState(false);
+
+  useEffect(() => {
+    if (!pendingGoalMet) return;
+    clearPendingGoalMet();
+    setShowGoalToast(true);
+    if (goalToastTimer.current) clearTimeout(goalToastTimer.current);
+    const anim = Animated.sequence([
+      Animated.timing(goalToastOpacity, { toValue: 1, duration: 260, useNativeDriver: true }),
+      Animated.delay(2600),
+      Animated.timing(goalToastOpacity, { toValue: 0, duration: 340, useNativeDriver: true }),
+    ]);
+    anim.start();
+    goalToastTimer.current = setTimeout(() => setShowGoalToast(false), 3200);
+    return () => {
+      anim.stop();
+      if (goalToastTimer.current) clearTimeout(goalToastTimer.current);
+    };
+  }, [pendingGoalMet]);
 
   const totalHours = Math.floor(profile.totalMinutes / 60);
 
@@ -524,6 +547,20 @@ export default function YouScreen() {
         )}
       </ScrollView>
 
+      {showGoalToast && (
+        <Animated.View
+          style={[styles.goalToast, { opacity: goalToastOpacity }]}
+          pointerEvents="none"
+        >
+          <Text style={[styles.goalToastText, { fontFamily: 'Inter_700Bold' }]}>
+            🎉 Daily goal reached!
+          </Text>
+          <Text style={[styles.goalToastSub, { fontFamily: 'Inter_400Regular' }]}>
+            {streak.todayMinutes} min read today · keep it up!
+          </Text>
+        </Animated.View>
+      )}
+
       <ReminderModal
         visible={showReminderModal}
         initialHour={reminder.hour}
@@ -605,6 +642,27 @@ export default function YouScreen() {
 
 const styles = StyleSheet.create({
   root: { flex: 1 },
+  goalToast: {
+    position: 'absolute',
+    top: 100,
+    left: 20,
+    right: 20,
+    borderRadius: 16,
+    borderWidth: 1.5,
+    borderColor: '#3A6645',
+    backgroundColor: '#e8f4ed',
+    paddingVertical: 14,
+    paddingHorizontal: 18,
+    alignItems: 'center',
+    gap: 3,
+    shadowColor: '#3A6645',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.18,
+    shadowRadius: 12,
+    elevation: 8,
+  },
+  goalToastText: { fontSize: 16, letterSpacing: -0.2, color: '#2a5235' },
+  goalToastSub: { fontSize: 13, color: '#3A6645' },
   header: { paddingHorizontal: 20, paddingBottom: 16, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
   title: { fontSize: 26, letterSpacing: -0.5 },
   profileCard: {

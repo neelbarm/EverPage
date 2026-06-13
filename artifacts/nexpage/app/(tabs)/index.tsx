@@ -28,7 +28,7 @@ export default function ShelfScreen() {
   const colors = useColors();
   const insets = useSafeAreaInsets();
   const router = useRouter();
-  const { books, streak, recommendedBooks, addBook, pendingFreezeEarned, clearPendingFreezeEarned } = useStore();
+  const { books, streak, recommendedBooks, addBook, pendingFreezeEarned, clearPendingFreezeEarned, pendingGoalMet, clearPendingGoalMet } = useStore();
   const topPad = insets.top + (Platform.OS === 'web' ? 67 : 0);
 
   const activeBooks = useMemo(() => books.filter(b => !b.finishedAt), [books]);
@@ -39,6 +39,11 @@ export default function ShelfScreen() {
   const toastOpacity = useRef(new Animated.Value(0)).current;
   const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [showToast, setShowToast] = useState(false);
+
+  const goalToastOpacity = useRef(new Animated.Value(0)).current;
+  const goalToastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [showGoalToast, setShowGoalToast] = useState(false);
+
   const [selectedRec, setSelectedRec] = useState<typeof recommendedBooks[0] | null>(null);
   const [recPagesStr, setRecPagesStr] = useState('');
 
@@ -59,6 +64,24 @@ export default function ShelfScreen() {
       if (toastTimer.current) clearTimeout(toastTimer.current);
     };
   }, [pendingFreezeEarned]);
+
+  useEffect(() => {
+    if (!pendingGoalMet) return;
+    clearPendingGoalMet();
+    setShowGoalToast(true);
+    if (goalToastTimer.current) clearTimeout(goalToastTimer.current);
+    const anim = Animated.sequence([
+      Animated.timing(goalToastOpacity, { toValue: 1, duration: 260, useNativeDriver: true }),
+      Animated.delay(2600),
+      Animated.timing(goalToastOpacity, { toValue: 0, duration: 340, useNativeDriver: true }),
+    ]);
+    anim.start();
+    goalToastTimer.current = setTimeout(() => setShowGoalToast(false), 3200);
+    return () => {
+      anim.stop();
+      if (goalToastTimer.current) clearTimeout(goalToastTimer.current);
+    };
+  }, [pendingGoalMet]);
 
   return (
     <View style={[styles.root, { backgroundColor: colors.background }]}>
@@ -214,6 +237,20 @@ export default function ShelfScreen() {
           </>
         )}
       </ScrollView>
+
+      {showGoalToast && (
+        <Animated.View
+          style={[styles.goalToast, { backgroundColor: '#e8f4ed', borderColor: '#3A6645', opacity: goalToastOpacity }]}
+          pointerEvents="none"
+        >
+          <Text style={[styles.goalToastText, { color: '#2a5235', fontFamily: 'Inter_700Bold' }]}>
+            🎉 Daily goal reached!
+          </Text>
+          <Text style={[styles.goalToastSub, { color: '#3A6645', fontFamily: 'Inter_400Regular' }]}>
+            {streak.todayMinutes} min read today · keep it up!
+          </Text>
+        </Animated.View>
+      )}
 
       {showToast && (
         <Animated.View
@@ -381,6 +418,25 @@ const styles = StyleSheet.create({
   recTitle: { fontSize: 13, lineHeight: 17, letterSpacing: -0.2 },
   recAuthor: { fontSize: 12 },
   recReason: { fontSize: 11, marginTop: 2 },
+  goalToast: {
+    position: 'absolute',
+    top: 100,
+    left: 20,
+    right: 20,
+    borderRadius: 16,
+    borderWidth: 1.5,
+    paddingVertical: 14,
+    paddingHorizontal: 18,
+    alignItems: 'center',
+    gap: 3,
+    shadowColor: '#3A6645',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.18,
+    shadowRadius: 12,
+    elevation: 8,
+  },
+  goalToastText: { fontSize: 16, letterSpacing: -0.2 },
+  goalToastSub: { fontSize: 13 },
   freezeToast: {
     position: 'absolute',
     bottom: 100,

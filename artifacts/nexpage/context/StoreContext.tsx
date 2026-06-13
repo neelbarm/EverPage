@@ -111,6 +111,8 @@ interface StoreContextType {
   isLoaded: boolean;
   pendingFreezeEarned: boolean;
   clearPendingFreezeEarned: () => void;
+  pendingGoalMet: boolean;
+  clearPendingGoalMet: () => void;
   logSession: (bookId: string, durationMinutes: number, startPage: number, endPage: number) => Promise<void>;
   finishBook: (bookId: string, favoriteQuote?: string) => void;
   useStreakFreeze: () => void;
@@ -342,10 +344,15 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
   const [reminder, setReminderState] = useState<ReminderSettings>(DEFAULT_REMINDER);
   const [isLoaded, setIsLoaded] = useState(false);
   const [pendingFreezeEarned, setPendingFreezeEarned] = useState(false);
+  const [pendingGoalMet, setPendingGoalMet] = useState(false);
   const cloudSyncedRef = useRef(false);
 
   function clearPendingFreezeEarned() {
     setPendingFreezeEarned(false);
+  }
+
+  function clearPendingGoalMet() {
+    setPendingGoalMet(false);
   }
 
   useEffect(() => {
@@ -504,7 +511,9 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
     const newBooks = books.map(b =>
       b.id === bookId ? { ...b, currentPage: Math.min(endPage, b.totalPages) } : b
     );
+    const wasUnderGoal = streak.dailyGoalMinutes > 0 && streak.todayMinutes < streak.dailyGoalMinutes;
     const newStreak = { ...streak, todayMinutes: streak.todayMinutes + durationMinutes };
+    const goalJustMet = wasUnderGoal && newStreak.todayMinutes >= streak.dailyGoalMinutes;
     let earnedFreeze = false;
     if (!newStreak.checkedDays.includes(todayStr())) {
       const yesterday = new Date();
@@ -543,6 +552,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
     setStreak(newStreak);
     setProfile(newProfile);
     if (earnedFreeze) setPendingFreezeEarned(true);
+    if (goalJustMet) setPendingGoalMet(true);
     await persist(newBooks, newSessions, newStreak, newProfile, reminder);
     const updatedBook = newBooks.find(b => b.id === bookId);
     if (updatedBook) syncBooksToCloud([updatedBook]);
@@ -627,6 +637,8 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
       isLoaded,
       pendingFreezeEarned,
       clearPendingFreezeEarned,
+      pendingGoalMet,
+      clearPendingGoalMet,
       logSession, finishBook, useStreakFreeze, addBook, updateBook, getBook, setReminder, setDailyGoal, updateProfile,
     }}>
       {children}
