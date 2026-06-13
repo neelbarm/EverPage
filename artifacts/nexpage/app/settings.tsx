@@ -100,7 +100,25 @@ function GoalModal({
   const colors = useColors();
   const insets = useSafeAreaInsets();
   const [selected, setSelected] = useState(initial);
+  const [inputText, setInputText] = useState(String(initial));
   const OPTIONS = [10, 15, 20, 30, 45, 60, 90, 120];
+
+  const parsed = parseInt(inputText, 10);
+  const isValid = !isNaN(parsed) && parsed >= 1 && parsed <= 480;
+  const showError = inputText.trim().length > 0 && !isValid;
+
+  function handleChipPress(m: number) {
+    setSelected(m);
+    setInputText(String(m));
+  }
+
+  function handleTextChange(text: string) {
+    const clean = text.replace(/[^0-9]/g, '');
+    setInputText(clean);
+    const n = parseInt(clean, 10);
+    if (!isNaN(n) && n >= 1 && n <= 480) setSelected(n);
+  }
+
   return (
     <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
       <View style={styles.overlay}>
@@ -112,27 +130,56 @@ function GoalModal({
             {OPTIONS.map(m => (
               <TouchableOpacity
                 key={m}
-                onPress={() => setSelected(m)}
+                onPress={() => handleChipPress(m)}
                 style={[styles.chip, {
-                  backgroundColor: m === selected ? colors.primary : colors.muted,
-                  borderColor: m === selected ? colors.primary : colors.border,
+                  backgroundColor: m === selected && !showError ? colors.primary : colors.muted,
+                  borderColor: m === selected && !showError ? colors.primary : colors.border,
                 }]}
                 activeOpacity={0.7}
               >
-                <Text style={[styles.chipText, { color: m === selected ? '#fff' : colors.foreground, fontFamily: 'Inter_500Medium' }]}>
+                <Text style={[styles.chipText, { color: m === selected && !showError ? '#fff' : colors.foreground, fontFamily: 'Inter_500Medium' }]}>
                   {m} min
                 </Text>
               </TouchableOpacity>
             ))}
           </View>
+          <View style={styles.goalCustomRow}>
+            <Text style={[styles.goalOrLabel, { color: colors.mutedForeground, fontFamily: 'Inter_400Regular' }]}>or enter custom</Text>
+            <View style={[
+              styles.goalInputWrap,
+              { borderColor: showError ? '#c0392b' : isValid && !OPTIONS.includes(selected) ? colors.primary : colors.border, backgroundColor: colors.background },
+            ]}>
+              <TextInput
+                style={[styles.goalInput, { color: colors.foreground, fontFamily: 'Inter_500Medium' }]}
+                value={inputText}
+                onChangeText={handleTextChange}
+                keyboardType="number-pad"
+                placeholder="e.g. 25"
+                placeholderTextColor={colors.mutedForeground}
+                maxLength={3}
+                selectTextOnFocus
+              />
+              <Text style={[styles.goalInputUnit, { color: colors.mutedForeground, fontFamily: 'Inter_400Regular' }]}>min</Text>
+            </View>
+          </View>
+          {showError && (
+            <Text style={[styles.goalError, { color: '#c0392b', fontFamily: 'Inter_400Regular' }]}>
+              Enter a value between 1 and 480
+            </Text>
+          )}
           <View style={[styles.previewBox, { backgroundColor: colors.muted }]}>
             <Feather name="target" size={15} color={colors.primary} />
             <Text style={[styles.previewText, { color: colors.mutedForeground, fontFamily: 'Inter_400Regular' }]}>
-              Read {selected} minutes a day to keep your streak alive.
+              Read {isValid ? selected : '?'} minutes a day to keep your streak alive.
             </Text>
           </View>
-          <TouchableOpacity style={[styles.saveBtn, { backgroundColor: colors.primary }]} onPress={() => onSave(selected)} activeOpacity={0.85}>
-            <Text style={[styles.saveBtnText, { fontFamily: 'Inter_600SemiBold' }]}>Save</Text>
+          <TouchableOpacity
+            style={[styles.saveBtn, { backgroundColor: showError ? colors.muted : colors.primary }]}
+            onPress={() => { if (isValid) onSave(selected); }}
+            activeOpacity={0.85}
+            disabled={showError}
+          >
+            <Text style={[styles.saveBtnText, { fontFamily: 'Inter_600SemiBold', color: showError ? colors.mutedForeground : '#fff' }]}>Save</Text>
           </TouchableOpacity>
         </View>
       </View>
@@ -602,6 +649,18 @@ const styles = StyleSheet.create({
   sheetTitle: { fontSize: 20, letterSpacing: -0.5 },
   sheetSub: { fontSize: 11, letterSpacing: 1.5 },
   chipGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
+  goalCustomRow: {
+    flexDirection: 'row', alignItems: 'center', gap: 10, marginTop: 4,
+  },
+  goalOrLabel: { fontSize: 13 },
+  goalInputWrap: {
+    flex: 1, flexDirection: 'row', alignItems: 'center',
+    borderWidth: 1.5, borderRadius: 10,
+    paddingHorizontal: 12, paddingVertical: 8, gap: 6,
+  },
+  goalInput: { flex: 1, fontSize: 15, padding: 0 },
+  goalInputUnit: { fontSize: 13 },
+  goalError: { fontSize: 12, marginTop: -4 },
   chipRow: { gap: 8, paddingVertical: 4 },
   chip: { paddingHorizontal: 14, paddingVertical: 8, borderRadius: 20, borderWidth: 1 },
   chipText: { fontSize: 13 },
