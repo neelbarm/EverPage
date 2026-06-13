@@ -315,7 +315,7 @@ export default function YouScreen() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
   const { profile, streak, reminder, setReminder, setDailyGoal, books, pendingGoalMet, clearPendingGoalMet } = useStore();
-  const { socialProfile, setNudgesEnabled, isRegistered } = useSocial();
+  const { socialProfile, setNudgesEnabled, isRegistered, followers } = useSocial();
   const topPad = insets.top + (Platform.OS === 'web' ? 67 : 0);
   const [showReminderModal, setShowReminderModal] = useState(false);
   const [showGoalModal, setShowGoalModal] = useState(false);
@@ -428,6 +428,18 @@ export default function YouScreen() {
               {streak.currentStreak} day streak
             </Text>
           </View>
+          {isRegistered && (
+            <TouchableOpacity
+              onPress={() => router.push('/(tabs)/friends')}
+              activeOpacity={0.7}
+              style={styles.followersBadge}
+            >
+              <Ionicons name="people-outline" size={14} color={colors.mutedForeground} />
+              <Text style={[styles.followersBadgeText, { color: colors.mutedForeground, fontFamily: 'Inter_500Medium' }]}>
+                {followers.length} {followers.length === 1 ? 'follower' : 'followers'}
+              </Text>
+            </TouchableOpacity>
+          )}
         </View>
 
         {/* Stats grid */}
@@ -674,6 +686,8 @@ const styles = StyleSheet.create({
   profileName: { fontSize: 22, marginBottom: 10, letterSpacing: -0.5 },
   streakBadge: { flexDirection: 'row', alignItems: 'center', gap: 5, paddingHorizontal: 13, paddingVertical: 6, borderRadius: 18 },
   streakBadgeText: { fontSize: 13 },
+  followersBadge: { flexDirection: 'row', alignItems: 'center', gap: 5, marginTop: 2 },
+  followersBadgeText: { fontSize: 13 },
   statsGrid: {
     flexDirection: 'row', borderRadius: 16, borderWidth: 1,
     overflow: 'hidden', shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.05, shadowRadius: 6, elevation: 1,
