@@ -430,7 +430,7 @@ export default function YouScreen() {
           </View>
           {isRegistered && (
             <TouchableOpacity
-              onPress={() => router.push('/(tabs)/friends')}
+              onPress={() => router.push({ pathname: '/(tabs)/friends', params: { openFollowers: '1' } })}
               activeOpacity={0.7}
               style={styles.followersBadge}
             >

@@ -6,7 +6,7 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
-import { useRouter } from 'expo-router';
+import { useRouter, useLocalSearchParams } from 'expo-router';
 import { useColors } from '@/hooks/useColors';
 import { useSocial, ActivityItem, SocialUser, NudgeHistoryItem } from '@/context/SocialContext';
 import RegisterModal from '@/components/RegisterModal';
@@ -328,12 +328,20 @@ export default function FriendsScreen() {
   const colors = useColors();
   const insets = useSafeAreaInsets();
   const { isRegistered, feed, following, followers, nudgeHistory, unreadNudgeCount, markNudgesRead, isLoading, refreshFeed, followUser, unfollowUser, isFollowing } = useSocial();
+  const { openFollowers } = useLocalSearchParams<{ openFollowers?: string }>();
   const [showWeek, setShowWeek] = useState(false);
   const [showSearch, setShowSearch] = useState(false);
   const [showRegister, setShowRegister] = useState(false);
   const [showNudges, setShowNudges] = useState(false);
   const [showFollowers, setShowFollowers] = useState(false);
   const [followingId, setFollowingId] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (openFollowers === '1') {
+      setShowFollowers(true);
+      setShowNudges(false);
+    }
+  }, [openFollowers]);
   const topPad = insets.top + (Platform.OS === 'web' ? 67 : 0);
 
   const now = Date.now();
