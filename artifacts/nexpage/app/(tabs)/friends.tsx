@@ -327,11 +327,13 @@ function NudgeHistoryCard({ item }: { item: NudgeHistoryItem }) {
 export default function FriendsScreen() {
   const colors = useColors();
   const insets = useSafeAreaInsets();
-  const { isRegistered, feed, following, nudgeHistory, unreadNudgeCount, markNudgesRead, isLoading, refreshFeed } = useSocial();
+  const { isRegistered, feed, following, followers, nudgeHistory, unreadNudgeCount, markNudgesRead, isLoading, refreshFeed, followUser, unfollowUser, isFollowing } = useSocial();
   const [showWeek, setShowWeek] = useState(false);
   const [showSearch, setShowSearch] = useState(false);
   const [showRegister, setShowRegister] = useState(false);
   const [showNudges, setShowNudges] = useState(false);
+  const [showFollowers, setShowFollowers] = useState(false);
+  const [followingId, setFollowingId] = useState<string | null>(null);
   const topPad = insets.top + (Platform.OS === 'web' ? 67 : 0);
 
   const now = Date.now();
@@ -387,10 +389,28 @@ export default function FriendsScreen() {
             <TouchableOpacity
               style={[styles.searchIconBtn, { backgroundColor: colors.muted }]}
               onPress={() => {
+                setShowFollowers(v => !v);
+                setShowNudges(false);
+              }}
+              activeOpacity={0.8}
+            >
+              <Ionicons name="people-outline" size={20} color={colors.foreground} />
+              {followers.length > 0 && (
+                <View style={[styles.badge, { backgroundColor: colors.accent }]}>
+                  <Text style={[styles.badgeText, { fontFamily: 'Inter_700Bold' }]}>
+                    {followers.length > 9 ? '9+' : followers.length}
+                  </Text>
+                </View>
+              )}
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.searchIconBtn, { backgroundColor: colors.muted }]}
+              onPress={() => {
                 setShowNudges(v => {
                   if (!v) markNudgesRead();
                   return !v;
                 });
+                setShowFollowers(false);
               }}
               activeOpacity={0.8}
             >
@@ -438,6 +458,74 @@ export default function FriendsScreen() {
           ))}
         </View>
       </View>
+
+      {showFollowers && (
+        <View style={[styles.nudgePanelContainer, { backgroundColor: colors.card, borderColor: colors.border }]}>
+          <View style={[styles.nudgePanelHeader, { borderBottomColor: colors.border }]}>
+            <Text style={[styles.nudgePanelTitle, { color: colors.foreground, fontFamily: 'Inter_700Bold' }]}>
+              Followers · {followers.length}
+            </Text>
+            <TouchableOpacity onPress={() => setShowFollowers(false)} activeOpacity={0.7}>
+              <Ionicons name="close" size={20} color={colors.mutedForeground} />
+            </TouchableOpacity>
+          </View>
+          {followers.length === 0 ? (
+            <View style={styles.nudgePanelEmpty}>
+              <Text style={[styles.nudgePanelEmptyText, { color: colors.mutedForeground, fontFamily: 'Inter_400Regular' }]}>
+                Nobody is following you yet — share your profile to get started.
+              </Text>
+            </View>
+          ) : (
+            <ScrollView style={{ maxHeight: 280 }} showsVerticalScrollIndicator={false}>
+              {followers.map(user => {
+                const alreadyFollowing = isFollowing(user.id);
+                return (
+                  <View key={user.id} style={[styles.followerRow, { borderBottomColor: colors.border }]}>
+                    <AvatarCircle initial={user.initial} color={user.color} size={40} />
+                    <View style={{ flex: 1 }}>
+                      <Text style={[styles.followerName, { color: colors.foreground, fontFamily: 'Inter_600SemiBold' }]} numberOfLines={1}>
+                        {user.displayName}
+                      </Text>
+                      <Text style={[styles.followerUsername, { color: colors.mutedForeground, fontFamily: 'Inter_400Regular' }]}>
+                        @{user.username}
+                      </Text>
+                    </View>
+                    <TouchableOpacity
+                      style={[
+                        styles.followBackBtn,
+                        alreadyFollowing
+                          ? { backgroundColor: colors.muted, borderColor: colors.border }
+                          : { backgroundColor: colors.primary, borderColor: colors.primary },
+                      ]}
+                      disabled={followingId === user.id}
+                      onPress={async () => {
+                        setFollowingId(user.id);
+                        try {
+                          if (alreadyFollowing) {
+                            await unfollowUser(user.id);
+                          } else {
+                            await followUser(user.id);
+                          }
+                        } finally {
+                          setFollowingId(null);
+                        }
+                      }}
+                      activeOpacity={0.8}
+                    >
+                      {followingId === user.id
+                        ? <ActivityIndicator size="small" color={alreadyFollowing ? colors.mutedForeground : '#fff'} />
+                        : <Text style={[styles.followBackBtnText, { color: alreadyFollowing ? colors.mutedForeground : '#fff', fontFamily: 'Inter_600SemiBold' }]}>
+                            {alreadyFollowing ? 'Following' : 'Follow back'}
+                          </Text>
+                      }
+                    </TouchableOpacity>
+                  </View>
+                );
+              })}
+            </ScrollView>
+          )}
+        </View>
+      )}
 
       {showNudges && (
         <View style={[styles.nudgePanelContainer, { backgroundColor: colors.card, borderColor: colors.border }]}>
@@ -589,4 +677,9 @@ const styles = StyleSheet.create({
   resultUsername: { fontSize: 13 },
   followBtn: { paddingHorizontal: 16, paddingVertical: 7, borderRadius: 20, borderWidth: 1.5, minWidth: 88, alignItems: 'center' },
   followBtnText: { fontSize: 13 },
+  followerRow: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 20, paddingVertical: 12, gap: 12, borderBottomWidth: StyleSheet.hairlineWidth },
+  followerName: { fontSize: 14, letterSpacing: -0.2 },
+  followerUsername: { fontSize: 12, marginTop: 1 },
+  followBackBtn: { paddingHorizontal: 14, paddingVertical: 6, borderRadius: 18, borderWidth: 1.5, minWidth: 98, alignItems: 'center' },
+  followBackBtnText: { fontSize: 13 },
 });

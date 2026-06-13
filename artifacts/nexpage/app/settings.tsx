@@ -18,6 +18,112 @@ import RegisterModal from '@/components/RegisterModal';
 
 const APP_VERSION = '1.0.0';
 
+function ChangePasswordModal({
+  visible, onClose, onSuccess,
+}: { visible: boolean; onClose: () => void; onSuccess: () => void }) {
+  const colors = useColors();
+  const insets = useSafeAreaInsets();
+  const { changePassword } = useAuth();
+  const [current, setCurrent] = useState('');
+  const [next, setNext] = useState('');
+  const [confirm, setConfirm] = useState('');
+  const [error, setError] = useState('');
+  const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    if (!visible) {
+      setCurrent(''); setNext(''); setConfirm(''); setError(''); setSaving(false);
+    }
+  }, [visible]);
+
+  async function handleSave() {
+    if (!current) { setError('Enter your current password.'); return; }
+    if (next.length < 6) { setError('New password must be at least 6 characters.'); return; }
+    if (next !== confirm) { setError('New passwords do not match.'); return; }
+    setError('');
+    setSaving(true);
+    try {
+      await changePassword(current, next);
+      onSuccess();
+    } catch (e: any) {
+      setError(e?.message || 'Something went wrong. Try again.');
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
+      <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+        <TouchableOpacity style={styles.overlay} activeOpacity={1} onPress={onClose}>
+          <TouchableOpacity
+            activeOpacity={1}
+            style={[styles.cpSheet, { backgroundColor: colors.card, borderColor: colors.border, paddingBottom: insets.bottom + 24 }]}
+          >
+            <View style={[styles.handle, { backgroundColor: colors.border }]} />
+            <Text style={[styles.sheetTitle, { color: colors.foreground, fontFamily: 'Inter_700Bold', marginBottom: 4 }]}>
+              Change Password
+            </Text>
+
+            <Text style={[styles.cpLabel, { color: colors.mutedForeground, fontFamily: 'Inter_600SemiBold' }]}>CURRENT PASSWORD</Text>
+            <TextInput
+              style={[styles.cpInput, { backgroundColor: colors.muted, color: colors.foreground, borderColor: colors.border, fontFamily: 'Inter_400Regular' }]}
+              value={current}
+              onChangeText={setCurrent}
+              secureTextEntry
+              placeholder="••••••••"
+              placeholderTextColor={colors.mutedForeground}
+              returnKeyType="next"
+              autoCapitalize="none"
+            />
+
+            <Text style={[styles.cpLabel, { color: colors.mutedForeground, fontFamily: 'Inter_600SemiBold' }]}>NEW PASSWORD</Text>
+            <TextInput
+              style={[styles.cpInput, { backgroundColor: colors.muted, color: colors.foreground, borderColor: colors.border, fontFamily: 'Inter_400Regular' }]}
+              value={next}
+              onChangeText={setNext}
+              secureTextEntry
+              placeholder="At least 6 characters"
+              placeholderTextColor={colors.mutedForeground}
+              returnKeyType="next"
+              autoCapitalize="none"
+            />
+
+            <Text style={[styles.cpLabel, { color: colors.mutedForeground, fontFamily: 'Inter_600SemiBold' }]}>CONFIRM NEW PASSWORD</Text>
+            <TextInput
+              style={[styles.cpInput, { backgroundColor: colors.muted, color: colors.foreground, borderColor: colors.border, fontFamily: 'Inter_400Regular' }]}
+              value={confirm}
+              onChangeText={setConfirm}
+              secureTextEntry
+              placeholder="••••••••"
+              placeholderTextColor={colors.mutedForeground}
+              returnKeyType="done"
+              autoCapitalize="none"
+              onSubmitEditing={handleSave}
+            />
+
+            {error !== '' && (
+              <Text style={[styles.cpError, { color: '#C0392B', fontFamily: 'Inter_400Regular' }]}>{error}</Text>
+            )}
+
+            <TouchableOpacity
+              style={[styles.saveBtn, { backgroundColor: colors.primary, marginTop: 8 }, saving && { opacity: 0.6 }]}
+              onPress={handleSave}
+              disabled={saving}
+              activeOpacity={0.85}
+            >
+              {saving
+                ? <ActivityIndicator color="#fff" />
+                : <Text style={[styles.saveBtnText, { fontFamily: 'Inter_600SemiBold' }]}>Update password</Text>
+              }
+            </TouchableOpacity>
+          </TouchableOpacity>
+        </TouchableOpacity>
+      </KeyboardAvoidingView>
+    </Modal>
+  );
+}
+
 const AVATAR_COLORS = [
   '#8a2333', '#b87355', '#B54935', '#B08A3C',
   '#3A6645', '#4A7A52', '#3A8A7A', '#5C849E',
@@ -263,7 +369,7 @@ export default function SettingsScreen() {
   const router = useRouter();
   const { profile, streak, reminder, setReminder, setDailyGoal, updateProfile } = useStore();
   const { socialProfile, isRegistered, setNudgesEnabled } = useSocial();
-  const { user, isAuthenticated, logout } = useAuth();
+  const { user, isAuthenticated, logout, changePassword } = useAuth();
 
   const { themeMode, setThemeMode } = useTheme();
 
@@ -277,6 +383,8 @@ export default function SettingsScreen() {
   const [signingOut, setSigningOut] = useState(false);
   const [showAuthModal, setShowAuthModal] = useState(false);
   const [showSignOutConfirm, setShowSignOutConfirm] = useState(false);
+  const [showChangePassword, setShowChangePassword] = useState(false);
+  const [passwordChanged, setPasswordChanged] = useState(false);
 
   const topPad = insets.top + (Platform.OS === 'web' ? 67 : 0);
   const hasProfileChanges = name !== profile.name || selectedColor !== profile.color;
@@ -471,6 +579,11 @@ export default function SettingsScreen() {
                 value={user.email ?? user.firstName ?? 'Connected'}
               />
               <SettingsRow
+                icon="lock"
+                label="Change password"
+                onPress={() => { setPasswordChanged(false); setShowChangePassword(true); }}
+              />
+              <SettingsRow
                 icon="log-out"
                 iconBg={colors.primary}
                 label="Sign out"
@@ -566,6 +679,31 @@ export default function SettingsScreen() {
         visible={showAuthModal}
         onClose={() => setShowAuthModal(false)}
       />
+      <ChangePasswordModal
+        visible={showChangePassword}
+        onClose={() => setShowChangePassword(false)}
+        onSuccess={() => { setShowChangePassword(false); setPasswordChanged(true); }}
+      />
+      <Modal visible={passwordChanged} transparent animationType="fade" onRequestClose={() => setPasswordChanged(false)}>
+        <TouchableOpacity style={styles.overlay} activeOpacity={1} onPress={() => setPasswordChanged(false)}>
+          <View style={[styles.confirmSheet, { backgroundColor: colors.card, borderColor: colors.border }]}>
+            <View style={[styles.confirmIconWrap, { backgroundColor: '#e8f5e9' }]}>
+              <Feather name="check" size={22} color="#2e7d32" />
+            </View>
+            <Text style={[styles.confirmTitle, { color: colors.foreground, fontFamily: 'Inter_700Bold' }]}>Password updated</Text>
+            <Text style={[styles.confirmBody, { color: colors.mutedForeground, fontFamily: 'Inter_400Regular' }]}>
+              Your password has been changed successfully.
+            </Text>
+            <TouchableOpacity
+              style={[styles.confirmBtn, { backgroundColor: colors.primary }]}
+              onPress={() => setPasswordChanged(false)}
+              activeOpacity={0.85}
+            >
+              <Text style={[styles.confirmBtnText, { fontFamily: 'Inter_600SemiBold' }]}>Done</Text>
+            </TouchableOpacity>
+          </View>
+        </TouchableOpacity>
+      </Modal>
 
       <Modal visible={showSignOutConfirm} transparent animationType="fade" onRequestClose={() => setShowSignOutConfirm(false)}>
         <TouchableOpacity style={styles.overlay} activeOpacity={1} onPress={() => setShowSignOutConfirm(false)}>
@@ -698,6 +836,16 @@ const styles = StyleSheet.create({
     alignItems: 'center', marginTop: 4,
   },
   confirmBtnText: { fontSize: 15, color: '#fff' },
+  cpSheet: {
+    borderTopLeftRadius: 24, borderTopRightRadius: 24, borderWidth: 1,
+    paddingHorizontal: 24, paddingTop: 12, gap: 10,
+  },
+  cpLabel: { fontSize: 11, letterSpacing: 1.5, marginTop: 8 },
+  cpInput: {
+    borderRadius: 12, borderWidth: 1,
+    paddingHorizontal: 14, paddingVertical: Platform.OS === 'ios' ? 13 : 10, fontSize: 15,
+  },
+  cpError: { fontSize: 13, marginTop: -4 },
   confirmCancelBtn: {
     width: '100%', borderRadius: 14, paddingVertical: 13,
     alignItems: 'center', borderWidth: 1,

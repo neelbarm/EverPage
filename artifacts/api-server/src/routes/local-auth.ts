@@ -187,6 +187,54 @@ router.get("/local-auth/me", async (req: Request, res: Response) => {
   });
 });
 
+router.post("/local-auth/change-password", async (req: Request, res: Response) => {
+  const sid = getSessionId(req);
+  if (!sid) {
+    res.status(401).json({ error: "Not authenticated" });
+    return;
+  }
+
+  const session = await getSession(sid);
+  if (!session?.user?.id) {
+    res.status(401).json({ error: "Not authenticated" });
+    return;
+  }
+
+  const { currentPassword, newPassword } = req.body ?? {};
+  if (!currentPassword || !newPassword) {
+    res.status(400).json({ error: "currentPassword and newPassword are required" });
+    return;
+  }
+  if (newPassword.length < 6) {
+    res.status(400).json({ error: "New password must be at least 6 characters" });
+    return;
+  }
+
+  const rows = await db
+    .select()
+    .from(npUsers)
+    .where(eq(npUsers.id, session.user.id))
+    .limit(1);
+
+  if (rows.length === 0 || !rows[0].passwordHash) {
+    res.status(404).json({ error: "Account not found" });
+    return;
+  }
+
+  if (!checkPassword(currentPassword, rows[0].passwordHash)) {
+    res.status(401).json({ error: "Current password is incorrect" });
+    return;
+  }
+
+  const newHash = hashPassword(newPassword);
+  await db
+    .update(npUsers)
+    .set({ passwordHash: newHash })
+    .where(eq(npUsers.id, session.user.id));
+
+  res.json({ success: true });
+});
+
 router.post("/local-auth/logout", async (req: Request, res: Response) => {
   const sid = getSessionId(req);
   if (sid) {

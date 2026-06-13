@@ -18,6 +18,7 @@ interface AuthContextValue {
   login: (email: string, password: string) => Promise<void>;
   register: (email: string, password: string, username: string, displayName: string) => Promise<void>;
   logout: () => Promise<void>;
+  changePassword: (currentPassword: string, newPassword: string) => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextValue>({
@@ -27,6 +28,7 @@ const AuthContext = createContext<AuthContextValue>({
   login: async () => {},
   register: async () => {},
   logout: async () => {},
+  changePassword: async () => {},
 });
 
 function getApiBaseUrl(): string {
@@ -114,6 +116,27 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   }, []);
 
+  const changePassword = useCallback(async (currentPassword: string, newPassword: string) => {
+    const apiBase = getApiBaseUrl();
+    if (!apiBase) throw new Error("API base URL not configured");
+    const token = await getItem(AUTH_TOKEN_KEY);
+    if (!token) throw new Error("Not authenticated");
+
+    const res = await fetch(`${apiBase}/api/local-auth/change-password`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify({ currentPassword, newPassword }),
+    });
+
+    const data = await res.json();
+    if (!res.ok) {
+      throw new Error(data.error || `Password change failed (${res.status})`);
+    }
+  }, []);
+
   const logout = useCallback(async () => {
     try {
       const token = await getItem(AUTH_TOKEN_KEY);
@@ -141,6 +164,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         login,
         register,
         logout,
+        changePassword,
       }}
     >
       {children}

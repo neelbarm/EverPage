@@ -61,6 +61,7 @@ interface SocialContextType {
   socialProfile: (SocialUser & { nudgesEnabled: boolean }) | null;
   isRegistered: boolean;
   following: SocialUser[];
+  followers: SocialUser[];
   feed: ActivityItem[];
   leaderboard: LeaderboardEntry[];
   suggestedUsers: SocialUser[];
@@ -119,6 +120,7 @@ export function SocialProvider({ children }: { children: React.ReactNode }) {
   const { isAuthenticated, isLoading: authLoading } = useAuth();
   const [socialProfile, setSocialProfile] = useState<(SocialUser & { nudgesEnabled: boolean }) | null>(null);
   const [following, setFollowing] = useState<SocialUser[]>([]);
+  const [followers, setFollowers] = useState<SocialUser[]>([]);
   const [feed, setFeed] = useState<ActivityItem[]>([]);
   const [leaderboard, setLeaderboard] = useState<LeaderboardEntry[]>([]);
   const [suggestedUsers, setSuggestedUsers] = useState<SocialUser[]>([]);
@@ -132,6 +134,7 @@ export function SocialProvider({ children }: { children: React.ReactNode }) {
     if (!isAuthenticated) {
       setSocialProfile(null);
       setFollowing([]);
+      setFollowers([]);
       setFeed([]);
       setLeaderboard([]);
       setSuggestedUsers([]);
@@ -159,14 +162,16 @@ export function SocialProvider({ children }: { children: React.ReactNode }) {
   async function loadSocialData() {
     setIsLoading(true);
     try {
-      const [followingData, feedData, boardData, suggestData, nudgesData] = await Promise.allSettled([
+      const [followingData, followersData, feedData, boardData, suggestData, nudgesData] = await Promise.allSettled([
         apiFetch<SocialUser[]>('/social/following'),
+        apiFetch<SocialUser[]>('/social/followers'),
         apiFetch<ActivityItem[]>('/social/feed'),
         apiFetch<LeaderboardEntry[]>('/social/leaderboard'),
         apiFetch<SocialUser[]>('/social/suggested'),
         apiFetch<NudgeHistoryItem[]>('/social/nudges'),
       ]);
       if (followingData.status === 'fulfilled') setFollowing(followingData.value);
+      if (followersData.status === 'fulfilled') setFollowers(followersData.value);
       if (feedData.status === 'fulfilled') setFeed(feedData.value);
       if (boardData.status === 'fulfilled') setLeaderboard(boardData.value);
       if (suggestData.status === 'fulfilled') setSuggestedUsers(suggestData.value);
@@ -304,6 +309,7 @@ export function SocialProvider({ children }: { children: React.ReactNode }) {
       socialProfile,
       isRegistered,
       following,
+      followers,
       feed,
       leaderboard,
       suggestedUsers,

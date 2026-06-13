@@ -155,6 +155,23 @@ router.get("/social/following", async (req, res) => {
   res.json(rows);
 });
 
+router.get("/social/followers", async (req, res) => {
+  const userId = requireAuth(req, res);
+  if (!userId) return;
+  const rows = await db
+    .select({
+      id: npUsers.id,
+      username: npUsers.username,
+      displayName: npUsers.displayName,
+      color: npUsers.color,
+      initial: npUsers.initial,
+    })
+    .from(npFollows)
+    .innerJoin(npUsers, eq(npFollows.followerId, npUsers.id))
+    .where(eq(npFollows.followingId, userId));
+  res.json(rows);
+});
+
 router.get("/social/feed", async (req, res) => {
   const userId = requireAuth(req, res);
   if (!userId) return;
