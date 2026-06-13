@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { Animated, View, Text, ScrollView, TouchableOpacity, StyleSheet, Platform, Modal, TextInput } from 'react-native';
+import { Animated, View, Text, ScrollView, TouchableOpacity, Pressable, StyleSheet, Platform, Modal, TextInput } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Feather, Ionicons } from '@expo/vector-icons';
@@ -232,12 +232,19 @@ export default function ShelfScreen() {
         transparent
         onRequestClose={() => setSelectedRec(null)}
       >
-        <View style={styles.recModalOverlay}>
-          <View style={[styles.recModalSheet, { backgroundColor: colors.card }]}>
+        <Pressable style={styles.recModalOverlay} onPress={() => setSelectedRec(null)}>
+          <Pressable style={[styles.recModalSheet, { backgroundColor: colors.card }]} onPress={() => {}}>
             <View style={[styles.recModalHandle, { backgroundColor: colors.border }]} />
             {selectedRec && (
               <>
                 <View style={styles.recModalHeader}>
+                  <TouchableOpacity
+                    style={styles.recModalClose}
+                    onPress={() => setSelectedRec(null)}
+                    hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
+                  >
+                    <Feather name="x" size={18} color={colors.mutedForeground} />
+                  </TouchableOpacity>
                   <BookCover
                     bookId={selectedRec.id}
                     coverColor={selectedRec.coverColor}
@@ -301,8 +308,8 @@ export default function ShelfScreen() {
                 </View>
               </>
             )}
-          </View>
-        </View>
+          </Pressable>
+        </Pressable>
       </Modal>
     </View>
   );
@@ -414,6 +421,7 @@ const styles = StyleSheet.create({
     alignSelf: 'center', marginBottom: 4,
   },
   recModalHeader: { flexDirection: 'row', gap: 16, alignItems: 'flex-start' },
+  recModalClose: { position: 'absolute', top: 0, right: 0, zIndex: 1, padding: 2 },
   recModalTitle: { fontSize: 17, lineHeight: 22, letterSpacing: -0.3 },
   recModalAuthor: { fontSize: 14 },
   recModalReason: { fontSize: 13, fontStyle: 'italic' },
