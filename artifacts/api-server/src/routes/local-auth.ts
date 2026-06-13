@@ -8,7 +8,6 @@ import {
   deleteSession,
   getSession,
   getSessionId,
-  SESSION_TTL,
 } from "../lib/auth";
 
 const router: IRouter = Router();
