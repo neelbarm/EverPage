@@ -451,6 +451,10 @@ router.post("/social/nudge/:userId", async (req, res) => {
   const nudgeId = generateId();
   await db.insert(npNudges).values({ id: nudgeId, senderId, recipientId: targetUserId });
 
+  // Fire-and-forget: delete nudge records older than 30 days to keep the table tidy
+  const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
+  db.delete(npNudges).where(sql`${npNudges.createdAt} < ${thirtyDaysAgo.toISOString()}`).catch(() => {});
+
   if (!target.nudgesEnabled) {
     res.json({ ok: true, skipped: "nudges_disabled" });
     return;
@@ -484,6 +488,7 @@ router.get("/social/nudges", async (req, res) => {
   const userId = requireAuth(req, res);
   if (!userId) return;
 
+  const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
   const rows = await db
     .select({
       id: npNudges.id,
@@ -496,7 +501,7 @@ router.get("/social/nudges", async (req, res) => {
     })
     .from(npNudges)
     .innerJoin(npUsers, eq(npNudges.senderId, npUsers.id))
-    .where(eq(npNudges.recipientId, userId))
+    .where(and(eq(npNudges.recipientId, userId), gte(npNudges.createdAt, thirtyDaysAgo)))
     .orderBy(desc(npNudges.createdAt))
     .limit(50);
 
