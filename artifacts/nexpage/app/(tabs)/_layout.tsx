@@ -9,6 +9,7 @@ import { Platform, StyleSheet, TouchableOpacity, View, useColorScheme } from "re
 
 import { useColors } from "@/hooks/useColors";
 import { useAuth } from "@/lib/auth";
+import { useSocial } from "@/context/SocialContext";
 
 function NativeTabLayout() {
   return (
@@ -44,6 +45,7 @@ function ClassicTabLayout() {
   const isDark = colorScheme === "dark";
   const isIOS = Platform.OS === "ios";
   const isWeb = Platform.OS === "web";
+  const { unreadNudgeCount } = useSocial();
 
   return (
     <Tabs
@@ -88,6 +90,8 @@ function ClassicTabLayout() {
         name="friends"
         options={{
           title: "Friends",
+          tabBarBadge: unreadNudgeCount > 0 ? (unreadNudgeCount > 9 ? '9+' : unreadNudgeCount) : undefined,
+          tabBarBadgeStyle: { fontSize: 10, minWidth: 16, height: 16, lineHeight: 16 },
           tabBarIcon: ({ color }) =>
             isIOS ? (
               <SymbolView name="person.2" tintColor={color} size={22} />

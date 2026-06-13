@@ -45,6 +45,17 @@ export const npActivity = pgTable("np_activity", {
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 
+export const npNudges = pgTable("np_nudges", {
+  id: text("id").primaryKey(),
+  senderId: text("sender_id")
+    .notNull()
+    .references(() => npUsers.id, { onDelete: "cascade" }),
+  recipientId: text("recipient_id")
+    .notNull()
+    .references(() => npUsers.id, { onDelete: "cascade" }),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
 export const insertNpUserSchema = createInsertSchema(npUsers).omit({ createdAt: true, updatedAt: true });
 export const insertNpActivitySchema = createInsertSchema(npActivity).omit({ createdAt: true });
 

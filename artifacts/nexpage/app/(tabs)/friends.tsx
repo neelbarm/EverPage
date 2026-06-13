@@ -8,7 +8,7 @@ import { Ionicons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
 import { useRouter } from 'expo-router';
 import { useColors } from '@/hooks/useColors';
-import { useSocial, ActivityItem, SocialUser } from '@/context/SocialContext';
+import { useSocial, ActivityItem, SocialUser, NudgeHistoryItem } from '@/context/SocialContext';
 import RegisterModal from '@/components/RegisterModal';
 
 function AvatarCircle({ initial, color, size = 44 }: { initial: string; color: string; size?: number }) {
@@ -290,13 +290,46 @@ function SearchModal({
   );
 }
 
+function NudgeHistoryCard({ item }: { item: NudgeHistoryItem }) {
+  const colors = useColors();
+  const router = useRouter();
+
+  function goToProfile() {
+    router.push(`/profile/${item.senderId}` as any);
+  }
+
+  return (
+    <View style={[styles.card, { borderBottomColor: colors.border }]}>
+      <TouchableOpacity onPress={goToProfile} activeOpacity={0.75}>
+        <AvatarCircle initial={item.senderInitial} color={item.senderColor} />
+      </TouchableOpacity>
+      <View style={styles.cardInfo}>
+        <View style={styles.cardNameRow}>
+          <TouchableOpacity onPress={goToProfile} activeOpacity={0.75}>
+            <Text style={[styles.friendName, { color: colors.foreground, fontFamily: 'Inter_600SemiBold' }]}>
+              {item.senderDisplayName}
+            </Text>
+          </TouchableOpacity>
+          <Text style={[styles.timeAgo, { color: colors.mutedForeground, fontFamily: 'Inter_400Regular' }]}>
+            {timeAgo(item.createdAt)}
+          </Text>
+        </View>
+        <Text style={[styles.bookTitle, { color: colors.mutedForeground, fontFamily: 'Inter_400Regular' }]}>
+          👋 nudged you to keep reading
+        </Text>
+      </View>
+    </View>
+  );
+}
+
 export default function FriendsScreen() {
   const colors = useColors();
   const insets = useSafeAreaInsets();
-  const { isRegistered, feed, following, isLoading, refreshFeed } = useSocial();
+  const { isRegistered, feed, following, nudgeHistory, unreadNudgeCount, markNudgesRead, isLoading, refreshFeed } = useSocial();
   const [showWeek, setShowWeek] = useState(false);
   const [showSearch, setShowSearch] = useState(false);
   const [showRegister, setShowRegister] = useState(false);
+  const [showNudges, setShowNudges] = useState(false);
   const topPad = insets.top + (Platform.OS === 'web' ? 67 : 0);
 
   const now = Date.now();
@@ -348,13 +381,34 @@ export default function FriendsScreen() {
       <View style={[styles.header, { paddingTop: topPad + 12 }]}>
         <View style={styles.headerRow}>
           <Text style={[styles.title, { color: colors.foreground, fontFamily: 'Inter_700Bold' }]}>Friends</Text>
-          <TouchableOpacity
-            style={[styles.searchIconBtn, { backgroundColor: colors.muted }]}
-            onPress={() => setShowSearch(true)}
-            activeOpacity={0.8}
-          >
-            <Ionicons name="person-add-outline" size={20} color={colors.foreground} />
-          </TouchableOpacity>
+          <View style={styles.headerActions}>
+            <TouchableOpacity
+              style={[styles.searchIconBtn, { backgroundColor: colors.muted }]}
+              onPress={() => {
+                setShowNudges(v => {
+                  if (!v) markNudgesRead();
+                  return !v;
+                });
+              }}
+              activeOpacity={0.8}
+            >
+              <Ionicons name="notifications-outline" size={20} color={colors.foreground} />
+              {unreadNudgeCount > 0 && (
+                <View style={[styles.badge, { backgroundColor: colors.primary }]}>
+                  <Text style={[styles.badgeText, { fontFamily: 'Inter_700Bold' }]}>
+                    {unreadNudgeCount > 9 ? '9+' : unreadNudgeCount}
+                  </Text>
+                </View>
+              )}
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.searchIconBtn, { backgroundColor: colors.muted }]}
+              onPress={() => setShowSearch(true)}
+              activeOpacity={0.8}
+            >
+              <Ionicons name="person-add-outline" size={20} color={colors.foreground} />
+            </TouchableOpacity>
+          </View>
         </View>
         <View style={[styles.toggle, { backgroundColor: colors.muted }]}>
           {[{ label: 'Today', week: false }, { label: 'This week', week: true }].map(opt => (
@@ -382,6 +436,32 @@ export default function FriendsScreen() {
           ))}
         </View>
       </View>
+
+      {showNudges && (
+        <View style={[styles.nudgePanelContainer, { backgroundColor: colors.card, borderColor: colors.border }]}>
+          <View style={[styles.nudgePanelHeader, { borderBottomColor: colors.border }]}>
+            <Text style={[styles.nudgePanelTitle, { color: colors.foreground, fontFamily: 'Inter_700Bold' }]}>
+              Nudges received
+            </Text>
+            <TouchableOpacity onPress={() => setShowNudges(false)} activeOpacity={0.7}>
+              <Ionicons name="close" size={20} color={colors.mutedForeground} />
+            </TouchableOpacity>
+          </View>
+          {nudgeHistory.length === 0 ? (
+            <View style={styles.nudgePanelEmpty}>
+              <Text style={[styles.nudgePanelEmptyText, { color: colors.mutedForeground, fontFamily: 'Inter_400Regular' }]}>
+                No nudges yet — friends can tap 👋 on your activity to cheer you on.
+              </Text>
+            </View>
+          ) : (
+            <ScrollView style={{ maxHeight: 260 }} showsVerticalScrollIndicator={false}>
+              {nudgeHistory.map(item => (
+                <NudgeHistoryCard key={item.id} item={item} />
+              ))}
+            </ScrollView>
+          )}
+        </View>
+      )}
 
       {isLoading && feed.length === 0 ? (
         <View style={styles.loadingContainer}>
@@ -460,8 +540,16 @@ const styles = StyleSheet.create({
   root: { flex: 1 },
   header: { paddingHorizontal: 20, paddingBottom: 8, gap: 14 },
   headerRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  headerActions: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   title: { fontSize: 26, letterSpacing: -0.5 },
-  searchIconBtn: { width: 38, height: 38, borderRadius: 19, alignItems: 'center', justifyContent: 'center' },
+  searchIconBtn: { width: 38, height: 38, borderRadius: 19, alignItems: 'center', justifyContent: 'center', position: 'relative' },
+  badge: { position: 'absolute', top: -2, right: -2, minWidth: 16, height: 16, borderRadius: 8, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 3 },
+  badgeText: { color: '#fff', fontSize: 9 },
+  nudgePanelContainer: { borderBottomWidth: 1, borderTopWidth: StyleSheet.hairlineWidth },
+  nudgePanelHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 20, paddingVertical: 12, borderBottomWidth: StyleSheet.hairlineWidth },
+  nudgePanelTitle: { fontSize: 15, letterSpacing: -0.2 },
+  nudgePanelEmpty: { paddingHorizontal: 20, paddingVertical: 20 },
+  nudgePanelEmptyText: { fontSize: 14, lineHeight: 20 },
   toggle: { flexDirection: 'row', borderRadius: 10, padding: 3, alignSelf: 'flex-start' },
   toggleBtn: { paddingHorizontal: 16, paddingVertical: 7, borderRadius: 8 },
   toggleText: { fontSize: 14 },

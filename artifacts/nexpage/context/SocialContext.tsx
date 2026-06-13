@@ -47,6 +47,16 @@ export interface LeaderboardEntry {
   streakDays: number;
 }
 
+export interface NudgeHistoryItem {
+  id: string;
+  senderId: string;
+  senderUsername: string;
+  senderDisplayName: string;
+  senderColor: string;
+  senderInitial: string;
+  createdAt: string;
+}
+
 interface SocialContextType {
   socialProfile: (SocialUser & { nudgesEnabled: boolean }) | null;
   isRegistered: boolean;
@@ -54,6 +64,8 @@ interface SocialContextType {
   feed: ActivityItem[];
   leaderboard: LeaderboardEntry[];
   suggestedUsers: SocialUser[];
+  nudgeHistory: NudgeHistoryItem[];
+  unreadNudgeCount: number;
   isLoading: boolean;
   registerUser: (username: string, displayName: string, color: string) => Promise<void>;
   followUser: (userId: string) => Promise<void>;
@@ -66,6 +78,7 @@ interface SocialContextType {
   sendNudge: (userId: string) => Promise<void>;
   registerPushToken: (token: string) => Promise<void>;
   setNudgesEnabled: (enabled: boolean) => Promise<void>;
+  markNudgesRead: () => void;
 }
 
 const SocialContext = createContext<SocialContextType | null>(null);
@@ -109,6 +122,8 @@ export function SocialProvider({ children }: { children: React.ReactNode }) {
   const [feed, setFeed] = useState<ActivityItem[]>([]);
   const [leaderboard, setLeaderboard] = useState<LeaderboardEntry[]>([]);
   const [suggestedUsers, setSuggestedUsers] = useState<SocialUser[]>([]);
+  const [nudgeHistory, setNudgeHistory] = useState<NudgeHistoryItem[]>([]);
+  const [lastReadNudgeTime, setLastReadNudgeTime] = useState<number>(0);
   const [isLoading, setIsLoading] = useState(false);
   const initialized = useRef(false);
 
@@ -120,6 +135,8 @@ export function SocialProvider({ children }: { children: React.ReactNode }) {
       setFeed([]);
       setLeaderboard([]);
       setSuggestedUsers([]);
+      setNudgeHistory([]);
+      setLastReadNudgeTime(0);
       initialized.current = false;
       return;
     }
@@ -142,16 +159,18 @@ export function SocialProvider({ children }: { children: React.ReactNode }) {
   async function loadSocialData() {
     setIsLoading(true);
     try {
-      const [followingData, feedData, boardData, suggestData] = await Promise.allSettled([
+      const [followingData, feedData, boardData, suggestData, nudgesData] = await Promise.allSettled([
         apiFetch<SocialUser[]>('/social/following'),
         apiFetch<ActivityItem[]>('/social/feed'),
         apiFetch<LeaderboardEntry[]>('/social/leaderboard'),
         apiFetch<SocialUser[]>('/social/suggested'),
+        apiFetch<NudgeHistoryItem[]>('/social/nudges'),
       ]);
       if (followingData.status === 'fulfilled') setFollowing(followingData.value);
       if (feedData.status === 'fulfilled') setFeed(feedData.value);
       if (boardData.status === 'fulfilled') setLeaderboard(boardData.value);
       if (suggestData.status === 'fulfilled') setSuggestedUsers(suggestData.value);
+      if (nudgesData.status === 'fulfilled') setNudgeHistory(nudgesData.value);
     } catch { /* ignore */ } finally {
       setIsLoading(false);
     }
@@ -253,6 +272,14 @@ export function SocialProvider({ children }: { children: React.ReactNode }) {
     setSocialProfile(prev => prev ? { ...prev, nudgesEnabled: enabled } : prev);
   }, []);
 
+  const markNudgesRead = useCallback(() => {
+    setLastReadNudgeTime(Date.now());
+  }, []);
+
+  const unreadNudgeCount = nudgeHistory.filter(n => {
+    return new Date(n.createdAt).getTime() > lastReadNudgeTime;
+  }).length;
+
   const isRegistered = socialProfile !== null;
 
   return (
@@ -263,6 +290,8 @@ export function SocialProvider({ children }: { children: React.ReactNode }) {
       feed,
       leaderboard,
       suggestedUsers,
+      nudgeHistory,
+      unreadNudgeCount,
       isLoading,
       registerUser,
       followUser,
@@ -275,6 +304,7 @@ export function SocialProvider({ children }: { children: React.ReactNode }) {
       sendNudge,
       registerPushToken,
       setNudgesEnabled,
+      markNudgesRead,
     }}>
       {children}
     </SocialContext.Provider>

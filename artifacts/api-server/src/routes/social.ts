@@ -1,6 +1,6 @@
 import { Router, type IRouter } from "express";
 import { db } from "@workspace/db";
-import { npUsers, npFollows, npActivity } from "@workspace/db/schema";
+import { npUsers, npFollows, npActivity, npNudges } from "@workspace/db/schema";
 import { eq, ilike, or, and, ne, sql, desc, not, inArray } from "drizzle-orm";
 
 const router: IRouter = Router();
@@ -427,6 +427,9 @@ router.post("/social/nudge/:userId", async (req, res) => {
     return;
   }
 
+  const nudgeId = generateId();
+  await db.insert(npNudges).values({ id: nudgeId, senderId, recipientId: targetUserId });
+
   if (!target.nudgesEnabled) {
     res.json({ ok: true, skipped: "nudges_disabled" });
     return;
@@ -454,6 +457,29 @@ router.post("/social/nudge/:userId", async (req, res) => {
   } catch (err: any) {
     res.status(500).json({ error: "Failed to send push notification", detail: err?.message });
   }
+});
+
+router.get("/social/nudges", async (req, res) => {
+  const userId = requireAuth(req, res);
+  if (!userId) return;
+
+  const rows = await db
+    .select({
+      id: npNudges.id,
+      senderId: npNudges.senderId,
+      senderUsername: npUsers.username,
+      senderDisplayName: npUsers.displayName,
+      senderColor: npUsers.color,
+      senderInitial: npUsers.initial,
+      createdAt: npNudges.createdAt,
+    })
+    .from(npNudges)
+    .innerJoin(npUsers, eq(npNudges.senderId, npUsers.id))
+    .where(eq(npNudges.recipientId, userId))
+    .orderBy(desc(npNudges.createdAt))
+    .limit(50);
+
+  res.json(rows);
 });
 
 export default router;
