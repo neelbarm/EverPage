@@ -285,7 +285,12 @@ export default function SettingsScreen() {
           text: 'Sign out', style: 'destructive',
           onPress: async () => {
             setSigningOut(true);
-            try { await logout(); } finally { setSigningOut(false); }
+            try {
+              await logout();
+              router.replace('/');
+            } finally {
+              setSigningOut(false);
+            }
           },
         },
       ],
