@@ -1,7 +1,7 @@
 import React, { useState, useCallback } from 'react';
 import {
   View, Text, ScrollView, TouchableOpacity, StyleSheet,
-  Platform, TextInput, Switch, Alert, ActivityIndicator,
+  Platform, TextInput, Switch, ActivityIndicator,
   Modal, KeyboardAvoidingView,
 } from 'react-native';
 import { useRouter } from 'expo-router';
@@ -229,6 +229,7 @@ export default function SettingsScreen() {
   const [showReminderModal, setShowReminderModal] = useState(false);
   const [signingOut, setSigningOut] = useState(false);
   const [showAuthModal, setShowAuthModal] = useState(false);
+  const [showSignOutConfirm, setShowSignOutConfirm] = useState(false);
 
   const topPad = insets.top + (Platform.OS === 'web' ? 67 : 0);
   const hasProfileChanges = name !== profile.name || selectedColor !== profile.color;
@@ -276,25 +277,18 @@ export default function SettingsScreen() {
   }
 
   function handleSignOut() {
-    Alert.alert(
-      'Sign out',
-      'Your reading data is saved locally and will still be here when you return.',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Sign out', style: 'destructive',
-          onPress: async () => {
-            setSigningOut(true);
-            try {
-              await logout();
-              router.replace('/');
-            } finally {
-              setSigningOut(false);
-            }
-          },
-        },
-      ],
-    );
+    setShowSignOutConfirm(true);
+  }
+
+  async function confirmSignOut() {
+    setShowSignOutConfirm(false);
+    setSigningOut(true);
+    try {
+      await logout();
+      router.replace('/');
+    } finally {
+      setSigningOut(false);
+    }
   }
 
   function handleSignIn() {
@@ -525,6 +519,37 @@ export default function SettingsScreen() {
         visible={showAuthModal}
         onClose={() => setShowAuthModal(false)}
       />
+
+      <Modal visible={showSignOutConfirm} transparent animationType="fade" onRequestClose={() => setShowSignOutConfirm(false)}>
+        <TouchableOpacity style={styles.overlay} activeOpacity={1} onPress={() => setShowSignOutConfirm(false)}>
+          <View style={[styles.confirmSheet, { backgroundColor: colors.card, borderColor: colors.border }]}>
+            <View style={[styles.confirmIconWrap, { backgroundColor: '#fde8ea' }]}>
+              <Feather name="log-out" size={22} color={colors.primary} />
+            </View>
+            <Text style={[styles.confirmTitle, { color: colors.foreground, fontFamily: 'Inter_700Bold' }]}>Sign out?</Text>
+            <Text style={[styles.confirmBody, { color: colors.mutedForeground, fontFamily: 'Inter_400Regular' }]}>
+              Your reading data is saved locally and will still be here when you return.
+            </Text>
+            <TouchableOpacity
+              style={[styles.confirmBtn, { backgroundColor: colors.primary }]}
+              onPress={confirmSignOut}
+              activeOpacity={0.85}
+            >
+              {signingOut
+                ? <ActivityIndicator size="small" color="#fff" />
+                : <Text style={[styles.confirmBtnText, { fontFamily: 'Inter_600SemiBold' }]}>Sign out</Text>
+              }
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.confirmCancelBtn, { borderColor: colors.border }]}
+              onPress={() => setShowSignOutConfirm(false)}
+              activeOpacity={0.7}
+            >
+              <Text style={[styles.confirmCancelText, { color: colors.foreground, fontFamily: 'Inter_500Medium' }]}>Cancel</Text>
+            </TouchableOpacity>
+          </View>
+        </TouchableOpacity>
+      </Modal>
     </KeyboardAvoidingView>
   );
 }
@@ -597,4 +622,26 @@ const styles = StyleSheet.create({
   },
   themeChipText: { fontSize: 12 },
   footerText: { fontSize: 12, textAlign: 'center' },
+  confirmSheet: {
+    margin: 24, borderRadius: 20, borderWidth: 1,
+    padding: 24, alignItems: 'center', gap: 12,
+    shadowColor: '#000', shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.15, shadowRadius: 24, elevation: 12,
+  },
+  confirmIconWrap: {
+    width: 52, height: 52, borderRadius: 26,
+    alignItems: 'center', justifyContent: 'center', marginBottom: 4,
+  },
+  confirmTitle: { fontSize: 20, letterSpacing: -0.4 },
+  confirmBody: { fontSize: 14, lineHeight: 20, textAlign: 'center', paddingHorizontal: 8 },
+  confirmBtn: {
+    width: '100%', borderRadius: 14, paddingVertical: 15,
+    alignItems: 'center', marginTop: 4,
+  },
+  confirmBtnText: { fontSize: 15, color: '#fff' },
+  confirmCancelBtn: {
+    width: '100%', borderRadius: 14, paddingVertical: 13,
+    alignItems: 'center', borderWidth: 1,
+  },
+  confirmCancelText: { fontSize: 15 },
 });
