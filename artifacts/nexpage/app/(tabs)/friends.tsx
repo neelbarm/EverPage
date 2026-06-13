@@ -48,9 +48,11 @@ function NudgeButton({ userId, displayName }: { userId: string; displayName: str
     setSending(true);
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     try {
-      await sendNudge(userId);
+      const result = await sendNudge(userId);
       setSent(true);
-      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      if (!result.alreadyNudged) {
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      }
     } catch {
       Alert.alert('Could not send nudge', 'Please try again later.');
     } finally {

@@ -1,7 +1,7 @@
 import { Router, type IRouter } from "express";
 import { db } from "@workspace/db";
 import { npUsers, npFollows, npActivity, npNudges } from "@workspace/db/schema";
-import { eq, ilike, or, and, ne, sql, desc, not, inArray } from "drizzle-orm";
+import { eq, ilike, or, and, ne, sql, desc, not, inArray, gte } from "drizzle-orm";
 
 const router: IRouter = Router();
 
@@ -424,6 +424,27 @@ router.post("/social/nudge/:userId", async (req, res) => {
   const target = targets[0];
   if (!target) {
     res.status(404).json({ error: "User not found" });
+    return;
+  }
+
+  const cooldownMs = 24 * 60 * 60 * 1000;
+  const since = new Date(Date.now() - cooldownMs);
+  const recentNudge = await db
+    .select({ id: npNudges.id, createdAt: npNudges.createdAt })
+    .from(npNudges)
+    .where(
+      and(
+        eq(npNudges.senderId, senderId),
+        eq(npNudges.recipientId, targetUserId),
+        gte(npNudges.createdAt, since),
+      ),
+    )
+    .limit(1);
+
+  if (recentNudge.length > 0) {
+    const sentAt = new Date(recentNudge[0].createdAt as any).getTime();
+    const cooldownUntil = new Date(sentAt + cooldownMs).toISOString();
+    res.status(429).json({ error: "Already nudged this person in the last 24 hours", cooldownUntil });
     return;
   }
 

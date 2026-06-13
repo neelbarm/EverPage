@@ -75,7 +75,7 @@ interface SocialContextType {
   postRecommendation: (bookTitle: string, bookAuthor: string) => Promise<void>;
   refreshFeed: () => Promise<void>;
   isFollowing: (userId: string) => boolean;
-  sendNudge: (userId: string) => Promise<void>;
+  sendNudge: (userId: string) => Promise<{ alreadyNudged: boolean }>;
   registerPushToken: (token: string) => Promise<void>;
   setNudgesEnabled: (enabled: boolean) => Promise<void>;
   markNudgesRead: () => void;
@@ -251,8 +251,25 @@ export function SocialProvider({ children }: { children: React.ReactNode }) {
     return following.some(u => u.id === userId);
   }, [following]);
 
-  const sendNudge = useCallback(async (userId: string) => {
-    await apiFetch(`/social/nudge/${userId}`, { method: 'POST' });
+  const sendNudge = useCallback(async (userId: string): Promise<{ alreadyNudged: boolean }> => {
+    const token = await getAuthToken();
+    const headers: Record<string, string> = {
+      'Content-Type': 'application/json',
+      ...(token ? { 'Authorization': `Bearer ${token}` } : {}),
+    };
+    const res = await fetch(`${getApiBase()}/social/nudge/${userId}`, {
+      method: 'POST',
+      headers,
+      credentials: 'include',
+    });
+    if (res.status === 429) {
+      return { alreadyNudged: true };
+    }
+    if (!res.ok) {
+      const err = await res.text().catch(() => res.statusText);
+      throw new Error(`API error ${res.status}: ${err}`);
+    }
+    return { alreadyNudged: false };
   }, []);
 
   const registerPushToken = useCallback(async (token: string) => {
