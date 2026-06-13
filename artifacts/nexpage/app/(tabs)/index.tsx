@@ -2,7 +2,7 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Animated, View, Text, ScrollView, TouchableOpacity, StyleSheet, Platform, Modal, TextInput } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { Ionicons } from '@expo/vector-icons';
+import { Feather, Ionicons } from '@expo/vector-icons';
 import { useColors } from '@/hooks/useColors';
 import { useStore } from '@/context/StoreContext';
 import { BookCover } from '@/components/BookCover';
@@ -80,6 +80,35 @@ export default function ShelfScreen() {
           </Text>
         </TouchableOpacity>
       </View>
+
+      {streak.dailyGoalMinutes > 0 && (() => {
+        const pct = Math.min(streak.todayMinutes / streak.dailyGoalMinutes, 1);
+        const met = streak.todayMinutes >= streak.dailyGoalMinutes;
+        return (
+          <TouchableOpacity
+            style={[styles.goalStrip, { backgroundColor: colors.card, borderColor: met ? '#3A6645' : colors.border }]}
+            onPress={() => router.push('/(tabs)/stats')}
+            activeOpacity={0.8}
+          >
+            <View style={[styles.goalStripIcon, { backgroundColor: met ? '#e8f4ed' : colors.muted }]}>
+              <Feather name={met ? 'check' : 'target'} size={13} color={met ? '#3A6645' : colors.primary} />
+            </View>
+            <View style={{ flex: 1, gap: 5 }}>
+              <View style={styles.goalStripRow}>
+                <Text style={[styles.goalStripText, { color: met ? '#3A6645' : colors.foreground, fontFamily: 'Inter_600SemiBold' }]}>
+                  {met ? 'Daily goal complete!' : `${streak.todayMinutes} of ${streak.dailyGoalMinutes} min`}
+                </Text>
+                <Text style={[styles.goalStripPct, { color: met ? '#3A6645' : colors.mutedForeground, fontFamily: 'Inter_500Medium' }]}>
+                  {Math.round(pct * 100)}%
+                </Text>
+              </View>
+              <View style={[styles.goalStripTrack, { backgroundColor: colors.border }]}>
+                <View style={[styles.goalStripFill, { width: `${pct * 100}%` as any, backgroundColor: met ? '#3A6645' : colors.primary }]} />
+              </View>
+            </View>
+          </TouchableOpacity>
+        );
+      })()}
 
       <ScrollView
         style={{ flex: 1 }}
@@ -293,6 +322,21 @@ const styles = StyleSheet.create({
   },
   streakNum: { fontSize: 22, lineHeight: 26 },
   streakLabel: { fontSize: 11, lineHeight: 14 },
+  goalStrip: {
+    marginHorizontal: 16, marginBottom: 10, borderRadius: 14, borderWidth: 1,
+    paddingHorizontal: 14, paddingVertical: 12,
+    flexDirection: 'row', alignItems: 'center', gap: 12,
+    shadowColor: '#000', shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.04, shadowRadius: 4, elevation: 1,
+  },
+  goalStripIcon: {
+    width: 28, height: 28, borderRadius: 14, alignItems: 'center', justifyContent: 'center',
+  },
+  goalStripRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
+  goalStripText: { fontSize: 13 },
+  goalStripPct: { fontSize: 13 },
+  goalStripTrack: { height: 4, borderRadius: 2, overflow: 'hidden' },
+  goalStripFill: { height: 4, borderRadius: 2 },
   heroCard: {
     marginHorizontal: 16, marginBottom: 8, borderRadius: 18, borderWidth: 1,
     padding: 16, shadowColor: '#000', shadowOffset: { width: 0, height: 2 },
