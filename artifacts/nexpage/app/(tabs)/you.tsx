@@ -198,6 +198,13 @@ function DailyGoalModal({
   const [selected, setSelected] = useState(initialMinutes);
   const [inputText, setInputText] = useState(String(initialMinutes));
 
+  useEffect(() => {
+    if (visible) {
+      setSelected(initialMinutes);
+      setInputText(String(initialMinutes));
+    }
+  }, [visible, initialMinutes]);
+
   const options = [10, 15, 20, 30, 45, 60, 90, 120];
 
   const parsed = parseInt(inputText, 10);
