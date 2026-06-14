@@ -42,6 +42,7 @@ export default function ShelfScreen() {
 
   const goalToastOpacity = useRef(new Animated.Value(0)).current;
   const goalToastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const goalToastAnim = useRef<Animated.CompositeAnimation | null>(null);
   const [showGoalToast, setShowGoalToast] = useState(false);
 
   const [selectedRec, setSelectedRec] = useState<typeof recommendedBooks[0] | null>(null);
@@ -75,6 +76,7 @@ export default function ShelfScreen() {
       Animated.delay(2600),
       Animated.timing(goalToastOpacity, { toValue: 0, duration: 340, useNativeDriver: true }),
     ]);
+    goalToastAnim.current = anim;
     anim.start();
     goalToastTimer.current = setTimeout(() => setShowGoalToast(false), 3200);
     return () => {
@@ -82,6 +84,15 @@ export default function ShelfScreen() {
       if (goalToastTimer.current) clearTimeout(goalToastTimer.current);
     };
   }, [pendingGoalMet]);
+
+  function dismissGoalToast() {
+    if (goalToastAnim.current) goalToastAnim.current.stop();
+    if (goalToastTimer.current) clearTimeout(goalToastTimer.current);
+    Animated.timing(goalToastOpacity, { toValue: 0, duration: 150, useNativeDriver: true }).start(() => {
+      setShowGoalToast(false);
+    });
+    router.navigate('/(tabs)/stats');
+  }
 
   return (
     <View style={[styles.root, { backgroundColor: colors.background }]}>
@@ -241,7 +252,6 @@ export default function ShelfScreen() {
       {showGoalToast && (
         <Animated.View
           style={[styles.goalToast, { backgroundColor: '#e8f4ed', borderColor: '#3A6645', opacity: goalToastOpacity }]}
-          pointerEvents="none"
         >
           <Text style={[styles.goalToastText, { color: '#2a5235', fontFamily: 'Inter_700Bold' }]}>
             🎉 Daily goal reached!
@@ -249,6 +259,7 @@ export default function ShelfScreen() {
           <Text style={[styles.goalToastSub, { color: '#3A6645', fontFamily: 'Inter_400Regular' }]}>
             {streak.todayMinutes} min read today · keep it up!
           </Text>
+          <Pressable onPress={dismissGoalToast} style={StyleSheet.absoluteFillObject} />
         </Animated.View>
       )}
 

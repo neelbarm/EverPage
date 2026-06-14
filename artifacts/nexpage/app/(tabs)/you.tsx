@@ -5,6 +5,7 @@ import {
   Text,
   ScrollView,
   TouchableOpacity,
+  Pressable,
   StyleSheet,
   Platform,
   Modal,
@@ -332,6 +333,7 @@ export default function YouScreen() {
 
   const goalToastOpacity = useRef(new Animated.Value(0)).current;
   const goalToastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const goalToastAnim = useRef<Animated.CompositeAnimation | null>(null);
   const [showGoalToast, setShowGoalToast] = useState(false);
 
   useEffect(() => {
@@ -344,6 +346,7 @@ export default function YouScreen() {
       Animated.delay(2600),
       Animated.timing(goalToastOpacity, { toValue: 0, duration: 340, useNativeDriver: true }),
     ]);
+    goalToastAnim.current = anim;
     anim.start();
     goalToastTimer.current = setTimeout(() => setShowGoalToast(false), 3200);
     return () => {
@@ -351,6 +354,15 @@ export default function YouScreen() {
       if (goalToastTimer.current) clearTimeout(goalToastTimer.current);
     };
   }, [pendingGoalMet]);
+
+  function dismissGoalToast() {
+    if (goalToastAnim.current) goalToastAnim.current.stop();
+    if (goalToastTimer.current) clearTimeout(goalToastTimer.current);
+    Animated.timing(goalToastOpacity, { toValue: 0, duration: 150, useNativeDriver: true }).start(() => {
+      setShowGoalToast(false);
+    });
+    router.navigate('/(tabs)/stats');
+  }
 
   const totalHours = Math.floor(profile.totalMinutes / 60);
 
@@ -569,7 +581,6 @@ export default function YouScreen() {
       {showGoalToast && (
         <Animated.View
           style={[styles.goalToast, { opacity: goalToastOpacity }]}
-          pointerEvents="none"
         >
           <Text style={[styles.goalToastText, { fontFamily: 'Inter_700Bold' }]}>
             🎉 Daily goal reached!
@@ -577,6 +588,7 @@ export default function YouScreen() {
           <Text style={[styles.goalToastSub, { fontFamily: 'Inter_400Regular' }]}>
             {streak.todayMinutes} min read today · keep it up!
           </Text>
+          <Pressable onPress={dismissGoalToast} style={StyleSheet.absoluteFillObject} />
         </Animated.View>
       )}
 
