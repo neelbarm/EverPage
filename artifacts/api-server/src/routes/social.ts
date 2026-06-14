@@ -6,6 +6,7 @@ import { eq, ilike, or, and, ne, sql, desc, not, inArray, gte } from "drizzle-or
 const router: IRouter = Router();
 
 const EXPO_PUSH_URL = "https://exp.host/--/api/v2/push/send";
+const NUDGE_RETENTION_DAYS = 30;
 
 function generateId(): string {
   return Date.now().toString(36) + Math.random().toString(36).substring(2, 9);
@@ -468,9 +469,9 @@ router.post("/social/nudge/:userId", async (req, res) => {
   const nudgeId = generateId();
   await db.insert(npNudges).values({ id: nudgeId, senderId, recipientId: targetUserId });
 
-  // Fire-and-forget: delete nudge records older than 30 days to keep the table tidy
-  const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
-  db.delete(npNudges).where(sql`${npNudges.createdAt} < ${thirtyDaysAgo.toISOString()}`).catch(() => {});
+  // Fire-and-forget: delete nudge records older than NUDGE_RETENTION_DAYS to keep the table tidy
+  const retentionCutoff = new Date(Date.now() - NUDGE_RETENTION_DAYS * 24 * 60 * 60 * 1000);
+  db.delete(npNudges).where(sql`${npNudges.createdAt} < ${retentionCutoff.toISOString()}`).catch(() => {});
 
   if (!target.nudgesEnabled) {
     res.json({ ok: true, skipped: "nudges_disabled" });
@@ -505,7 +506,7 @@ router.get("/social/nudges", async (req, res) => {
   const userId = requireAuth(req, res);
   if (!userId) return;
 
-  const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
+  const thirtyDaysAgo = new Date(Date.now() - NUDGE_RETENTION_DAYS * 24 * 60 * 60 * 1000);
   const rows = await db
     .select({
       id: npNudges.id,
