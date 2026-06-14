@@ -7,6 +7,7 @@ const router: IRouter = Router();
 
 const EXPO_PUSH_URL = "https://exp.host/--/api/v2/push/send";
 const NUDGE_RETENTION_DAYS = 30;
+const NUDGE_COOLDOWN_DAYS = 1;
 
 function generateId(): string {
   return Date.now().toString(36) + Math.random().toString(36).substring(2, 9);
@@ -445,7 +446,7 @@ router.post("/social/nudge/:userId", async (req, res) => {
     return;
   }
 
-  const cooldownMs = 24 * 60 * 60 * 1000;
+  const cooldownMs = NUDGE_COOLDOWN_DAYS * 24 * 60 * 60 * 1000;
   const since = new Date(Date.now() - cooldownMs);
   const recentNudge = await db
     .select({ id: npNudges.id, createdAt: npNudges.createdAt })
