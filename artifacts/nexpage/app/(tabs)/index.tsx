@@ -48,6 +48,12 @@ export default function ShelfScreen() {
   const goalToastAnim = useRef<Animated.CompositeAnimation | null>(null);
   const [showGoalToast, setShowGoalToast] = useState(false);
 
+  const goalUpdatedToastOpacity = useRef(new Animated.Value(0)).current;
+  const goalUpdatedToastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const goalUpdatedToastAnim = useRef<Animated.CompositeAnimation | null>(null);
+  const [showGoalUpdatedToast, setShowGoalUpdatedToast] = useState(false);
+  const [goalUpdatedMinutes, setGoalUpdatedMinutes] = useState(0);
+
   const [selectedRec, setSelectedRec] = useState<typeof recommendedBooks[0] | null>(null);
   const [recPagesStr, setRecPagesStr] = useState('');
   const sheetTranslateY = useRef(new Animated.Value(0)).current;
@@ -113,6 +119,22 @@ export default function ShelfScreen() {
       setShowGoalToast(false);
     });
     router.navigate('/(tabs)/stats');
+  }
+
+  function triggerGoalUpdatedToast(minutes: number) {
+    setGoalUpdatedMinutes(minutes);
+    setShowGoalUpdatedToast(true);
+    if (goalUpdatedToastTimer.current) clearTimeout(goalUpdatedToastTimer.current);
+    if (goalUpdatedToastAnim.current) goalUpdatedToastAnim.current.stop();
+    goalUpdatedToastOpacity.setValue(0);
+    const anim = Animated.sequence([
+      Animated.timing(goalUpdatedToastOpacity, { toValue: 1, duration: 220, useNativeDriver: true }),
+      Animated.delay(1800),
+      Animated.timing(goalUpdatedToastOpacity, { toValue: 0, duration: 300, useNativeDriver: true }),
+    ]);
+    goalUpdatedToastAnim.current = anim;
+    anim.start();
+    goalUpdatedToastTimer.current = setTimeout(() => setShowGoalUpdatedToast(false), 2320);
   }
 
   function dismissFreezeToast() {
@@ -294,6 +316,16 @@ export default function ShelfScreen() {
         </Animated.View>
       )}
 
+      {showGoalUpdatedToast && (
+        <Animated.View
+          style={[styles.freezeToast, { backgroundColor: colors.card, borderColor: colors.primary, opacity: goalUpdatedToastOpacity }]}
+        >
+          <Text style={[styles.freezeToastText, { color: colors.foreground, fontFamily: 'Inter_600SemiBold' }]}>
+            Goal updated to {goalUpdatedMinutes} min ✓
+          </Text>
+        </Animated.View>
+      )}
+
       {showToast && (
         <Animated.View
           style={[styles.freezeToast, { backgroundColor: colors.card, borderColor: colors.primary, opacity: toastOpacity }]}
@@ -308,7 +340,7 @@ export default function ShelfScreen() {
       <DailyGoalModal
         visible={showGoalModal}
         initialMinutes={streak.dailyGoalMinutes}
-        onSave={(minutes) => { setDailyGoal(minutes); setShowGoalModal(false); }}
+        onSave={(minutes) => { setDailyGoal(minutes); setShowGoalModal(false); triggerGoalUpdatedToast(minutes); }}
         onClose={() => setShowGoalModal(false)}
       />
 
