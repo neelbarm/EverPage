@@ -515,7 +515,7 @@ const styles = StyleSheet.create({
   },
   emptyTitle: { fontSize: 18 },
   emptySub: { fontSize: 14, textAlign: 'center', lineHeight: 20 },
-  recSection: { marginTop: 16, marginHorizontal: 16, gap: 10 },
+  recSection: { marginTop: 16, marginHorizontal: 16, gap: 10, padding: 14 },
   recLabel: { fontSize: 11, letterSpacing: 1.5 },
   recCard: { width: 140, borderRadius: 12, borderWidth: 1, overflow: 'hidden', shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.06, shadowRadius: 6, elevation: 2 },
   recBody: { padding: 10, gap: 2 },
