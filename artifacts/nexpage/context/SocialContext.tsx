@@ -212,6 +212,7 @@ export function SocialProvider({ children }: { children: React.ReactNode }) {
       }
       return prev;
     });
+    await loadSocialData();
   }, [following]);
 
   const searchUsers = useCallback(async (query: string): Promise<SocialUser[]> => {
