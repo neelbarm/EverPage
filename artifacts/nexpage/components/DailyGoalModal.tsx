@@ -24,12 +24,10 @@ export function DailyGoalModal({
 }) {
   const colors = useColors();
   const insets = useSafeAreaInsets();
-  const [selected, setSelected] = useState(initialMinutes);
   const [inputText, setInputText] = useState(String(initialMinutes));
 
   useEffect(() => {
     if (visible) {
-      setSelected(initialMinutes);
       setInputText(String(initialMinutes));
     }
   }, [visible, initialMinutes]);
@@ -39,17 +37,15 @@ export function DailyGoalModal({
   const parsed = parseInt(inputText, 10);
   const isValid = !isNaN(parsed) && parsed >= 1 && parsed <= 480;
   const showError = inputText.trim().length > 0 && !isValid;
+  const isCustomActive = isValid && !options.includes(parsed);
 
   function handleChipPress(m: number) {
-    setSelected(m);
     setInputText(String(m));
   }
 
   function handleTextChange(text: string) {
     const clean = text.replace(/[^0-9]/g, '');
     setInputText(clean);
-    const n = parseInt(clean, 10);
-    if (!isNaN(n) && n >= 1 && n <= 480) setSelected(n);
   }
 
   return (
@@ -77,8 +73,8 @@ export function DailyGoalModal({
                 style={[
                   styles.minuteChip,
                   {
-                    backgroundColor: m === selected && !showError ? colors.primary : colors.muted,
-                    borderColor: m === selected && !showError ? colors.primary : colors.border,
+                    backgroundColor: m === parsed && isValid && !isCustomActive ? colors.primary : colors.muted,
+                    borderColor: m === parsed && isValid && !isCustomActive ? colors.primary : colors.border,
                   },
                 ]}
                 activeOpacity={0.7}
@@ -87,7 +83,7 @@ export function DailyGoalModal({
                   style={[
                     styles.minuteChipText,
                     {
-                      color: m === selected && !showError ? '#fff' : colors.foreground,
+                      color: m === parsed && isValid && !isCustomActive ? '#fff' : colors.foreground,
                       fontFamily: 'Inter_500Medium',
                     },
                   ]}
@@ -102,7 +98,7 @@ export function DailyGoalModal({
             <Text style={[styles.goalOrLabel, { color: colors.mutedForeground, fontFamily: 'Inter_400Regular' }]}>or enter custom</Text>
             <View style={[
               styles.goalInputWrap,
-              { borderColor: showError ? '#c0392b' : isValid && !options.includes(selected) ? colors.primary : colors.border, backgroundColor: colors.background },
+              { borderColor: showError ? '#c0392b' : isCustomActive ? colors.primary : colors.border, backgroundColor: colors.background },
             ]}>
               <TextInput
                 style={[styles.goalInput, { color: colors.foreground, fontFamily: 'Inter_500Medium' }]}
@@ -126,13 +122,13 @@ export function DailyGoalModal({
           <View style={[styles.previewRow, { backgroundColor: colors.muted, borderRadius: 12 }]}>
             <Feather name="target" size={16} color={colors.primary} />
             <Text style={[styles.previewText, { color: colors.mutedForeground, fontFamily: 'Inter_400Regular' }]}>
-              {`Read ${isValid ? selected : '?'} minutes a day to keep your streak alive.`}
+              {`Read ${isValid ? parsed : '?'} minutes a day to keep your streak alive.`}
             </Text>
           </View>
 
           <TouchableOpacity
             style={[styles.saveBtn, { backgroundColor: showError ? colors.muted : colors.primary }]}
-            onPress={() => { if (isValid) onSave(selected); }}
+            onPress={() => { if (isValid) onSave(parsed); }}
             activeOpacity={0.8}
             disabled={showError}
           >
