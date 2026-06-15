@@ -40,6 +40,7 @@ export default function ShelfScreen() {
 
   const toastOpacity = useRef(new Animated.Value(0)).current;
   const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const toastAnim = useRef<Animated.CompositeAnimation | null>(null);
   const [showToast, setShowToast] = useState(false);
 
   const goalToastOpacity = useRef(new Animated.Value(0)).current;
@@ -77,6 +78,7 @@ export default function ShelfScreen() {
       Animated.delay(2200),
       Animated.timing(toastOpacity, { toValue: 0, duration: 300, useNativeDriver: true }),
     ]);
+    toastAnim.current = anim;
     anim.start();
     toastTimer.current = setTimeout(() => setShowToast(false), 2720);
     return () => {
@@ -111,6 +113,15 @@ export default function ShelfScreen() {
       setShowGoalToast(false);
     });
     router.navigate('/(tabs)/stats');
+  }
+
+  function dismissFreezeToast() {
+    if (toastAnim.current) toastAnim.current.stop();
+    if (toastTimer.current) clearTimeout(toastTimer.current);
+    Animated.timing(toastOpacity, { toValue: 0, duration: 150, useNativeDriver: true }).start(() => {
+      setShowToast(false);
+    });
+    router.navigate('/(tabs)/you');
   }
 
   return (
@@ -286,11 +297,11 @@ export default function ShelfScreen() {
       {showToast && (
         <Animated.View
           style={[styles.freezeToast, { backgroundColor: colors.card, borderColor: colors.primary, opacity: toastOpacity }]}
-          pointerEvents="none"
         >
           <Text style={[styles.freezeToastText, { color: colors.foreground, fontFamily: 'Inter_600SemiBold' }]}>
             ❄️ You earned a streak freeze! ({streak.freezesLeft} left)
           </Text>
+          <Pressable onPress={dismissFreezeToast} style={StyleSheet.absoluteFillObject} />
         </Animated.View>
       )}
 
