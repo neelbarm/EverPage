@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { Animated, View, Text, ScrollView, TouchableOpacity, Pressable, StyleSheet, Platform, Modal, TextInput } from 'react-native';
+import { Animated, View, Text, ScrollView, TouchableOpacity, Pressable, PanResponder, StyleSheet, Platform, Modal, TextInput } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Feather, Ionicons } from '@expo/vector-icons';
@@ -47,6 +47,23 @@ export default function ShelfScreen() {
 
   const [selectedRec, setSelectedRec] = useState<typeof recommendedBooks[0] | null>(null);
   const [recPagesStr, setRecPagesStr] = useState('');
+  const sheetTranslateY = useRef(new Animated.Value(0)).current;
+  const panResponder = useRef(
+    PanResponder.create({
+      onMoveShouldSetPanResponder: (_, g) => g.dy > 6 && g.dy > Math.abs(g.dx),
+      onPanResponderMove: (_, g) => { if (g.dy > 0) sheetTranslateY.setValue(g.dy); },
+      onPanResponderRelease: (_, g) => {
+        if (g.dy > 80 || g.vy > 0.5) {
+          Animated.timing(sheetTranslateY, { toValue: 700, duration: 220, useNativeDriver: true }).start(() => {
+            setSelectedRec(null);
+            sheetTranslateY.setValue(0);
+          });
+        } else {
+          Animated.spring(sheetTranslateY, { toValue: 0, useNativeDriver: true, bounciness: 4 }).start();
+        }
+      },
+    })
+  ).current;
 
   useEffect(() => {
     if (!pendingFreezeEarned) return;
@@ -280,9 +297,17 @@ export default function ShelfScreen() {
         transparent
         onRequestClose={() => setSelectedRec(null)}
       >
-        <Pressable style={styles.recModalOverlay} onPress={() => setSelectedRec(null)}>
-          <Pressable style={[styles.recModalSheet, { backgroundColor: colors.card }]} onPress={() => {}}>
-            <View style={[styles.recModalHandle, { backgroundColor: colors.border }]} />
+        <View style={styles.recModalOverlay}>
+          {/* Tap dim area to dismiss — sibling to sheet so sheet buttons aren't blocked */}
+          <Pressable style={StyleSheet.absoluteFillObject} onPress={() => setSelectedRec(null)} />
+          <Animated.View
+            style={[styles.recModalSheet, { backgroundColor: colors.card, transform: [{ translateY: sheetTranslateY }] }]}
+            {...panResponder.panHandlers}
+          >
+            {/* Handle bar — tap or swipe down to dismiss */}
+            <Pressable onPress={() => setSelectedRec(null)} style={styles.recModalHandleHitArea}>
+              <View style={[styles.recModalHandle, { backgroundColor: colors.border }]} />
+            </Pressable>
             {selectedRec && (
               <>
                 <View style={styles.recModalHeader}>
@@ -356,8 +381,8 @@ export default function ShelfScreen() {
                 </View>
               </>
             )}
-          </Pressable>
-        </Pressable>
+          </Animated.View>
+        </View>
       </Modal>
     </View>
   );
@@ -483,9 +508,11 @@ const styles = StyleSheet.create({
     shadowRadius: 16,
     elevation: 12,
   },
+  recModalHandleHitArea: {
+    alignSelf: 'center', paddingVertical: 10, paddingHorizontal: 32, marginBottom: 4,
+  },
   recModalHandle: {
     width: 36, height: 4, borderRadius: 2,
-    alignSelf: 'center', marginBottom: 4,
   },
   recModalHeader: { flexDirection: 'row', gap: 16, alignItems: 'flex-start' },
   recModalClose: { position: 'absolute', top: 0, right: 0, zIndex: 1, padding: 2 },
