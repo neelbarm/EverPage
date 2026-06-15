@@ -1,15 +1,16 @@
-import { BlurView } from "expo-blur";
-import { isLiquidGlassAvailable } from "expo-glass-effect";
 import { Redirect, Tabs, useRouter } from "expo-router";
 import { Icon, Label, NativeTabs } from "expo-router/unstable-native-tabs";
 import { SymbolView } from "expo-symbols";
 import { Feather, Ionicons } from "@expo/vector-icons";
 import React from "react";
-import { Platform, StyleSheet, TouchableOpacity, View, useColorScheme } from "react-native";
+import { Platform, StyleSheet, TouchableOpacity, View } from "react-native";
+import { isLiquidGlassAvailable } from "expo-glass-effect";
 
 import { useColors } from "@/hooks/useColors";
 import { useAuth } from "@/lib/auth";
 import { useSocial } from "@/context/SocialContext";
+
+const FAB_COLOR = "#1C2028";
 
 function NativeTabLayout() {
   return (
@@ -40,10 +41,7 @@ function NativeTabLayout() {
 
 function ClassicTabLayout() {
   const colors = useColors();
-  const colorScheme = useColorScheme();
   const router = useRouter();
-  const isDark = colorScheme === "dark";
-  const isIOS = Platform.OS === "ios";
   const isWeb = Platform.OS === "web";
   const { unreadNudgeCount } = useSocial();
 
@@ -51,27 +49,31 @@ function ClassicTabLayout() {
     <Tabs
       screenOptions={{
         headerShown: false,
-        tabBarActiveTintColor: colors.primary,
-        tabBarInactiveTintColor: colors.mutedForeground,
+        tabBarActiveTintColor: colors.foreground,
+        tabBarInactiveTintColor: "rgba(28,32,40,0.42)",
         tabBarStyle: {
           position: "absolute",
-          backgroundColor: isIOS ? "transparent" : colors.background,
-          borderTopWidth: StyleSheet.hairlineWidth,
-          borderTopColor: colors.border,
-          elevation: 0,
-          overflow: "visible",
+          backgroundColor: "transparent",
+          borderTopWidth: 0,
+          borderRadius: 32,
+          marginHorizontal: 14,
+          marginBottom: 14,
+          elevation: 12,
+          shadowColor: "#000",
+          shadowOffset: { width: 0, height: 4 },
+          shadowOpacity: 0.14,
+          shadowRadius: 16,
+          overflow: "hidden",
           ...(isWeb ? { height: 84 } : {}),
         },
-        tabBarBackground: () =>
-          isIOS ? (
-            <BlurView
-              intensity={96}
-              tint={isDark ? "dark" : "light"}
-              style={StyleSheet.absoluteFill}
-            />
-          ) : isWeb ? (
-            <View style={[StyleSheet.absoluteFill, { backgroundColor: colors.background }]} />
-          ) : null,
+        tabBarBackground: () => (
+          <View
+            style={[
+              StyleSheet.absoluteFill,
+              { backgroundColor: colors.tabBar, borderRadius: 32 },
+            ]}
+          />
+        ),
       }}
     >
       <Tabs.Screen
@@ -79,7 +81,7 @@ function ClassicTabLayout() {
         options={{
           title: "Shelf",
           tabBarIcon: ({ color }) =>
-            isIOS ? (
+            Platform.OS === "ios" ? (
               <SymbolView name="books.vertical" tintColor={color} size={22} />
             ) : (
               <Ionicons name="book-outline" size={22} color={color} />
@@ -90,10 +92,10 @@ function ClassicTabLayout() {
         name="friends"
         options={{
           title: "Friends",
-          tabBarBadge: unreadNudgeCount > 0 ? (unreadNudgeCount > 9 ? '9+' : unreadNudgeCount) : undefined,
+          tabBarBadge: unreadNudgeCount > 0 ? (unreadNudgeCount > 9 ? "9+" : unreadNudgeCount) : undefined,
           tabBarBadgeStyle: { fontSize: 10, minWidth: 16, height: 16, lineHeight: 16 },
           tabBarIcon: ({ color }) =>
-            isIOS ? (
+            Platform.OS === "ios" ? (
               <SymbolView name="person.2" tintColor={color} size={22} />
             ) : (
               <Ionicons name="people-outline" size={22} color={color} />
@@ -108,7 +110,7 @@ function ClassicTabLayout() {
           tabBarIcon: () => null,
           tabBarButton: () => (
             <TouchableOpacity
-              onPress={() => router.push({ pathname: '/(tabs)/log', params: { addBook: 'true' } })}
+              onPress={() => router.push({ pathname: "/(tabs)/log", params: { addBook: "true" } })}
               style={{ flex: 1, alignItems: "center", justifyContent: "center" }}
               activeOpacity={0.85}
             >
@@ -117,12 +119,12 @@ function ClassicTabLayout() {
                   width: 52,
                   height: 52,
                   borderRadius: 26,
-                  backgroundColor: colors.primary,
+                  backgroundColor: FAB_COLOR,
                   alignItems: "center",
                   justifyContent: "center",
-                  shadowColor: colors.primary,
+                  shadowColor: FAB_COLOR,
                   shadowOffset: { width: 0, height: 4 },
-                  shadowOpacity: 0.35,
+                  shadowOpacity: 0.4,
                   shadowRadius: 10,
                   elevation: 8,
                   marginBottom: isWeb ? 16 : 0,
@@ -139,7 +141,7 @@ function ClassicTabLayout() {
         options={{
           title: "Stats",
           tabBarIcon: ({ color }) =>
-            isIOS ? (
+            Platform.OS === "ios" ? (
               <SymbolView name="chart.bar" tintColor={color} size={22} />
             ) : (
               <Ionicons name="bar-chart-outline" size={22} color={color} />
@@ -151,7 +153,7 @@ function ClassicTabLayout() {
         options={{
           title: "Profile",
           tabBarIcon: ({ color }) =>
-            isIOS ? (
+            Platform.OS === "ios" ? (
               <SymbolView name="person.circle" tintColor={color} size={22} />
             ) : (
               <Ionicons name="person-circle-outline" size={24} color={color} />
@@ -164,7 +166,6 @@ function ClassicTabLayout() {
 
 function AuthGate({ children }: { children: React.ReactNode }) {
   const { isAuthenticated, isLoading } = useAuth();
-
   if (isLoading) return null;
   if (!isAuthenticated) return <Redirect href="/" />;
   return <>{children}</>;

@@ -15,12 +15,22 @@ function formatDate(): string {
   return `${days[d.getDay()]}, ${months[d.getMonth()]} ${d.getDate()}`;
 }
 
-function ProgressBar({ progress, height = 4 }: { progress: number; height?: number }) {
+function ProgressBar({
+  progress,
+  height = 4,
+  trackColor,
+  fillColor,
+}: {
+  progress: number;
+  height?: number;
+  trackColor?: string;
+  fillColor?: string;
+}) {
   const colors = useColors();
   const clamped = Math.min(Math.max(progress, 0), 1);
   return (
-    <View style={{ height, backgroundColor: colors.border, borderRadius: height / 2, overflow: 'hidden' }}>
-      <View style={{ height, width: `${clamped * 100}%`, backgroundColor: colors.primary, borderRadius: height / 2 }} />
+    <View style={{ height, backgroundColor: trackColor ?? colors.border, borderRadius: height / 2, overflow: 'hidden' }}>
+      <View style={{ height, width: `${clamped * 100}%`, backgroundColor: fillColor ?? colors.primary, borderRadius: height / 2 }} />
     </View>
   );
 }
@@ -154,14 +164,14 @@ export default function ShelfScreen() {
           <Text style={[styles.shelfLabel, { color: colors.foreground, fontFamily: 'Inter_700Bold' }]}>Your shelf</Text>
         </View>
         <TouchableOpacity
-          style={[styles.streakBadge, { backgroundColor: colors.primary }]}
+          style={[styles.streakBadge, { backgroundColor: colors.tabBar }]}
           onPress={() => router.push('/(tabs)/stats')}
           activeOpacity={0.8}
         >
-          <Text style={[styles.streakNum, { color: colors.primaryForeground, fontFamily: 'Inter_700Bold' }]}>
+          <Text style={[styles.streakNum, { color: colors.foreground, fontFamily: 'Inter_700Bold' }]}>
             {streak.currentStreak}
           </Text>
-          <Text style={[styles.streakLabel, { color: 'rgba(255,255,255,0.75)', fontFamily: 'Inter_400Regular' }]}>
+          <Text style={[styles.streakLabel, { color: colors.mutedForeground, fontFamily: 'Inter_400Regular' }]}>
             {'day\nstreak'}
           </Text>
         </TouchableOpacity>
@@ -215,29 +225,34 @@ export default function ShelfScreen() {
           <>
             {heroBook && (
               <TouchableOpacity
-                style={[styles.heroCard, { backgroundColor: colors.card, borderColor: colors.border }]}
+                style={[styles.heroCard, { backgroundColor: colors.teal, borderColor: 'transparent' }]}
                 onPress={() => router.push(`/book/${heroBook.id}`)}
                 activeOpacity={0.92}
               >
-                <Text style={[styles.continueLabel, { color: colors.accent, fontFamily: 'Inter_700Bold' }]}>CONTINUE</Text>
+                <Text style={[styles.continueLabel, { color: 'rgba(255,255,255,0.65)', fontFamily: 'Inter_700Bold' }]}>CONTINUE</Text>
                 <View style={styles.heroContent}>
                   <BookCover bookId={heroBook.id} coverColor={heroBook.coverColor} coverImageUri={heroBook.coverImageUri} width={82} height={120} borderRadius={8} />
                   <View style={styles.heroInfo}>
-                    <Text style={[styles.heroTitle, { color: colors.foreground, fontFamily: 'Inter_700Bold' }]} numberOfLines={2}>
+                    <Text style={[styles.heroTitle, { color: '#ffffff', fontFamily: 'Inter_700Bold' }]} numberOfLines={2}>
                       {heroBook.title}
                     </Text>
-                    <Text style={[styles.heroAuthor, { color: colors.mutedForeground, fontFamily: 'Inter_400Regular' }]}>
+                    <Text style={[styles.heroAuthor, { color: 'rgba(255,255,255,0.65)', fontFamily: 'Inter_400Regular' }]}>
                       {heroBook.author}
                     </Text>
                     <View style={styles.heroProgressRow}>
-                      <Text style={[styles.heroPages, { color: colors.mutedForeground, fontFamily: 'Inter_500Medium' }]}>
+                      <Text style={[styles.heroPages, { color: 'rgba(255,255,255,0.65)', fontFamily: 'Inter_500Medium' }]}>
                         p. {heroBook.currentPage} / {heroBook.totalPages}
                       </Text>
-                      <Text style={[styles.heroPct, { color: colors.primary, fontFamily: 'Inter_700Bold' }]}>
+                      <Text style={[styles.heroPct, { color: '#ffffff', fontFamily: 'Inter_700Bold' }]}>
                         {Math.round(heroProgress * 100)}%
                       </Text>
                     </View>
-                    <ProgressBar progress={heroProgress} height={5} />
+                    <ProgressBar
+                      progress={heroProgress}
+                      height={5}
+                      trackColor="rgba(255,255,255,0.25)"
+                      fillColor="rgba(255,255,255,0.9)"
+                    />
                   </View>
                 </View>
               </TouchableOpacity>
@@ -277,13 +292,13 @@ export default function ShelfScreen() {
             )}
 
             {recommendedBooks.length > 0 && (
-              <View style={styles.recSection}>
-                <Text style={[styles.recLabel, { color: colors.mutedForeground, fontFamily: 'Inter_600SemiBold' }]}>PICKED FOR YOU</Text>
+              <View style={[styles.recSection, { backgroundColor: colors.primary, borderRadius: 18 }]}>
+                <Text style={[styles.recLabel, { color: 'rgba(255,255,255,0.72)', fontFamily: 'Inter_600SemiBold' }]}>PICKED FOR YOU</Text>
                 <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 12, paddingVertical: 2 }}>
                   {recommendedBooks.map(book => (
                     <TouchableOpacity
                       key={book.id}
-                      style={[styles.recCard, { backgroundColor: colors.card, borderColor: colors.border }]}
+                      style={[styles.recCard, { backgroundColor: '#ffffff', borderColor: 'transparent' }]}
                       onPress={() => { setSelectedRec(book); setRecPagesStr(''); }}
                       activeOpacity={0.85}
                     >
@@ -291,7 +306,7 @@ export default function ShelfScreen() {
                       <View style={styles.recBody}>
                         <Text style={[styles.recTitle, { color: colors.foreground, fontFamily: 'Inter_600SemiBold' }]} numberOfLines={2}>{book.title}</Text>
                         <Text style={[styles.recAuthor, { color: colors.mutedForeground, fontFamily: 'Inter_400Regular' }]} numberOfLines={1}>{book.author}</Text>
-                        <Text style={[styles.recReason, { color: colors.accent, fontFamily: 'Inter_400Regular' }]} numberOfLines={1}>{book.reason}</Text>
+                        <Text style={[styles.recReason, { color: colors.teal, fontFamily: 'Inter_400Regular' }]} numberOfLines={1}>{book.reason}</Text>
                       </View>
                     </TouchableOpacity>
                   ))}

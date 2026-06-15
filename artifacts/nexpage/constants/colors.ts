@@ -1,19 +1,13 @@
-// Extracted directly from ReadStreak PDF slide deck
-// #f2e9db — warm parchment background
-// #201b15 — deep warm-brown foreground
-// #8a7865 — warm taupe muted text
-// #8a2333 — wine/burgundy accent (primary brand color)
-
 const colors = {
   light: {
     text: "#201b15",
-    tint: "#8a2333",
+    tint: "#1B6B72",
     background: "#f2e9db",
     foreground: "#201b15",
     card: "#faf5ed",
     cardForeground: "#201b15",
     primary: "#8a2333",
-    primaryForeground: "#f2e9db",
+    primaryForeground: "#ffffff",
     secondary: "#e9dece",
     secondaryForeground: "#201b15",
     muted: "#ece3d5",
@@ -24,10 +18,12 @@ const colors = {
     destructiveForeground: "#f2e9db",
     border: "#ddd0be",
     input: "#ddd0be",
+    teal: "#1B6B72",
+    tabBar: "#A8C5D6",
   },
   dark: {
     text: "#f2e9db",
-    tint: "#b87355",
+    tint: "#2A8A94",
     background: "#19120c",
     foreground: "#f2e9db",
     card: "#241a12",
@@ -44,6 +40,8 @@ const colors = {
     destructiveForeground: "#f2e9db",
     border: "#2e2218",
     input: "#2e2218",
+    teal: "#2A8A94",
+    tabBar: "#1A3545",
   },
   radius: 12,
 };
