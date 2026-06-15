@@ -5,57 +5,52 @@ import {
   ScrollView,
   TouchableOpacity,
   StyleSheet,
-  Dimensions,
   Animated,
   Easing,
 } from 'react-native';
 import { Redirect } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { Ionicons } from '@expo/vector-icons';
 import { useAuth } from '@/lib/auth';
 import RegisterModal from '@/components/RegisterModal';
 
-const { width } = Dimensions.get('window');
-
 const PALETTE = {
   bg: '#f2e9db',
-  fg: '#201b15',
+  fg: '#1a1732',
   muted: '#8a7865',
   primary: '#8a2333',
-  primaryLight: '#a82a3f',
-  card: '#faf5ed',
-  border: '#ddd0be',
-  accent: '#e8ddd0',
+  card: '#ffffff',
+  border: '#e8ddd0',
+  tan: '#C4946A',
+  blue: '#6AB5D0',
+  teal: '#2B5973',
+  wine: '#8a2333',
+  ctaBtn: '#6AADCB',
 };
 
-const FEATURES = [
+const FEATURES: { title: string; description: string; bg: string }[] = [
   {
-    icon: 'library-outline' as const,
-    color: '#5C849E',
-    title: 'Your Reading Shelf',
+    title: 'Your Reading\nShelf',
     description:
       'Add books, track your progress page by page, and keep every title you\'re reading — or have ever read — in one beautiful place.',
+    bg: PALETTE.tan,
   },
   {
-    icon: 'flame-outline' as const,
-    color: '#B54935',
-    title: 'Daily Streaks & Goals',
+    title: 'Daily Streaks\n& Goals',
     description:
       'Set a daily reading goal in minutes. Hit it every day to build your streak. Streak freezes keep your progress safe on busy days.',
+    bg: PALETTE.blue,
   },
   {
-    icon: 'people-outline' as const,
-    color: '#3A6645',
-    title: 'Read With Friends',
+    title: 'Read with\nFriends',
     description:
       'See what your friends are reading right now, cheer each other on the leaderboard, and share quotes from the books you love.',
+    bg: PALETTE.teal,
   },
   {
-    icon: 'bar-chart-outline' as const,
-    color: '#8B5E9E',
-    title: 'Beautiful Reading Stats',
+    title: 'Beautiful\nReading Stats',
     description:
       'Charts of your reading minutes, pages per week, and a yearly Wrapped — a personal story of your reading year.',
+    bg: PALETTE.wine,
   },
 ];
 
@@ -109,30 +104,16 @@ function FlippingBook() {
     inputRange: [0, 0.5, 1],
     outputRange: [1, 0, 1],
   });
-
   const rightPageBg = flipAnim.interpolate({
     inputRange: [0, 0.49, 0.5, 1],
     outputRange: ['#fff8f0', '#fff8f0', '#eee4d6', '#eee4d6'],
   });
-
-  const glowScale = glowPulse.interpolate({
-    inputRange: [0, 1],
-    outputRange: [1, 1.15],
-  });
-  const glowOpacity = glowPulse.interpolate({
-    inputRange: [0, 1],
-    outputRange: [0.18, 0.32],
-  });
+  const glowScale = glowPulse.interpolate({ inputRange: [0, 1], outputRange: [1, 1.15] });
+  const glowOpacity = glowPulse.interpolate({ inputRange: [0, 1], outputRange: [0.18, 0.32] });
 
   return (
     <Animated.View style={{ transform: [{ scale: scaleIn }], alignItems: 'center' }}>
-      <Animated.View
-        style={[
-          bookStyles.glow,
-          { transform: [{ scale: glowScale }], opacity: glowOpacity },
-        ]}
-      />
-
+      <Animated.View style={[bookStyles.glow, { transform: [{ scale: glowScale }], opacity: glowOpacity }]} />
       <View style={bookStyles.book}>
         <View style={[bookStyles.page, { backgroundColor: '#faf5ed' }]}>
           <View style={{ gap: 7, paddingTop: 6 }}>
@@ -141,20 +122,12 @@ function FlippingBook() {
             ))}
           </View>
         </View>
-
         <View style={bookStyles.spine} />
-
         <Animated.View
           style={[
             bookStyles.page,
             { backgroundColor: rightPageBg as any },
-            {
-              transform: [
-                { translateX: -(PAGE_W / 2) },
-                { scaleX: rightPageScaleX },
-                { translateX: PAGE_W / 2 },
-              ],
-            },
+            { transform: [{ translateX: -(PAGE_W / 2) }, { scaleX: rightPageScaleX }, { translateX: PAGE_W / 2 }] },
           ]}
         >
           <View style={{ gap: 7, paddingTop: 6 }}>
@@ -164,7 +137,6 @@ function FlippingBook() {
           </View>
         </Animated.View>
       </View>
-
       <View style={bookStyles.bookShadow} />
     </Animated.View>
   );
@@ -173,9 +145,7 @@ function FlippingBook() {
 const bookStyles = StyleSheet.create({
   glow: {
     position: 'absolute',
-    width: 160,
-    height: 160,
-    borderRadius: 80,
+    width: 160, height: 160, borderRadius: 80,
     backgroundColor: PALETTE.primary,
     top: -20,
   },
@@ -191,100 +161,15 @@ const bookStyles = StyleSheet.create({
     shadowRadius: 18,
     elevation: 12,
   },
-  page: {
-    width: PAGE_W,
-    height: PAGE_H + 20,
-    padding: 9,
-  },
-  spine: {
-    width: 10,
-    height: PAGE_H + 20,
-    backgroundColor: PALETTE.primary,
-  },
-  line: {
-    height: 4,
-    backgroundColor: PALETTE.border,
-    borderRadius: 2,
-  },
+  page: { width: PAGE_W, height: PAGE_H + 20, padding: 9 },
+  spine: { width: 10, height: PAGE_H + 20, backgroundColor: PALETTE.primary },
+  line: { height: 4, backgroundColor: '#ddd0be', borderRadius: 2 },
   bookShadow: {
-    width: 80,
-    height: 10,
-    borderRadius: 40,
-    backgroundColor: '#201b15',
-    opacity: 0.12,
-    marginTop: 6,
-    alignSelf: 'center',
+    width: 80, height: 10, borderRadius: 40,
+    backgroundColor: '#201b15', opacity: 0.12,
+    marginTop: 6, alignSelf: 'center',
   },
 });
-
-function AnimatedSection({
-  anim,
-  children,
-  delay = 0,
-}: {
-  anim: Animated.Value;
-  children: React.ReactNode;
-  delay?: number;
-}) {
-  return (
-    <Animated.View
-      style={{
-        opacity: anim,
-        transform: [
-          {
-            translateY: anim.interpolate({
-              inputRange: [0, 1],
-              outputRange: [28, 0],
-            }),
-          },
-        ],
-      }}
-    >
-      {children}
-    </Animated.View>
-  );
-}
-
-function FeatureCard({
-  icon,
-  color,
-  title,
-  description,
-  anim,
-}: {
-  icon: React.ComponentProps<typeof Ionicons>['name'];
-  color: string;
-  title: string;
-  description: string;
-  anim: Animated.Value;
-}) {
-  return (
-    <Animated.View
-      style={[
-        styles.featureCard,
-        {
-          opacity: anim,
-          transform: [
-            {
-              translateY: anim.interpolate({
-                inputRange: [0, 1],
-                outputRange: [24, 0],
-              }),
-            },
-          ],
-        },
-      ]}
-    >
-      <View style={[styles.featureIconWrap, { backgroundColor: color + '22' }]}>
-        <Ionicons name={icon} size={28} color={color} />
-      </View>
-      <View style={styles.featureText}>
-        <Text style={styles.featureTitle}>{title}</Text>
-        <Text style={styles.featureDesc}>{description}</Text>
-      </View>
-    </Animated.View>
-  );
-}
 
 export default function LandingScreen() {
   const insets = useSafeAreaInsets();
@@ -297,7 +182,7 @@ export default function LandingScreen() {
   const landingOpacity = useRef(new Animated.Value(0)).current;
 
   const heroAnim = useRef(new Animated.Value(0)).current;
-  const shelfAnim = useRef(new Animated.Value(0)).current;
+  const booksAnim = useRef(new Animated.Value(0)).current;
   const feat0 = useRef(new Animated.Value(0)).current;
   const feat1 = useRef(new Animated.Value(0)).current;
   const feat2 = useRef(new Animated.Value(0)).current;
@@ -314,15 +199,14 @@ export default function LandingScreen() {
 
   function doTransition() {
     if (!authDoneRef.current || !timerDoneRef.current) return;
-
     Animated.parallel([
       Animated.timing(splashOpacity, { toValue: 0, duration: 380, useNativeDriver: true }),
       Animated.timing(landingOpacity, { toValue: 1, duration: 380, useNativeDriver: true }),
     ]).start(() => {
       setPhase('landing');
-      Animated.stagger(70, [
+      Animated.stagger(65, [
         Animated.spring(heroAnim, { toValue: 1, tension: 70, friction: 9, useNativeDriver: true }),
-        Animated.spring(shelfAnim, { toValue: 1, tension: 70, friction: 9, useNativeDriver: true }),
+        Animated.spring(booksAnim, { toValue: 1, tension: 70, friction: 9, useNativeDriver: true }),
         Animated.spring(feat0, { toValue: 1, tension: 70, friction: 9, useNativeDriver: true }),
         Animated.spring(feat1, { toValue: 1, tension: 70, friction: 9, useNativeDriver: true }),
         Animated.spring(feat2, { toValue: 1, tension: 70, friction: 9, useNativeDriver: true }),
@@ -332,8 +216,8 @@ export default function LandingScreen() {
       ]).start(() => {
         Animated.loop(
           Animated.sequence([
-            Animated.timing(ctaPulse, { toValue: 1.03, duration: 900, useNativeDriver: true }),
-            Animated.timing(ctaPulse, { toValue: 1, duration: 900, useNativeDriver: true }),
+            Animated.timing(ctaPulse, { toValue: 1.025, duration: 950, useNativeDriver: true }),
+            Animated.timing(ctaPulse, { toValue: 1, duration: 950, useNativeDriver: true }),
           ])
         ).start();
       });
@@ -352,7 +236,6 @@ export default function LandingScreen() {
       timerDoneRef.current = true;
       doTransition();
     }, 5000);
-
     return () => clearTimeout(t);
   }, []);
 
@@ -365,37 +248,24 @@ export default function LandingScreen() {
 
   if (isAuthenticated) return <Redirect href="/(tabs)" />;
 
-  function openRegister() {
-    setDefaultMode('register');
-    setModalVisible(true);
-  }
+  function openRegister() { setDefaultMode('register'); setModalVisible(true); }
+  function openLogin() { setDefaultMode('login'); setModalVisible(true); }
 
-  function openLogin() {
-    setDefaultMode('login');
-    setModalVisible(true);
-  }
+  const featAnims = [feat0, feat1, feat2, feat3];
 
   return (
     <View style={[styles.root, { backgroundColor: PALETTE.bg }]}>
+
+      {/* ── Splash ── */}
       {phase === 'splash' && (
-        <Animated.View
-          style={[styles.splash, { opacity: splashOpacity }]}
-          pointerEvents="none"
-        >
+        <Animated.View style={[styles.splash, { opacity: splashOpacity }]} pointerEvents="none">
           <FlippingBook />
           <Animated.Text
             style={[
               styles.splashName,
               {
                 opacity: splashNameAnim,
-                transform: [
-                  {
-                    translateY: splashNameAnim.interpolate({
-                      inputRange: [0, 1],
-                      outputRange: [16, 0],
-                    }),
-                  },
-                ],
+                transform: [{ translateY: splashNameAnim.interpolate({ inputRange: [0, 1], outputRange: [16, 0] }) }],
               },
             ]}
           >
@@ -406,14 +276,7 @@ export default function LandingScreen() {
               styles.splashSub,
               {
                 opacity: splashSubAnim,
-                transform: [
-                  {
-                    translateY: splashSubAnim.interpolate({
-                      inputRange: [0, 1],
-                      outputRange: [10, 0],
-                    }),
-                  },
-                ],
+                transform: [{ translateY: splashSubAnim.interpolate({ inputRange: [0, 1], outputRange: [10, 0] }) }],
               },
             ]}
           >
@@ -422,85 +285,96 @@ export default function LandingScreen() {
         </Animated.View>
       )}
 
+      {/* ── Landing ── */}
       {phase === 'landing' && (
         <Animated.View style={[{ flex: 1 }, { opacity: landingOpacity }]}>
           <ScrollView
             contentContainerStyle={[
               styles.scroll,
-              { paddingTop: Math.max(insets.top, 44) + 32, paddingBottom: insets.bottom + 24 },
+              { paddingTop: Math.max(insets.top, 44) + 24, paddingBottom: insets.bottom + 32 },
             ]}
             showsVerticalScrollIndicator={false}
           >
-            <AnimatedSection anim={heroAnim}>
-              <View style={styles.hero}>
-                <View style={styles.logoWrap}>
-                  <View style={styles.logoBadge}>
-                    <Ionicons name="book" size={36} color="#fff" />
-                  </View>
-                </View>
-                <Text style={styles.appName}>EverPage</Text>
-                <Text style={styles.tagline}>
-                  Read together. Track everything.{'\n'}Build your streak.
-                </Text>
-              </View>
-            </AnimatedSection>
 
-            <AnimatedSection anim={shelfAnim}>
-              <View style={styles.shelfPreview}>
-                <View style={styles.shelfBooks}>
-                  {[
-                    { color: '#5C849E', h: 108 },
-                    { color: '#B54935', h: 90 },
-                    { color: '#3A6645', h: 120 },
-                    { color: '#8B5E9E', h: 96 },
-                    { color: '#B08A3C', h: 114 },
-                    { color: '#4A7A52', h: 84 },
-                    { color: '#5E7A9E', h: 102 },
-                  ].map((b, i) => (
-                    <View key={i} style={[styles.bookSpine, { backgroundColor: b.color, height: b.h }]} />
-                  ))}
-                </View>
-                <View style={styles.shelfFloor} />
-              </View>
-              <Text style={styles.shelfCaption}>Track every book you read</Text>
-            </AnimatedSection>
+            {/* Hero */}
+            <Animated.View
+              style={{
+                opacity: heroAnim,
+                transform: [{ translateY: heroAnim.interpolate({ inputRange: [0, 1], outputRange: [28, 0] }) }],
+                alignItems: 'center',
+                marginBottom: 28,
+              }}
+            >
+              <Text style={styles.appName}>EverPage</Text>
+              <Text style={styles.tagline}>
+                Read together. Track everything.{'\n'}Build your streak.
+              </Text>
+            </Animated.View>
 
-            <View style={styles.features}>
-              {[feat0, feat1, feat2, feat3].map((anim, i) => (
-                <FeatureCard key={FEATURES[i].title} {...FEATURES[i]} anim={anim} />
+            {/* Book illustrations card */}
+            <Animated.View
+              style={[
+                styles.booksCard,
+                {
+                  opacity: booksAnim,
+                  transform: [{ translateY: booksAnim.interpolate({ inputRange: [0, 1], outputRange: [24, 0] }) }],
+                },
+              ]}
+            >
+              <Text style={styles.bookEmoji}>📘</Text>
+              <Text style={[styles.bookEmoji, styles.bookEmojiCenter]}>📚</Text>
+              <Text style={styles.bookEmoji}>📱</Text>
+            </Animated.View>
+
+            {/* 2×2 feature grid */}
+            <View style={styles.grid}>
+              {FEATURES.map((f, i) => (
+                <Animated.View
+                  key={f.title}
+                  style={[
+                    styles.featureCard,
+                    { backgroundColor: f.bg },
+                    {
+                      opacity: featAnims[i],
+                      transform: [{ translateY: featAnims[i].interpolate({ inputRange: [0, 1], outputRange: [22, 0] }) }],
+                    },
+                  ]}
+                >
+                  <Text style={styles.featureTitle}>{f.title}</Text>
+                  <Text style={styles.featureDesc}>{f.description}</Text>
+                </Animated.View>
               ))}
             </View>
 
-            <AnimatedSection anim={quoteAnim}>
-              <View style={styles.quoteBlock}>
-                <Ionicons name="chatbubble-ellipses-outline" size={20} color={PALETTE.muted} />
-                <Text style={styles.quoteText}>
-                  "A reader lives a thousand lives before he dies. The man who never reads lives only one."
-                </Text>
-                <Text style={styles.quoteAuthor}>— George R.R. Martin</Text>
-              </View>
-            </AnimatedSection>
+            {/* Quote */}
+            <Animated.View
+              style={[
+                styles.quoteBlock,
+                {
+                  opacity: quoteAnim,
+                  transform: [{ translateY: quoteAnim.interpolate({ inputRange: [0, 1], outputRange: [22, 0] }) }],
+                },
+              ]}
+            >
+              <Text style={styles.quoteText}>
+                A reader lives a thousand lives before he dies. The man who never reads lives only one.
+              </Text>
+              <Text style={styles.quoteAuthor}>- George R.R. Martin</Text>
+            </Animated.View>
 
+            {/* CTA */}
             <Animated.View
               style={[
                 styles.cta,
                 {
                   opacity: ctaAnim,
-                  transform: [
-                    {
-                      translateY: ctaAnim.interpolate({
-                        inputRange: [0, 1],
-                        outputRange: [28, 0],
-                      }),
-                    },
-                  ],
+                  transform: [{ translateY: ctaAnim.interpolate({ inputRange: [0, 1], outputRange: [28, 0] }) }],
                 },
               ]}
             >
               <Animated.View style={{ width: '100%', transform: [{ scale: ctaPulse }] }}>
                 <TouchableOpacity style={styles.getStartedBtn} onPress={openRegister} activeOpacity={0.85}>
-                  <Text style={styles.getStartedText}>Get Started — It's Free</Text>
-                  <Ionicons name="arrow-forward" size={18} color="#fff" />
+                  <Text style={styles.getStartedText}>Get Started – It's Free  →</Text>
                 </TouchableOpacity>
               </Animated.View>
               <TouchableOpacity onPress={openLogin} activeOpacity={0.7} style={styles.signinRow}>
@@ -510,6 +384,7 @@ export default function LandingScreen() {
                 </Text>
               </TouchableOpacity>
             </Animated.View>
+
           </ScrollView>
         </Animated.View>
       )}
@@ -546,127 +421,96 @@ const styles = StyleSheet.create({
     letterSpacing: 0.2,
   },
 
-  scroll: { alignItems: 'center', paddingHorizontal: 24 },
+  scroll: { alignItems: 'center', paddingHorizontal: 22 },
 
-  hero: { alignItems: 'center', marginBottom: 32 },
-  logoWrap: { marginBottom: 16 },
-  logoBadge: {
-    width: 80,
-    height: 80,
-    borderRadius: 22,
-    backgroundColor: PALETTE.primary,
-    alignItems: 'center',
-    justifyContent: 'center',
-    shadowColor: PALETTE.primary,
-    shadowOffset: { width: 0, height: 6 },
-    shadowOpacity: 0.3,
-    shadowRadius: 16,
-    elevation: 8,
-  },
   appName: {
-    fontSize: 38,
+    fontSize: 44,
     color: PALETTE.fg,
     fontFamily: 'Inter_700Bold',
-    letterSpacing: -0.5,
+    letterSpacing: -1.5,
     marginBottom: 10,
   },
   tagline: {
-    fontSize: 17,
+    fontSize: 16,
     color: PALETTE.muted,
     fontFamily: 'Inter_400Regular',
     textAlign: 'center',
-    lineHeight: 26,
-    maxWidth: 280,
+    lineHeight: 24,
   },
 
-  shelfPreview: {
+  booksCard: {
     backgroundColor: PALETTE.card,
-    borderRadius: 16,
-    paddingHorizontal: 16,
-    paddingTop: 16,
-    paddingBottom: 0,
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: PALETTE.border,
     width: '100%',
-    borderWidth: 1,
-    borderColor: PALETTE.border,
-    marginBottom: 8,
-    overflow: 'hidden',
-  },
-  shelfBooks: {
     flexDirection: 'row',
-    alignItems: 'flex-end',
-    gap: 5,
     justifyContent: 'center',
+    alignItems: 'center',
+    paddingVertical: 22,
+    paddingHorizontal: 24,
+    gap: 24,
+    marginBottom: 16,
+    shadowColor: '#201b15',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.07,
+    shadowRadius: 8,
+    elevation: 3,
   },
-  bookSpine: {
-    width: 34,
-    borderTopLeftRadius: 3,
-    borderTopRightRadius: 3,
+  bookEmoji: {
+    fontSize: 52,
   },
-  shelfFloor: {
-    marginTop: 4,
-    height: 8,
-    backgroundColor: PALETTE.border,
-    marginHorizontal: -16,
-  },
-  shelfCaption: {
-    fontSize: 13,
-    color: PALETTE.muted,
-    fontFamily: 'Inter_400Regular',
-    marginBottom: 32,
-    textAlign: 'center',
+  bookEmojiCenter: {
+    fontSize: 64,
+    marginTop: -6,
   },
 
-  features: { width: '100%', gap: 12, marginBottom: 32 },
-  featureCard: {
-    backgroundColor: PALETTE.card,
-    borderRadius: 14,
-    borderWidth: 1,
-    borderColor: PALETTE.border,
-    padding: 18,
+  grid: {
     flexDirection: 'row',
-    alignItems: 'flex-start',
-    gap: 14,
+    flexWrap: 'wrap',
+    gap: 10,
+    width: '100%',
+    marginBottom: 16,
   },
-  featureIconWrap: {
-    width: 52,
-    height: 52,
-    borderRadius: 14,
-    alignItems: 'center',
-    justifyContent: 'center',
-    flexShrink: 0,
+  featureCard: {
+    width: '48.4%',
+    borderRadius: 18,
+    padding: 16,
+    minHeight: 160,
+    justifyContent: 'flex-start',
   },
-  featureText: { flex: 1 },
   featureTitle: {
-    fontSize: 15,
-    color: PALETTE.fg,
-    fontFamily: 'Inter_600SemiBold',
-    marginBottom: 4,
+    fontSize: 16,
+    color: '#ffffff',
+    fontFamily: 'Inter_700Bold',
+    lineHeight: 22,
+    marginBottom: 8,
   },
   featureDesc: {
-    fontSize: 13,
-    color: PALETTE.muted,
+    fontSize: 11.5,
+    color: 'rgba(255,255,255,0.88)',
     fontFamily: 'Inter_400Regular',
-    lineHeight: 20,
+    lineHeight: 17,
   },
 
   quoteBlock: {
     backgroundColor: PALETTE.card,
-    borderRadius: 14,
+    borderRadius: 18,
     borderWidth: 1,
     borderColor: PALETTE.border,
-    padding: 20,
+    paddingVertical: 22,
+    paddingHorizontal: 24,
     width: '100%',
     alignItems: 'center',
     gap: 10,
-    marginBottom: 36,
+    marginBottom: 28,
   },
   quoteText: {
-    fontSize: 14,
+    fontSize: 15,
     color: PALETTE.fg,
     fontFamily: 'Inter_400Regular',
     textAlign: 'center',
-    lineHeight: 22,
-    fontStyle: 'italic',
+    lineHeight: 24,
   },
   quoteAuthor: {
     fontSize: 13,
@@ -674,35 +518,36 @@ const styles = StyleSheet.create({
     fontFamily: 'Inter_500Medium',
   },
 
-  cta: { width: '100%', alignItems: 'center', gap: 16 },
+  cta: { width: '100%', alignItems: 'center', gap: 14 },
   getStartedBtn: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 8,
-    backgroundColor: PALETTE.primary,
-    borderRadius: 14,
+    backgroundColor: PALETTE.ctaBtn,
+    borderRadius: 50,
     paddingVertical: 16,
+    paddingHorizontal: 28,
     width: '100%',
-    shadowColor: PALETTE.primary,
+    shadowColor: PALETTE.ctaBtn,
     shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
-    shadowRadius: 12,
-    elevation: 6,
+    shadowOpacity: 0.28,
+    shadowRadius: 10,
+    elevation: 5,
   },
   getStartedText: {
     fontSize: 16,
-    color: '#fff',
+    color: '#ffffff',
     fontFamily: 'Inter_600SemiBold',
+    letterSpacing: 0.2,
   },
   signinRow: { alignItems: 'center' },
   signinText: {
-    fontSize: 14,
+    fontSize: 13,
     color: PALETTE.muted,
     fontFamily: 'Inter_400Regular',
   },
   signinLink: {
-    color: PALETTE.primary,
-    fontFamily: 'Inter_600SemiBold',
+    color: PALETTE.fg,
+    fontFamily: 'Inter_700Bold',
   },
 });
