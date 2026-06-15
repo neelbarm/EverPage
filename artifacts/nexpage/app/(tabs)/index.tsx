@@ -6,6 +6,7 @@ import { Feather, Ionicons } from '@expo/vector-icons';
 import { useColors } from '@/hooks/useColors';
 import { useStore } from '@/context/StoreContext';
 import { BookCover } from '@/components/BookCover';
+import { DailyGoalModal } from '@/components/DailyGoalModal';
 
 function formatDate(): string {
   const d = new Date();
@@ -28,7 +29,8 @@ export default function ShelfScreen() {
   const colors = useColors();
   const insets = useSafeAreaInsets();
   const router = useRouter();
-  const { books, streak, recommendedBooks, addBook, pendingFreezeEarned, clearPendingFreezeEarned, pendingGoalMet, clearPendingGoalMet } = useStore();
+  const { books, streak, recommendedBooks, addBook, setDailyGoal, pendingFreezeEarned, clearPendingFreezeEarned, pendingGoalMet, clearPendingGoalMet } = useStore();
+  const [showGoalModal, setShowGoalModal] = useState(false);
   const topPad = insets.top + (Platform.OS === 'web' ? 67 : 0);
 
   const activeBooks = useMemo(() => books.filter(b => !b.finishedAt), [books]);
@@ -138,7 +140,7 @@ export default function ShelfScreen() {
         return (
           <TouchableOpacity
             style={[styles.goalStrip, { backgroundColor: colors.card, borderColor: met ? '#3A6645' : colors.border }]}
-            onPress={() => router.push('/(tabs)/stats')}
+            onPress={() => setShowGoalModal(true)}
             activeOpacity={0.8}
           >
             <View style={[styles.goalStripIcon, { backgroundColor: met ? '#e8f4ed' : colors.muted }]}>
@@ -157,6 +159,7 @@ export default function ShelfScreen() {
                 <View style={[styles.goalStripFill, { width: `${pct * 100}%` as any, backgroundColor: met ? '#3A6645' : colors.primary }]} />
               </View>
             </View>
+            <Feather name="edit-2" size={12} color={met ? '#3A6645' : colors.mutedForeground} style={{ opacity: 0.6 }} />
           </TouchableOpacity>
         );
       })()}
@@ -290,6 +293,13 @@ export default function ShelfScreen() {
           </Text>
         </Animated.View>
       )}
+
+      <DailyGoalModal
+        visible={showGoalModal}
+        initialMinutes={streak.dailyGoalMinutes}
+        onSave={(minutes) => { setDailyGoal(minutes); setShowGoalModal(false); }}
+        onClose={() => setShowGoalModal(false)}
+      />
 
       <Modal
         visible={!!selectedRec}
