@@ -20,6 +20,8 @@ const colors = {
     input: "#ddd0be",
     teal: "#1B6B72",
     tabBar: "#A8C5D6",
+    tabBarInactive: "#5a5048",
+    tabBarFab: "#1C2028",
   },
   dark: {
     text: "#f2e9db",
@@ -42,6 +44,8 @@ const colors = {
     input: "#2e2218",
     teal: "#2A8A94",
     tabBar: "#1A3545",
+    tabBarInactive: "#8a9ca8",
+    tabBarFab: "#e0d5c4",
   },
   radius: 12,
 };

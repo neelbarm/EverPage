@@ -10,8 +10,6 @@ import { useColors } from "@/hooks/useColors";
 import { useAuth } from "@/lib/auth";
 import { useSocial } from "@/context/SocialContext";
 
-const FAB_COLOR = "#1C2028";
-
 function NativeTabLayout() {
   return (
     <NativeTabs>
@@ -50,7 +48,7 @@ function ClassicTabLayout() {
       screenOptions={{
         headerShown: false,
         tabBarActiveTintColor: colors.foreground,
-        tabBarInactiveTintColor: "rgba(28,32,40,0.42)",
+        tabBarInactiveTintColor: colors.tabBarInactive,
         tabBarStyle: {
           position: "absolute",
           backgroundColor: "transparent",
@@ -74,6 +72,12 @@ function ClassicTabLayout() {
             ]}
           />
         ),
+        tabBarLabelStyle: {
+          fontFamily: 'Inter_600SemiBold',
+          fontSize: 11,
+          letterSpacing: 0.2,
+          marginBottom: 4,
+        },
       }}
     >
       <Tabs.Screen
@@ -119,10 +123,10 @@ function ClassicTabLayout() {
                   width: 52,
                   height: 52,
                   borderRadius: 26,
-                  backgroundColor: FAB_COLOR,
+                  backgroundColor: colors.tabBarFab,
                   alignItems: "center",
                   justifyContent: "center",
-                  shadowColor: FAB_COLOR,
+                  shadowColor: colors.tabBarFab,
                   shadowOffset: { width: 0, height: 4 },
                   shadowOpacity: 0.4,
                   shadowRadius: 10,
