@@ -134,6 +134,7 @@ function ChangePasswordModal({
                 : <Text style={[styles.saveBtnText, { fontFamily: 'Inter_600SemiBold' }]}>Update password</Text>
               }
             </TouchableOpacity>
+            </TouchableOpacity>
           </Animated.View>
         </TouchableOpacity>
       </KeyboardAvoidingView>
