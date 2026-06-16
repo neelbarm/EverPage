@@ -1,8 +1,8 @@
-import React, { useState, useCallback, useEffect } from 'react';
+import React, { useState, useCallback, useEffect, useRef } from 'react';
 import {
-  View, Text, ScrollView, TouchableOpacity, StyleSheet,
+  Animated, View, Text, ScrollView, TouchableOpacity, StyleSheet,
   Platform, TextInput, Switch, ActivityIndicator,
-  Modal, KeyboardAvoidingView,
+  Modal, KeyboardAvoidingView, PanResponder,
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -15,6 +15,7 @@ import { useSocial } from '@/context/SocialContext';
 import { useAuth } from '@/lib/auth';
 import { scheduleDailyReminder, cancelDailyReminder } from '@/lib/notifications';
 import RegisterModal from '@/components/RegisterModal';
+import { BottomSheet } from '@/components/BottomSheet';
 
 const APP_VERSION = '1.0.0';
 
@@ -29,10 +30,25 @@ function ChangePasswordModal({
   const [confirm, setConfirm] = useState('');
   const [error, setError] = useState('');
   const [saving, setSaving] = useState(false);
+  const translateY = useRef(new Animated.Value(0)).current;
+  function dismiss() {
+    Animated.timing(translateY, { toValue: 800, duration: 220, useNativeDriver: true })
+      .start(() => { onClose(); translateY.setValue(0); });
+  }
+  const pan = useRef(PanResponder.create({
+    onStartShouldSetPanResponder: () => false,
+    onMoveShouldSetPanResponder: (_, g) => g.dy > 8 && g.dy > Math.abs(g.dx) * 1.5,
+    onPanResponderMove: (_, g) => { if (g.dy > 0) translateY.setValue(g.dy); },
+    onPanResponderRelease: (_, g) => {
+      if (g.dy > 100 || g.vy > 0.8) dismiss();
+      else Animated.spring(translateY, { toValue: 0, useNativeDriver: true }).start();
+    },
+  })).current;
 
   useEffect(() => {
     if (!visible) {
       setCurrent(''); setNext(''); setConfirm(''); setError(''); setSaving(false);
+      translateY.setValue(0);
     }
   }, [visible]);
 
@@ -53,13 +69,14 @@ function ChangePasswordModal({
   }
 
   return (
-    <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
+    <Modal visible={visible} transparent animationType="slide" onRequestClose={dismiss}>
       <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
-        <TouchableOpacity style={styles.overlay} activeOpacity={1} onPress={onClose}>
-          <TouchableOpacity
-            activeOpacity={1}
-            style={[styles.cpSheet, { backgroundColor: colors.card, borderColor: colors.border, paddingBottom: insets.bottom + 24 }]}
-          >
+        <TouchableOpacity style={styles.overlay} activeOpacity={1} onPress={dismiss}>
+          <Animated.View style={{ transform: [{ translateY }] }} {...pan.panHandlers}>
+            <TouchableOpacity
+              activeOpacity={1}
+              style={[styles.cpSheet, { backgroundColor: colors.card, borderColor: colors.border, paddingBottom: insets.bottom + 24 }]}
+            >
             <View style={[styles.handle, { backgroundColor: colors.border }]} />
             <Text style={[styles.sheetTitle, { color: colors.foreground, fontFamily: 'Inter_700Bold', marginBottom: 4 }]}>
               Change Password
@@ -117,7 +134,7 @@ function ChangePasswordModal({
                 : <Text style={[styles.saveBtnText, { fontFamily: 'Inter_600SemiBold' }]}>Update password</Text>
               }
             </TouchableOpacity>
-          </TouchableOpacity>
+          </Animated.View>
         </TouchableOpacity>
       </KeyboardAvoidingView>
     </Modal>
@@ -226,9 +243,7 @@ function GoalModal({
   }
 
   return (
-    <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
-      <View style={styles.overlay}>
-        <View style={[styles.sheet, { backgroundColor: colors.card, paddingBottom: insets.bottom + 16 }]}>
+    <BottomSheet visible={visible} onClose={onClose} backgroundColor={colors.card} paddingBottom={insets.bottom + 16}>
           <View style={[styles.handle, { backgroundColor: colors.border }]} />
           <Text style={[styles.sheetTitle, { color: colors.foreground, fontFamily: 'Inter_700Bold' }]}>Daily Reading Goal</Text>
           <Text style={[styles.sheetSub, { color: colors.mutedForeground, fontFamily: 'Inter_600SemiBold' }]}>MINUTES PER DAY</Text>
@@ -287,9 +302,7 @@ function GoalModal({
           >
             <Text style={[styles.saveBtnText, { fontFamily: 'Inter_600SemiBold', color: showError ? colors.mutedForeground : '#fff' }]}>Save</Text>
           </TouchableOpacity>
-        </View>
-      </View>
-    </Modal>
+    </BottomSheet>
   );
 }
 
@@ -313,9 +326,7 @@ function ReminderModal({
     return `${d} ${h >= 12 ? 'PM' : 'AM'}`;
   }
   return (
-    <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
-      <View style={styles.overlay}>
-        <View style={[styles.sheet, { backgroundColor: colors.card, paddingBottom: insets.bottom + 16 }]}>
+    <BottomSheet visible={visible} onClose={onClose} backgroundColor={colors.card} paddingBottom={insets.bottom + 16}>
           <View style={[styles.handle, { backgroundColor: colors.border }]} />
           <Text style={[styles.sheetTitle, { color: colors.foreground, fontFamily: 'Inter_700Bold' }]}>Reading Reminder</Text>
           <View style={[styles.toggleRow, { borderBottomColor: colors.border }]}>
@@ -357,9 +368,7 @@ function ReminderModal({
           <TouchableOpacity style={[styles.saveBtn, { backgroundColor: colors.primary }]} onPress={() => onSave(enabled, hour, minute)} activeOpacity={0.85}>
             <Text style={[styles.saveBtnText, { fontFamily: 'Inter_600SemiBold' }]}>Save</Text>
           </TouchableOpacity>
-        </View>
-      </View>
-    </Modal>
+    </BottomSheet>
   );
 }
 

@@ -20,6 +20,7 @@ import { useSocial } from '@/context/SocialContext';
 import { BookCover } from '@/components/BookCover';
 import { scheduleDailyReminder, cancelDailyReminder } from '@/lib/notifications';
 import { DailyGoalModal } from '@/components/DailyGoalModal';
+import { BottomSheet } from '@/components/BottomSheet';
 
 function formatReminderTime(hour: number, minute: number): string {
   const h = hour === 0 ? 12 : hour > 12 ? hour - 12 : hour;
@@ -61,14 +62,7 @@ function ReminderModal({
   }
 
   return (
-    <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
-      <View style={styles.modalOverlay}>
-        <View
-          style={[
-            styles.modalSheet,
-            { backgroundColor: colors.card, paddingBottom: insets.bottom + 16 },
-          ]}
-        >
+    <BottomSheet visible={visible} onClose={onClose} backgroundColor={colors.card} paddingBottom={insets.bottom + 16}>
           <View style={[styles.modalHandle, { backgroundColor: colors.border }]} />
           <Text style={[styles.modalTitle, { color: colors.foreground, fontFamily: 'Inter_700Bold' }]}>
             Reading Reminder
@@ -177,9 +171,7 @@ function ReminderModal({
               Save
             </Text>
           </TouchableOpacity>
-        </View>
-      </View>
-    </Modal>
+    </BottomSheet>
   );
 }
 
@@ -477,14 +469,7 @@ export default function YouScreen() {
         onClose={() => setShowGoalModal(false)}
       />
 
-      <Modal
-        visible={showGenreModal}
-        animationType="slide"
-        transparent
-        onRequestClose={() => setShowGenreModal(false)}
-      >
-        <View style={styles.modalOverlay}>
-          <View style={[styles.modalSheet, { backgroundColor: colors.card, paddingBottom: insets.bottom + 24 }]}>
+      <BottomSheet visible={showGenreModal} onClose={() => setShowGenreModal(false)} backgroundColor={colors.card} paddingBottom={insets.bottom + 24}>
             <View style={[styles.modalHandle, { backgroundColor: colors.border }]} />
             <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
               <Text style={[styles.modalTitle, { color: colors.foreground, fontFamily: 'Inter_700Bold' }]}>
@@ -529,9 +514,7 @@ export default function YouScreen() {
                 </ScrollView>
               );
             })()}
-          </View>
-        </View>
-      </Modal>
+      </BottomSheet>
     </View>
   );
 }

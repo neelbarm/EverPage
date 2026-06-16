@@ -1,15 +1,9 @@
 import React, { useEffect, useState } from 'react';
-import {
-  Modal,
-  View,
-  Text,
-  TouchableOpacity,
-  TextInput,
-  StyleSheet,
-} from 'react-native';
+import { View, Text, TouchableOpacity, TextInput, StyleSheet } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Feather } from '@expo/vector-icons';
 import { useColors } from '@/hooks/useColors';
+import { BottomSheet } from '@/components/BottomSheet';
 
 export function DailyGoalModal({
   visible,
@@ -49,112 +43,96 @@ export function DailyGoalModal({
   }
 
   return (
-    <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
-      <View style={styles.modalOverlay}>
-        <View
-          style={[
-            styles.modalSheet,
-            { backgroundColor: colors.card, paddingBottom: insets.bottom + 16 },
-          ]}
-        >
-          <View style={[styles.modalHandle, { backgroundColor: colors.border }]} />
-          <Text style={[styles.modalTitle, { color: colors.foreground, fontFamily: 'Inter_700Bold' }]}>
-            Daily Reading Goal
-          </Text>
+    <BottomSheet
+      visible={visible}
+      onClose={onClose}
+      backgroundColor={colors.card}
+      paddingBottom={insets.bottom + 16}
+    >
+      <View style={[styles.modalHandle, { backgroundColor: colors.border }]} />
+      <Text style={[styles.modalTitle, { color: colors.foreground, fontFamily: 'Inter_700Bold' }]}>
+        Daily Reading Goal
+      </Text>
 
-          <Text style={[styles.pickerLabel, { color: colors.mutedForeground, fontFamily: 'Inter_600SemiBold' }]}>
-            MINUTES PER DAY
-          </Text>
-          <View style={styles.minuteRow}>
-            {options.map(m => (
-              <TouchableOpacity
-                key={m}
-                onPress={() => handleChipPress(m)}
-                style={[
-                  styles.minuteChip,
-                  {
-                    backgroundColor: m === parsed && isValid && !isCustomActive ? colors.primary : colors.muted,
-                    borderColor: m === parsed && isValid && !isCustomActive ? colors.primary : colors.border,
-                  },
-                ]}
-                activeOpacity={0.7}
-              >
-                <Text
-                  style={[
-                    styles.minuteChipText,
-                    {
-                      color: m === parsed && isValid && !isCustomActive ? '#fff' : colors.foreground,
-                      fontFamily: 'Inter_500Medium',
-                    },
-                  ]}
-                >
-                  {m} min
-                </Text>
-              </TouchableOpacity>
-            ))}
-          </View>
-
-          <View style={styles.goalCustomRow}>
-            <Text style={[styles.goalOrLabel, { color: colors.mutedForeground, fontFamily: 'Inter_400Regular' }]}>or enter custom</Text>
-            <View style={[
-              styles.goalInputWrap,
-              { borderColor: showError ? '#c0392b' : isCustomActive ? colors.primary : colors.border, backgroundColor: colors.background },
-            ]}>
-              <TextInput
-                style={[styles.goalInput, { color: colors.foreground, fontFamily: 'Inter_500Medium' }]}
-                value={inputText}
-                onChangeText={handleTextChange}
-                keyboardType="number-pad"
-                placeholder="e.g. 25"
-                placeholderTextColor={colors.mutedForeground}
-                maxLength={3}
-                selectTextOnFocus
-              />
-              <Text style={[styles.goalInputUnit, { color: colors.mutedForeground, fontFamily: 'Inter_400Regular' }]}>min</Text>
-            </View>
-          </View>
-          {showError && (
-            <Text style={[styles.goalError, { color: '#c0392b', fontFamily: 'Inter_400Regular' }]}>
-              Enter a value between 1 and 480
-            </Text>
-          )}
-
-          <View style={[styles.previewRow, { backgroundColor: colors.muted, borderRadius: 12 }]}>
-            <Feather name="target" size={16} color={colors.primary} />
-            <Text style={[styles.previewText, { color: colors.mutedForeground, fontFamily: 'Inter_400Regular' }]}>
-              {`Read ${isValid ? parsed : '?'} minutes a day to keep your streak alive.`}
-            </Text>
-          </View>
-
+      <Text style={[styles.pickerLabel, { color: colors.mutedForeground, fontFamily: 'Inter_600SemiBold' }]}>
+        MINUTES PER DAY
+      </Text>
+      <View style={styles.minuteRow}>
+        {options.map(m => (
           <TouchableOpacity
-            style={[styles.saveBtn, { backgroundColor: showError ? colors.muted : colors.primary }]}
-            onPress={() => { if (isValid) onSave(parsed); }}
-            activeOpacity={0.8}
-            disabled={showError}
+            key={m}
+            onPress={() => handleChipPress(m)}
+            style={[
+              styles.minuteChip,
+              {
+                backgroundColor: m === parsed && isValid && !isCustomActive ? colors.primary : colors.muted,
+                borderColor: m === parsed && isValid && !isCustomActive ? colors.primary : colors.border,
+              },
+            ]}
+            activeOpacity={0.7}
           >
-            <Text style={[styles.saveBtnText, { fontFamily: 'Inter_600SemiBold', color: showError ? colors.mutedForeground : '#fff' }]}>
-              Save
+            <Text
+              style={[
+                styles.minuteChipText,
+                {
+                  color: m === parsed && isValid && !isCustomActive ? '#fff' : colors.foreground,
+                  fontFamily: 'Inter_500Medium',
+                },
+              ]}
+            >
+              {m} min
             </Text>
           </TouchableOpacity>
+        ))}
+      </View>
+
+      <View style={styles.goalCustomRow}>
+        <Text style={[styles.goalOrLabel, { color: colors.mutedForeground, fontFamily: 'Inter_400Regular' }]}>or enter custom</Text>
+        <View style={[
+          styles.goalInputWrap,
+          { borderColor: showError ? '#c0392b' : isCustomActive ? colors.primary : colors.border, backgroundColor: colors.background },
+        ]}>
+          <TextInput
+            style={[styles.goalInput, { color: colors.foreground, fontFamily: 'Inter_500Medium' }]}
+            value={inputText}
+            onChangeText={handleTextChange}
+            keyboardType="number-pad"
+            placeholder="e.g. 25"
+            placeholderTextColor={colors.mutedForeground}
+            maxLength={3}
+            selectTextOnFocus
+          />
+          <Text style={[styles.goalInputUnit, { color: colors.mutedForeground, fontFamily: 'Inter_400Regular' }]}>min</Text>
         </View>
       </View>
-    </Modal>
+      {showError && (
+        <Text style={[styles.goalError, { color: '#c0392b', fontFamily: 'Inter_400Regular' }]}>
+          Enter a value between 1 and 480
+        </Text>
+      )}
+
+      <View style={[styles.previewRow, { backgroundColor: colors.muted, borderRadius: 12 }]}>
+        <Feather name="target" size={16} color={colors.primary} />
+        <Text style={[styles.previewText, { color: colors.mutedForeground, fontFamily: 'Inter_400Regular' }]}>
+          {`Read ${isValid ? parsed : '?'} minutes a day to keep your streak alive.`}
+        </Text>
+      </View>
+
+      <TouchableOpacity
+        style={[styles.saveBtn, { backgroundColor: showError ? colors.muted : colors.primary }]}
+        onPress={() => { if (isValid) onSave(parsed); }}
+        activeOpacity={0.8}
+        disabled={showError}
+      >
+        <Text style={[styles.saveBtnText, { fontFamily: 'Inter_600SemiBold', color: showError ? colors.mutedForeground : '#fff' }]}>
+          Save
+        </Text>
+      </TouchableOpacity>
+    </BottomSheet>
   );
 }
 
 const styles = StyleSheet.create({
-  modalOverlay: {
-    flex: 1,
-    justifyContent: 'flex-end',
-    backgroundColor: 'rgba(0,0,0,0.35)',
-  },
-  modalSheet: {
-    borderTopLeftRadius: 24,
-    borderTopRightRadius: 24,
-    paddingHorizontal: 20,
-    paddingTop: 12,
-    gap: 14,
-  },
   modalHandle: {
     width: 36,
     height: 4,
