@@ -339,8 +339,8 @@ export default function YouScreen() {
           ))}
         </View>
 
-        {/* Wrapped */}
-        <TouchableOpacity
+        {/* Wrapped — only visible in December */}
+        {new Date().getMonth() === 11 && <TouchableOpacity
           style={[styles.wrappedCard, { backgroundColor: colors.primary }]}
           onPress={() => router.push({ pathname: '/wrapped/[year]', params: { year: String(new Date().getFullYear()) } })}
           activeOpacity={0.88}
@@ -354,14 +354,14 @@ export default function YouScreen() {
             </Text>
           </View>
           <Ionicons name="chevron-forward" size={18} color="rgba(255,255,255,0.7)" />
-        </TouchableOpacity>
+        </TouchableOpacity>}
 
         {/* Reading taste */}
         <Text style={[styles.sectionLabel, { color: colors.mutedForeground, fontFamily: 'Inter_600SemiBold' }]}>READING TASTE</Text>
         <View style={[styles.genreCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
           {profile.genres.length === 0 ? (
-            <View style={[styles.genreRow]}>
-              <Text style={[styles.genreName, { color: colors.mutedForeground, fontFamily: 'Inter_400Regular' }]}>
+            <View style={{ paddingVertical: 18, alignItems: 'center' }}>
+              <Text style={{ color: colors.mutedForeground, fontFamily: 'Inter_400Regular', fontSize: 14 }}>
                 Genres appear once you add books.
               </Text>
             </View>

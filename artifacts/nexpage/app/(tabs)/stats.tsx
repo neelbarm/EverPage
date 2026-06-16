@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { View, Text, ScrollView, TouchableOpacity, StyleSheet, Platform, ActivityIndicator } from 'react-native';
+import { View, Text, ScrollView, TouchableOpacity, StyleSheet, Platform, ActivityIndicator, Modal, TextInput, Pressable } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
@@ -73,7 +73,9 @@ function LeaderRow({ entry, rank }: { entry: LeaderboardEntry; rank: number }) {
 export default function StatsScreen() {
   const colors = useColors();
   const insets = useSafeAreaInsets();
-  const { streak, profile, recommendedBooks } = useStore();
+  const { streak, profile, recommendedBooks, addBook } = useStore();
+  const [selectedRec, setSelectedRec] = useState<typeof recommendedBooks[0] | null>(null);
+  const [recPagesStr, setRecPagesStr] = useState('');
   const {
     isRegistered,
     leaderboard,
@@ -237,7 +239,12 @@ export default function StatsScreen() {
             <Text style={[styles.sectionTitle, { color: colors.mutedForeground, fontFamily: 'Inter_600SemiBold', marginTop: 8 }]}>PICKED FOR YOU</Text>
             <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 12, paddingVertical: 2 }}>
               {recommendedBooks.map(book => (
-                <View key={book.id} style={[styles.recCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
+                <TouchableOpacity
+                  key={book.id}
+                  style={[styles.recCard, { backgroundColor: colors.card, borderColor: colors.border }]}
+                  onPress={() => { setSelectedRec(book); setRecPagesStr(''); }}
+                  activeOpacity={0.85}
+                >
                   <BookCover bookId={book.id} coverColor={book.coverColor} coverImageUri={book.coverImageUri} width={158} height={100} borderRadius={0} />
                   <View style={styles.recBody}>
                     <Text style={[styles.recTitle, { color: colors.foreground, fontFamily: 'Inter_600SemiBold' }]} numberOfLines={2}>{book.title}</Text>
@@ -249,7 +256,7 @@ export default function StatsScreen() {
                       </Text>
                     )}
                   </View>
-                </View>
+                </TouchableOpacity>
               ))}
             </ScrollView>
 
@@ -325,6 +332,58 @@ export default function StatsScreen() {
       </ScrollView>
 
       <RegisterModal visible={showRegister} onClose={() => setShowRegister(false)} />
+
+      {/* Add recommended book modal */}
+      <Modal
+        visible={!!selectedRec}
+        animationType="slide"
+        transparent
+        onRequestClose={() => setSelectedRec(null)}
+      >
+        <Pressable style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.45)', justifyContent: 'flex-end' }} onPress={() => setSelectedRec(null)}>
+          <Pressable onPress={e => e.stopPropagation()}>
+            <View style={[{ backgroundColor: colors.card, borderTopLeftRadius: 24, borderTopRightRadius: 24, padding: 24, gap: 16 }]}>
+              <View style={{ width: 36, height: 4, borderRadius: 2, backgroundColor: colors.border, alignSelf: 'center', marginBottom: 4 }} />
+              {selectedRec && (
+                <>
+                  <View style={{ flexDirection: 'row', gap: 14 }}>
+                    <BookCover bookId={selectedRec.id} coverColor={selectedRec.coverColor} coverImageUri={selectedRec.coverImageUri} width={72} height={104} borderRadius={8} />
+                    <View style={{ flex: 1, gap: 4, justifyContent: 'center' }}>
+                      <Text style={{ color: colors.foreground, fontFamily: 'Inter_700Bold', fontSize: 16, lineHeight: 22 }} numberOfLines={3}>{selectedRec.title}</Text>
+                      <Text style={{ color: colors.mutedForeground, fontFamily: 'Inter_400Regular', fontSize: 14 }}>{selectedRec.author}</Text>
+                      <Text style={{ color: colors.accent, fontFamily: 'Inter_400Regular', fontSize: 13 }}>{selectedRec.reason}</Text>
+                    </View>
+                  </View>
+                  <View style={{ gap: 8 }}>
+                    <Text style={{ color: colors.mutedForeground, fontFamily: 'Inter_600SemiBold', fontSize: 11, letterSpacing: 1.2 }}>TOTAL PAGES</Text>
+                    <TextInput
+                      style={{ backgroundColor: colors.muted, borderColor: colors.border, borderWidth: 1, borderRadius: 10, paddingHorizontal: 14, paddingVertical: 12, color: colors.foreground, fontFamily: 'Inter_400Regular', fontSize: 16 }}
+                      value={recPagesStr}
+                      onChangeText={setRecPagesStr}
+                      keyboardType="number-pad"
+                      placeholder="e.g. 320"
+                      placeholderTextColor={colors.mutedForeground}
+                    />
+                  </View>
+                  <TouchableOpacity
+                    style={{ backgroundColor: colors.primary, borderRadius: 14, paddingVertical: 14, alignItems: 'center', opacity: recPagesStr.trim() && parseInt(recPagesStr, 10) > 0 ? 1 : 0.4 }}
+                    disabled={!recPagesStr.trim() || parseInt(recPagesStr, 10) <= 0}
+                    onPress={() => {
+                      const pages = parseInt(recPagesStr, 10);
+                      if (!pages || pages <= 0) return;
+                      addBook(selectedRec.title, selectedRec.author, pages, 'Literary Fiction', selectedRec.coverImageUri);
+                      setSelectedRec(null);
+                    }}
+                    activeOpacity={0.85}
+                  >
+                    <Text style={{ color: '#fff', fontFamily: 'Inter_600SemiBold', fontSize: 16 }}>Add to Shelf</Text>
+                  </TouchableOpacity>
+                </>
+              )}
+            </View>
+          </Pressable>
+        </Pressable>
+      </Modal>
     </View>
   );
 }
