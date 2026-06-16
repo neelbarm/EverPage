@@ -148,7 +148,7 @@ export default function StatsScreen() {
 
       <ScrollView
         style={{ flex: 1 }}
-        contentContainerStyle={{ paddingHorizontal: 20, paddingBottom: Platform.OS === 'web' ? 100 : 24, gap: 12 }}
+        contentContainerStyle={{ paddingHorizontal: 20, paddingBottom: 100, gap: 12 }}
         showsVerticalScrollIndicator={false}
         contentInsetAdjustmentBehavior={Platform.OS === 'ios' ? 'automatic' : 'never'}
       >

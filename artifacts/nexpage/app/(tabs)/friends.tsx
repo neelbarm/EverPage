@@ -591,7 +591,7 @@ export default function FriendsScreen() {
           )}
           onRefresh={refreshFeed}
           refreshing={isLoading}
-          contentContainerStyle={{ paddingBottom: Platform.OS === 'web' ? 100 : 20 }}
+          contentContainerStyle={{ paddingBottom: 100 }}
           showsVerticalScrollIndicator={false}
           ListHeaderComponent={
             !showWeek && friendsAtRisk.length > 0 ? (

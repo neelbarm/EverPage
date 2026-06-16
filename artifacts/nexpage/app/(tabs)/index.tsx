@@ -209,7 +209,7 @@ export default function ShelfScreen() {
 
       <ScrollView
         style={{ flex: 1 }}
-        contentContainerStyle={{ paddingBottom: Platform.OS === 'web' ? 100 : 24 }}
+        contentContainerStyle={{ paddingBottom: 100 }}
         contentInsetAdjustmentBehavior={Platform.OS === 'ios' ? 'automatic' : 'never'}
         showsVerticalScrollIndicator={false}
       >

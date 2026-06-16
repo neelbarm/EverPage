@@ -346,7 +346,7 @@ export default function LogScreen() {
           data={activeBooks}
           keyExtractor={b => b.id}
           renderItem={({ item }) => <BookRow book={item} onPress={() => startSession(item)} />}
-          contentContainerStyle={{ paddingBottom: Platform.OS === 'web' ? 100 : 20 }}
+          contentContainerStyle={{ paddingBottom: 100 }}
           scrollEnabled={activeBooks.length > 0}
           showsVerticalScrollIndicator={false}
         />

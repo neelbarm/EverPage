@@ -296,7 +296,7 @@ export default function YouScreen() {
       </View>
 
       <ScrollView
-        contentContainerStyle={{ paddingHorizontal: 20, paddingBottom: Platform.OS === 'web' ? 100 : 24, gap: 16 }}
+        contentContainerStyle={{ paddingHorizontal: 20, paddingBottom: 100, gap: 16 }}
         showsVerticalScrollIndicator={false}
         contentInsetAdjustmentBehavior={Platform.OS === 'ios' ? 'automatic' : 'never'}
       >
