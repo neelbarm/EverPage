@@ -10,11 +10,9 @@ const app: Express = express();
 
 function getAllowedOrigins(): Set<string> {
   const origins = new Set<string>();
-  // Replit dev domain (development)
   if (process.env.REPLIT_DEV_DOMAIN) {
     origins.add(`https://${process.env.REPLIT_DEV_DOMAIN}`);
   }
-  // Replit deployment domains (production) — comma-separated
   if (process.env.REPLIT_DOMAINS) {
     for (const d of process.env.REPLIT_DOMAINS.split(",")) {
       const host = d.trim();
@@ -22,6 +20,13 @@ function getAllowedOrigins(): Set<string> {
     }
   }
   return origins;
+}
+
+function isOriginAllowed(origin: string, allowed: Set<string>): boolean {
+  if (allowed.has(origin)) return true;
+  // Expo Go and Replit tunnel subdomains (e.g. *.expo.picard.replit.dev)
+  if (origin.endsWith(".replit.dev") || origin.endsWith(".replit.app")) return true;
+  return false;
 }
 
 const allowedOrigins = getAllowedOrigins();
@@ -55,7 +60,7 @@ app.use(
         callback(null, true);
         return;
       }
-      if (allowedOrigins.has(requestOrigin)) {
+      if (isOriginAllowed(requestOrigin, allowedOrigins)) {
         callback(null, true);
       } else {
         callback(new Error(`CORS: origin not allowed — ${requestOrigin}`));
