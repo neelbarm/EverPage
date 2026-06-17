@@ -91,6 +91,10 @@ function RootLayoutNav() {
         name="settings"
         options={{ headerShown: false, presentation: "modal" }}
       />
+      <Stack.Screen
+        name="legal"
+        options={{ headerShown: false }}
+      />
     </Stack>
   );
 }

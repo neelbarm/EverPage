@@ -377,7 +377,7 @@ export default function SettingsScreen() {
   const router = useRouter();
   const { profile, streak, reminder, setReminder, setDailyGoal, updateProfile } = useStore();
   const { socialProfile, isRegistered, setNudgesEnabled } = useSocial();
-  const { user, isAuthenticated, logout, changePassword } = useAuth();
+  const { user, isAuthenticated, logout, changePassword, deleteAccount } = useAuth();
 
   const { themeMode, setThemeMode } = useTheme();
 
@@ -393,6 +393,10 @@ export default function SettingsScreen() {
   const [showSignOutConfirm, setShowSignOutConfirm] = useState(false);
   const [showChangePassword, setShowChangePassword] = useState(false);
   const [passwordChanged, setPasswordChanged] = useState(false);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [deletePassword, setDeletePassword] = useState('');
+  const [deleteError, setDeleteError] = useState('');
+  const [deletingAccount, setDeletingAccount] = useState(false);
 
   const topPad = insets.top + (Platform.OS === 'web' ? 67 : 0);
   const hasProfileChanges = name !== profile.name || selectedColor !== profile.color;
@@ -451,6 +455,27 @@ export default function SettingsScreen() {
       router.replace('/');
     } finally {
       setSigningOut(false);
+    }
+  }
+
+  function handleDeleteAccount() {
+    setDeletePassword('');
+    setDeleteError('');
+    setShowDeleteConfirm(true);
+  }
+
+  async function confirmDeleteAccount() {
+    if (!deletePassword) { setDeleteError('Enter your password to confirm.'); return; }
+    setDeletingAccount(true);
+    setDeleteError('');
+    try {
+      await deleteAccount(deletePassword);
+      setShowDeleteConfirm(false);
+      router.replace('/');
+    } catch (e: unknown) {
+      setDeleteError(e instanceof Error ? e.message : 'Something went wrong.');
+    } finally {
+      setDeletingAccount(false);
     }
   }
 
@@ -597,8 +622,15 @@ export default function SettingsScreen() {
                 label="Sign out"
                 destructive
                 onPress={handleSignOut}
-                isLast
                 rightElement={signingOut ? <ActivityIndicator size="small" color={colors.primary} /> : undefined}
+              />
+              <SettingsRow
+                icon="trash-2"
+                iconBg="#b91c1c"
+                label="Delete Account"
+                destructive
+                onPress={handleDeleteAccount}
+                isLast
               />
             </>
           ) : (
@@ -654,6 +686,11 @@ export default function SettingsScreen() {
               ))}
             </View>
           </View>
+          <SettingsRow
+            icon="shield"
+            label="Privacy & Terms"
+            onPress={() => router.push('/legal')}
+          />
           <SettingsRow
             icon="info"
             label="Version"
@@ -711,6 +748,53 @@ export default function SettingsScreen() {
             </TouchableOpacity>
           </View>
         </TouchableOpacity>
+      </Modal>
+
+      <Modal visible={showDeleteConfirm} transparent animationType="fade" onRequestClose={() => { if (!deletingAccount) setShowDeleteConfirm(false); }}>
+        <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={styles.overlay}>
+          <TouchableOpacity style={{ flex: 1 }} activeOpacity={1} onPress={() => { if (!deletingAccount) setShowDeleteConfirm(false); }} />
+          <View style={[styles.confirmSheet, { backgroundColor: colors.card, borderColor: colors.border }]}>
+            <View style={[styles.confirmIconWrap, { backgroundColor: '#fde8ea' }]}>
+              <Feather name="trash-2" size={22} color="#b91c1c" />
+            </View>
+            <Text style={[styles.confirmTitle, { color: colors.foreground, fontFamily: 'Inter_700Bold' }]}>Delete Account?</Text>
+            <Text style={[styles.confirmBody, { color: colors.mutedForeground, fontFamily: 'Inter_400Regular' }]}>
+              This permanently deletes your reading history, streak, notes, and profile. This cannot be undone.
+            </Text>
+            <TextInput
+              style={[styles.deleteInput, { backgroundColor: colors.muted, borderColor: deleteError ? '#b91c1c' : colors.border, color: colors.foreground, fontFamily: 'Inter_400Regular' }]}
+              placeholder="Enter your password to confirm"
+              placeholderTextColor={colors.mutedForeground}
+              secureTextEntry
+              value={deletePassword}
+              onChangeText={(t) => { setDeletePassword(t); setDeleteError(''); }}
+              editable={!deletingAccount}
+              autoCapitalize="none"
+            />
+            {!!deleteError && (
+              <Text style={[styles.deleteErrorText, { fontFamily: 'Inter_400Regular' }]}>{deleteError}</Text>
+            )}
+            <TouchableOpacity
+              style={[styles.confirmBtn, { backgroundColor: '#b91c1c', opacity: deletingAccount ? 0.6 : 1 }]}
+              onPress={confirmDeleteAccount}
+              activeOpacity={0.85}
+              disabled={deletingAccount}
+            >
+              {deletingAccount
+                ? <ActivityIndicator size="small" color="#fff" />
+                : <Text style={[styles.confirmBtnText, { fontFamily: 'Inter_600SemiBold' }]}>Delete my account</Text>
+              }
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.confirmCancelBtn, { borderColor: colors.border }]}
+              onPress={() => setShowDeleteConfirm(false)}
+              activeOpacity={0.7}
+              disabled={deletingAccount}
+            >
+              <Text style={[styles.confirmCancelText, { color: colors.foreground, fontFamily: 'Inter_500Medium' }]}>Cancel</Text>
+            </TouchableOpacity>
+          </View>
+        </KeyboardAvoidingView>
       </Modal>
 
       <Modal visible={showSignOutConfirm} transparent animationType="fade" onRequestClose={() => setShowSignOutConfirm(false)}>
@@ -827,6 +911,12 @@ const styles = StyleSheet.create({
   },
   themeChipText: { fontSize: 12 },
   footerText: { fontSize: 12, textAlign: 'center' },
+  deleteInput: {
+    width: '100%', borderWidth: 1.5, borderRadius: 12,
+    paddingHorizontal: 14, paddingVertical: Platform.OS === 'ios' ? 13 : 10,
+    fontSize: 15, marginTop: 4,
+  },
+  deleteErrorText: { fontSize: 13, color: '#b91c1c', marginTop: 4, textAlign: 'center' },
   confirmSheet: {
     margin: 24, borderRadius: 20, borderWidth: 1,
     padding: 24, alignItems: 'center', gap: 12,

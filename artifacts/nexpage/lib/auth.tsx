@@ -19,6 +19,7 @@ interface AuthContextValue {
   register: (email: string, password: string, username: string, displayName: string) => Promise<void>;
   logout: () => Promise<void>;
   changePassword: (currentPassword: string, newPassword: string) => Promise<void>;
+  deleteAccount: (password: string) => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextValue>({
@@ -29,6 +30,7 @@ const AuthContext = createContext<AuthContextValue>({
   register: async () => {},
   logout: async () => {},
   changePassword: async () => {},
+  deleteAccount: async () => {},
 });
 
 function getApiBaseUrl(): string {
@@ -155,6 +157,30 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   }, []);
 
+  const deleteAccount = useCallback(async (password: string) => {
+    const apiBase = getApiBaseUrl();
+    if (!apiBase) throw new Error("API base URL not configured");
+    const token = await getItem(AUTH_TOKEN_KEY);
+    if (!token) throw new Error("Not authenticated");
+
+    const res = await fetch(`${apiBase}/api/local-auth/account`, {
+      method: "DELETE",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify({ password }),
+    });
+
+    const data = await res.json();
+    if (!res.ok) {
+      throw new Error(data.error || `Delete failed (${res.status})`);
+    }
+
+    await deleteItem(AUTH_TOKEN_KEY);
+    setUser(null);
+  }, []);
+
   return (
     <AuthContext.Provider
       value={{
@@ -165,6 +191,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         register,
         logout,
         changePassword,
+        deleteAccount,
       }}
     >
       {children}

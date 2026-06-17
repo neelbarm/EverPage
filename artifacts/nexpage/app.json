@@ -14,9 +14,22 @@
       "backgroundColor": "#FAF7F2"
     },
     "ios": {
-      "supportsTablet": false
+      "supportsTablet": false,
+      "bundleIdentifier": "app.everpage.mobile",
+      "infoPlist": {
+        "NSPhotoLibraryUsageDescription": "EverPage uses your photo library so you can set a profile picture.",
+        "NSPhotoLibraryAddUsageDescription": "EverPage saves images to your photo library.",
+        "NSUserNotificationUsageDescription": "EverPage sends reading reminders and nudges from friends."
+      }
     },
-    "android": {},
+    "android": {
+      "package": "app.everpage.mobile",
+      "permissions": [
+        "android.permission.RECEIVE_BOOT_COMPLETED",
+        "android.permission.VIBRATE",
+        "android.permission.READ_MEDIA_IMAGES"
+      ]
+    },
     "web": {
       "favicon": "./assets/images/icon.png"
     },
@@ -29,6 +42,12 @@
       ],
       "expo-font",
       "expo-web-browser",
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "EverPage uses your photo library so you can set a profile picture."
+        }
+      ],
       [
         "expo-notifications",
         {

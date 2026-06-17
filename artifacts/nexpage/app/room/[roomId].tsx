@@ -2,7 +2,7 @@ import React, { useEffect, useState, useRef, useCallback } from 'react';
 import {
   View, Text, FlatList, TouchableOpacity, StyleSheet,
   Platform, ActivityIndicator, TextInput, KeyboardAvoidingView,
-  Modal, ScrollView,
+  Modal, ScrollView, Alert,
 } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -121,6 +121,27 @@ export default function RoomScreen() {
     } finally {
       setJoining(false);
     }
+  }
+
+  function handleReportMessage(messageId: string) {
+    Alert.alert(
+      'Report Message',
+      'Is this message inappropriate, spam, or violating community guidelines?',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Report',
+          style: 'destructive',
+          onPress: () => {
+            apiFetch('/report', {
+              method: 'POST',
+              body: JSON.stringify({ contentType: 'room_message', contentId: messageId, reason: 'user_report' }),
+            }).catch(() => {});
+            Alert.alert('Report submitted', 'Thank you. We\'ll review this message.');
+          },
+        },
+      ]
+    );
   }
 
   async function handleSend() {
@@ -301,22 +322,28 @@ export default function RoomScreen() {
                 renderItem={({ item: m }) => (
                   <View style={[styles.messageRow, m.isMe && styles.messageRowMe]}>
                     {!m.isMe && <Avatar initial={m.initial} color={m.color} size={32} />}
-                    <View style={[
-                      styles.messageBubble,
-                      { backgroundColor: m.isMe ? colors.primary : colors.card, borderColor: colors.border },
-                    ]}>
-                      {!m.isMe && (
-                        <Text style={[styles.messageSender, { color: colors.mutedForeground, fontFamily: 'Inter_600SemiBold' }]}>
-                          {m.displayName}
+                    <TouchableOpacity
+                      activeOpacity={0.85}
+                      onLongPress={() => !m.isMe && handleReportMessage(m.id)}
+                      delayLongPress={500}
+                    >
+                      <View style={[
+                        styles.messageBubble,
+                        { backgroundColor: m.isMe ? colors.primary : colors.card, borderColor: colors.border },
+                      ]}>
+                        {!m.isMe && (
+                          <Text style={[styles.messageSender, { color: colors.mutedForeground, fontFamily: 'Inter_600SemiBold' }]}>
+                            {m.displayName}
+                          </Text>
+                        )}
+                        <Text style={[styles.messageBody, { color: m.isMe ? '#fff' : colors.foreground, fontFamily: 'Inter_400Regular' }]}>
+                          {m.body}
                         </Text>
-                      )}
-                      <Text style={[styles.messageBody, { color: m.isMe ? '#fff' : colors.foreground, fontFamily: 'Inter_400Regular' }]}>
-                        {m.body}
-                      </Text>
-                      <Text style={[styles.messageTime, { color: m.isMe ? 'rgba(255,255,255,0.6)' : colors.mutedForeground, fontFamily: 'Inter_400Regular' }]}>
-                        {timeAgo(m.createdAt)} · up to p. {m.spoilerUpToPage}
-                      </Text>
-                    </View>
+                        <Text style={[styles.messageTime, { color: m.isMe ? 'rgba(255,255,255,0.6)' : colors.mutedForeground, fontFamily: 'Inter_400Regular' }]}>
+                          {timeAgo(m.createdAt)} · up to p. {m.spoilerUpToPage}
+                        </Text>
+                      </View>
+                    </TouchableOpacity>
                   </View>
                 )}
                 contentContainerStyle={{ padding: 16, gap: 12, paddingBottom: 8 }}

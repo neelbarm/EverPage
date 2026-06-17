@@ -8,6 +8,7 @@ import bookshelfRouter from "./bookshelf";
 import wrappedRouter from "./wrapped";
 import notesRouter from "./notes";
 import roomsRouter from "./rooms";
+import reportRouter from "./report";
 
 const router: IRouter = Router();
 
@@ -20,5 +21,6 @@ router.use(bookshelfRouter);
 router.use(wrappedRouter);
 router.use(notesRouter);
 router.use(roomsRouter);
+router.use(reportRouter);
 
 export default router;

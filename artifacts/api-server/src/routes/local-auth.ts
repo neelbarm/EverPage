@@ -1,7 +1,7 @@
 import { Router, type IRouter, type Request, type Response } from "express";
 import bcrypt from "bcryptjs";
 import crypto from "crypto";
-import { db, npUsers } from "@workspace/db";
+import { db, npUsers, npBooks, npSessions, npStreak, npMarginNotes, npRoomMembers, npRoomMessages } from "@workspace/db";
 import { eq } from "drizzle-orm";
 import {
   createSession,
@@ -239,6 +239,53 @@ router.post("/local-auth/logout", async (req: Request, res: Response) => {
   if (sid) {
     await deleteSession(sid);
   }
+  res.json({ success: true });
+});
+
+router.delete("/local-auth/account", async (req: Request, res: Response) => {
+  const sid = getSessionId(req);
+  const session = sid ? await getSession(sid) : null;
+  if (!session) {
+    res.status(401).json({ error: "Not authenticated" });
+    return;
+  }
+
+  const { password } = req.body ?? {};
+  if (!password) {
+    res.status(400).json({ error: "Password is required to delete your account" });
+    return;
+  }
+
+  const rows = await db
+    .select()
+    .from(npUsers)
+    .where(eq(npUsers.id, session.user.id))
+    .limit(1);
+
+  if (rows.length === 0 || !rows[0].passwordHash) {
+    res.status(404).json({ error: "Account not found" });
+    return;
+  }
+
+  if (!checkPassword(password, rows[0].passwordHash!)) {
+    res.status(401).json({ error: "Incorrect password" });
+    return;
+  }
+
+  const userId = session.user.id;
+
+  await db.delete(npBooks).where(eq(npBooks.userId, userId));
+  await db.delete(npSessions).where(eq(npSessions.userId, userId));
+  await db.delete(npStreak).where(eq(npStreak.userId, userId));
+  await db.delete(npMarginNotes).where(eq(npMarginNotes.userId, userId));
+  await db.delete(npRoomMembers).where(eq(npRoomMembers.userId, userId));
+  await db.update(npRoomMessages)
+    .set({ body: "[deleted]", userId: "deleted" })
+    .where(eq(npRoomMessages.userId, userId));
+  await db.delete(npUsers).where(eq(npUsers.id, userId));
+
+  if (sid) await deleteSession(sid);
+
   res.json({ success: true });
 });
 

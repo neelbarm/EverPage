@@ -352,12 +352,35 @@ export default function BookDetailScreen() {
             </Text>
             <View style={[styles.notesCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
               {notes.map((note, i) => (
-                <View
+                <TouchableOpacity
                   key={note.id}
                   style={[
                     styles.noteRow,
                     i < notes.length - 1 && { borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: colors.border },
                   ]}
+                  activeOpacity={note.isOwnNote ? 1 : 0.85}
+                  onLongPress={() => {
+                    if (note.isOwnNote) return;
+                    Alert.alert(
+                      'Report Note',
+                      'Is this note inappropriate or violating community guidelines?',
+                      [
+                        { text: 'Cancel', style: 'cancel' },
+                        {
+                          text: 'Report',
+                          style: 'destructive',
+                          onPress: () => {
+                            apiFetch('/report', {
+                              method: 'POST',
+                              body: JSON.stringify({ contentType: 'margin_note', contentId: note.id, reason: 'user_report' }),
+                            }).catch(() => {});
+                            Alert.alert('Report submitted', 'Thank you. We\'ll review this note.');
+                          },
+                        },
+                      ]
+                    );
+                  }}
+                  delayLongPress={500}
                 >
                   <View style={[styles.noteAvatar, { backgroundColor: note.isOwnNote ? colors.primary : note.color }]}>
                     <Text style={[styles.noteInitial, { fontFamily: 'Inter_700Bold' }]}>{note.isOwnNote ? 'Y' : note.initial}</Text>
@@ -371,7 +394,7 @@ export default function BookDetailScreen() {
                     </View>
                     <Text style={[styles.noteText, { color: colors.mutedForeground, fontFamily: 'Inter_400Regular' }]}>{note.noteText}</Text>
                   </View>
-                </View>
+                </TouchableOpacity>
               ))}
             </View>
           </>
