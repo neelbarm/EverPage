@@ -27,29 +27,29 @@ const PALETTE = {
   ctaBtn: '#6AADCB',
 };
 
-const FEATURES: { title: string; description: string; bg: string }[] = [
+const FEATURES: { emoji: string; title: string; description: string; bg: string }[] = [
   {
-    title: 'Your Reading\nShelf',
-    description:
-      'Add books, track your progress page by page, and keep every title you\'re reading — or have ever read — in one beautiful place.',
+    emoji: '📚',
+    title: 'Your Reading Shelf',
+    description: 'Track every book page by page. Keep everything you\'re reading — or have ever read — in one beautiful place.',
     bg: PALETTE.tan,
   },
   {
-    title: 'Daily Streaks\n& Goals',
-    description:
-      'Set a daily reading goal in minutes. Hit it every day to build your streak. Streak freezes keep your progress safe on busy days.',
+    emoji: '🔥',
+    title: 'Daily Streaks & Goals',
+    description: 'Set a daily goal in minutes and build your streak. Streak freezes keep your progress safe on busy days.',
     bg: PALETTE.blue,
   },
   {
-    title: 'Read with\nFriends',
-    description:
-      'See what your friends are reading right now, cheer each other on the leaderboard, and share quotes from the books you love.',
+    emoji: '👥',
+    title: 'Read with Friends',
+    description: 'See what friends are reading, climb the leaderboard together, and share quotes from books you love.',
     bg: PALETTE.teal,
   },
   {
-    title: 'Beautiful\nReading Stats',
-    description:
-      'Charts of your reading minutes, pages per week, and a yearly Wrapped — a personal story of your reading year.',
+    emoji: '✨',
+    title: 'Beautiful Reading Stats',
+    description: 'Weekly charts, all-time totals, and a yearly Wrapped — a personal story of your reading year.',
     bg: PALETTE.wine,
   },
 ];
@@ -340,6 +340,7 @@ export default function LandingScreen() {
                     },
                   ]}
                 >
+                  <Text style={styles.featureEmoji}>{f.emoji}</Text>
                   <Text style={styles.featureTitle}>{f.title}</Text>
                   <Text style={styles.featureDesc}>{f.description}</Text>
                 </Animated.View>
@@ -475,22 +476,26 @@ const styles = StyleSheet.create({
   featureCard: {
     width: '48.4%',
     borderRadius: 18,
-    padding: 16,
-    minHeight: 160,
+    padding: 14,
+    minHeight: 164,
     justifyContent: 'flex-start',
   },
-  featureTitle: {
-    fontSize: 16,
-    color: '#ffffff',
-    fontFamily: 'Inter_700Bold',
-    lineHeight: 22,
+  featureEmoji: {
+    fontSize: 26,
     marginBottom: 8,
   },
+  featureTitle: {
+    fontSize: 14,
+    color: '#ffffff',
+    fontFamily: 'Inter_700Bold',
+    lineHeight: 20,
+    marginBottom: 6,
+  },
   featureDesc: {
-    fontSize: 11.5,
+    fontSize: 11,
     color: 'rgba(255,255,255,0.88)',
     fontFamily: 'Inter_400Regular',
-    lineHeight: 17,
+    lineHeight: 16,
   },
 
   quoteBlock: {
