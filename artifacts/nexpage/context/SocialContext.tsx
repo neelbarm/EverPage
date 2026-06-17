@@ -6,10 +6,11 @@ import React, {
   useCallback,
   useRef,
 } from 'react';
-import { getItem as getStoredItem } from '@/lib/storage';
+import { getItem as getStoredItem, setItem as setStoredItem } from '@/lib/storage';
 import { useAuth } from '@/lib/auth';
 
 const AUTH_TOKEN_KEY = 'auth_session_token';
+const NUDGE_READ_TIME_KEY = 'nudge_last_read_time';
 
 export interface SocialUser {
   id: string;
@@ -128,9 +129,15 @@ export function SocialProvider({ children }: { children: React.ReactNode }) {
   const [leaderboard, setLeaderboard] = useState<LeaderboardEntry[]>([]);
   const [suggestedUsers, setSuggestedUsers] = useState<SocialUser[]>([]);
   const [nudgeHistory, setNudgeHistory] = useState<NudgeHistoryItem[]>([]);
-  const [lastReadNudgeTime, setLastReadNudgeTime] = useState<number>(0);
+  const [lastReadNudgeTime, setLastReadNudgeTime] = useState<number>(() => Date.now());
   const [isLoading, setIsLoading] = useState(false);
   const initialized = useRef(false);
+
+  useEffect(() => {
+    getStoredItem(NUDGE_READ_TIME_KEY).then(val => {
+      if (val) setLastReadNudgeTime(Number(val));
+    }).catch(() => {});
+  }, []);
 
   useEffect(() => {
     if (authLoading) return;
@@ -142,7 +149,6 @@ export function SocialProvider({ children }: { children: React.ReactNode }) {
       setLeaderboard([]);
       setSuggestedUsers([]);
       setNudgeHistory([]);
-      setLastReadNudgeTime(0);
       initialized.current = false;
       return;
     }
@@ -299,7 +305,9 @@ export function SocialProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const markNudgesRead = useCallback(() => {
-    setLastReadNudgeTime(Date.now());
+    const now = Date.now();
+    setLastReadNudgeTime(now);
+    setStoredItem(NUDGE_READ_TIME_KEY, String(now)).catch(() => {});
   }, []);
 
   const uploadAvatar = useCallback(async (localUri: string, mimeType: string) => {

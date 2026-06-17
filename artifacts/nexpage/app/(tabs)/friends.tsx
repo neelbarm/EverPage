@@ -292,6 +292,65 @@ function SearchModal({
   );
 }
 
+function SuggestedUserRow({ user }: { user: SocialUser }) {
+  const colors = useColors();
+  const router = useRouter();
+  const { followUser, unfollowUser, isFollowing } = useSocial();
+  const [loading, setLoading] = useState(false);
+
+  async function toggleFollow() {
+    setLoading(true);
+    try {
+      if (isFollowing(user.id)) {
+        await unfollowUser(user.id);
+      } else {
+        await followUser(user.id);
+        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+      }
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  return (
+    <View style={[styles.card, { borderBottomColor: colors.border }]}>
+      <TouchableOpacity onPress={() => router.push(`/profile/${user.id}` as any)} activeOpacity={0.75}>
+        <AvatarCircle initial={user.initial} color={user.color} />
+      </TouchableOpacity>
+      <View style={styles.cardInfo}>
+        <View style={styles.cardNameRow}>
+          <TouchableOpacity onPress={() => router.push(`/profile/${user.id}` as any)} activeOpacity={0.75}>
+            <Text style={[styles.friendName, { color: colors.foreground, fontFamily: 'Inter_600SemiBold' }]}>
+              {user.displayName}
+            </Text>
+          </TouchableOpacity>
+        </View>
+        <Text style={[styles.bookTitle, { color: colors.mutedForeground, fontFamily: 'Inter_400Regular' }]}>
+          @{user.username}
+        </Text>
+      </View>
+      <TouchableOpacity
+        style={[
+          styles.nudgeBtn,
+          isFollowing(user.id)
+            ? { backgroundColor: colors.muted, borderColor: colors.border }
+            : { backgroundColor: colors.primary, borderColor: colors.primary },
+        ]}
+        onPress={toggleFollow}
+        disabled={loading}
+        activeOpacity={0.8}
+      >
+        {loading
+          ? <ActivityIndicator size="small" color={isFollowing(user.id) ? colors.mutedForeground : '#fff'} />
+          : <Text style={[styles.nudgeBtnText, { color: isFollowing(user.id) ? colors.mutedForeground : '#fff', fontFamily: 'Inter_600SemiBold' }]}>
+              {isFollowing(user.id) ? 'Following' : 'Follow'}
+            </Text>
+        }
+      </TouchableOpacity>
+    </View>
+  );
+}
+
 function NudgeHistoryCard({ item }: { item: NudgeHistoryItem }) {
   const colors = useColors();
   const router = useRouter();
@@ -327,7 +386,7 @@ function NudgeHistoryCard({ item }: { item: NudgeHistoryItem }) {
 export default function FriendsScreen() {
   const colors = useColors();
   const insets = useSafeAreaInsets();
-  const { isRegistered, feed, following, followers, nudgeHistory, unreadNudgeCount, markNudgesRead, isLoading, refreshFeed, followUser, unfollowUser, isFollowing } = useSocial();
+  const { isRegistered, feed, following, followers, suggestedUsers, nudgeHistory, unreadNudgeCount, markNudgesRead, isLoading, refreshFeed, followUser, unfollowUser, isFollowing } = useSocial();
   const { openFollowers } = useLocalSearchParams<{ openFollowers?: string }>();
   const [showWeek, setShowWeek] = useState(false);
   const [showSearch, setShowSearch] = useState(false);
@@ -566,22 +625,41 @@ export default function FriendsScreen() {
           <ActivityIndicator size="large" color={colors.primary} />
         </View>
       ) : following.length === 0 ? (
-        <View style={styles.empty}>
-          <Ionicons name="people-outline" size={48} color={colors.mutedForeground} />
-          <Text style={[styles.emptyTitle, { color: colors.foreground, fontFamily: 'Inter_600SemiBold' }]}>No friends yet</Text>
-          <Text style={[styles.emptyText, { color: colors.mutedForeground, fontFamily: 'Inter_400Regular' }]}>
-            Find readers with shared taste — tap the add button above.
-          </Text>
-          <TouchableOpacity
-            style={[styles.ctaBtn, { backgroundColor: colors.primary }]}
-            onPress={() => setShowSearch(true)}
-            activeOpacity={0.85}
-          >
-            <Text style={[styles.ctaBtnText, { color: colors.primaryForeground, fontFamily: 'Inter_600SemiBold' }]}>
-              Find Readers
+        <ScrollView
+          contentContainerStyle={{ paddingBottom: 100 }}
+          showsVerticalScrollIndicator={false}
+        >
+          <View style={[styles.sectionHeader, { borderBottomColor: colors.border }]}>
+            <Text style={[styles.sectionLabel, { color: colors.mutedForeground, fontFamily: 'Inter_600SemiBold' }]}>
+              SUGGESTED READERS
             </Text>
-          </TouchableOpacity>
-        </View>
+            <TouchableOpacity onPress={() => setShowSearch(true)} activeOpacity={0.7}>
+              <Text style={[{ color: colors.accent, fontSize: 13, fontFamily: 'Inter_600SemiBold' }]}>Search</Text>
+            </TouchableOpacity>
+          </View>
+          {suggestedUsers.length === 0 ? (
+            <View style={styles.empty}>
+              <Ionicons name="people-outline" size={48} color={colors.mutedForeground} />
+              <Text style={[styles.emptyTitle, { color: colors.foreground, fontFamily: 'Inter_600SemiBold' }]}>No friends yet</Text>
+              <Text style={[styles.emptyText, { color: colors.mutedForeground, fontFamily: 'Inter_400Regular' }]}>
+                Find readers with shared taste — tap the add button above.
+              </Text>
+              <TouchableOpacity
+                style={[styles.ctaBtn, { backgroundColor: colors.primary }]}
+                onPress={() => setShowSearch(true)}
+                activeOpacity={0.85}
+              >
+                <Text style={[styles.ctaBtnText, { color: colors.primaryForeground, fontFamily: 'Inter_600SemiBold' }]}>
+                  Find Readers
+                </Text>
+              </TouchableOpacity>
+            </View>
+          ) : (
+            suggestedUsers.map(user => (
+              <SuggestedUserRow key={user.id} user={user} />
+            ))
+          )}
+        </ScrollView>
       ) : (
         <FlatList
           data={filteredFeed}
@@ -651,7 +729,7 @@ const styles = StyleSheet.create({
   toggle: { flexDirection: 'row', borderRadius: 10, padding: 3, alignSelf: 'flex-start' },
   toggleBtn: { paddingHorizontal: 16, paddingVertical: 7, borderRadius: 8 },
   toggleText: { fontSize: 14 },
-  sectionHeader: { paddingHorizontal: 20, paddingVertical: 10, borderBottomWidth: StyleSheet.hairlineWidth },
+  sectionHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 20, paddingVertical: 10, borderBottomWidth: StyleSheet.hairlineWidth },
   sectionLabel: { fontSize: 11, letterSpacing: 1.5 },
   card: { flexDirection: 'row', alignItems: 'flex-start', paddingHorizontal: 20, paddingVertical: 15, gap: 14, borderBottomWidth: StyleSheet.hairlineWidth },
   cardInfo: { flex: 1, gap: 3 },
