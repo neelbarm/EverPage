@@ -17,6 +17,7 @@ export interface SocialUser {
   displayName: string;
   color: string;
   initial: string;
+  avatarUrl: string | null;
 }
 
 export interface ActivityItem {
@@ -80,6 +81,7 @@ interface SocialContextType {
   registerPushToken: (token: string) => Promise<void>;
   setNudgesEnabled: (enabled: boolean) => Promise<void>;
   markNudgesRead: () => void;
+  uploadAvatar: (localUri: string, mimeType: string) => Promise<void>;
 }
 
 const SocialContext = createContext<SocialContextType | null>(null);
@@ -299,6 +301,43 @@ export function SocialProvider({ children }: { children: React.ReactNode }) {
     setLastReadNudgeTime(Date.now());
   }, []);
 
+  const uploadAvatar = useCallback(async (localUri: string, mimeType: string) => {
+    const token = await getAuthToken();
+    const authHeaders: Record<string, string> = {
+      'Content-Type': 'application/json',
+      ...(token ? { 'Authorization': `Bearer ${token}` } : {}),
+    };
+
+    const urlRes = await fetch(`${getApiBase()}/storage/uploads/request-url`, {
+      method: 'POST',
+      headers: authHeaders,
+      credentials: 'include',
+      body: JSON.stringify({ name: 'avatar', size: 0, contentType: mimeType }),
+    });
+    if (!urlRes.ok) throw new Error('Failed to get upload URL');
+    const { uploadURL, objectPath } = await urlRes.json() as { uploadURL: string; objectPath: string };
+
+    const imgRes = await fetch(localUri);
+    const blob = await imgRes.blob();
+    const putRes = await fetch(uploadURL, {
+      method: 'PUT',
+      headers: { 'Content-Type': mimeType },
+      body: blob,
+    });
+    if (!putRes.ok) throw new Error('Failed to upload image');
+
+    const servingUrl = `${getApiBase()}/storage${objectPath}`;
+    const patchRes = await fetch(`${getApiBase()}/social/me/avatar`, {
+      method: 'PATCH',
+      headers: authHeaders,
+      credentials: 'include',
+      body: JSON.stringify({ avatarUrl: servingUrl }),
+    });
+    if (!patchRes.ok) throw new Error('Failed to save avatar URL');
+    const updated = await patchRes.json() as SocialUser & { nudgesEnabled: boolean };
+    setSocialProfile(updated);
+  }, []);
+
   const unreadNudgeCount = nudgeHistory.filter(n => {
     return new Date(n.createdAt).getTime() > lastReadNudgeTime;
   }).length;
@@ -329,6 +368,7 @@ export function SocialProvider({ children }: { children: React.ReactNode }) {
       registerPushToken,
       setNudgesEnabled,
       markNudgesRead,
+      uploadAvatar,
     }}>
       {children}
     </SocialContext.Provider>

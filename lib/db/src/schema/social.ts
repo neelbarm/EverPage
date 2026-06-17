@@ -10,6 +10,7 @@ export const npUsers = pgTable("np_users", {
   displayName: text("display_name").notNull(),
   color: text("color").notNull().default("#1C3A5A"),
   initial: text("initial").notNull(),
+  avatarUrl: text("avatar_url"),
   pushToken: text("push_token"),
   nudgesEnabled: boolean("nudges_enabled").notNull().default(true),
   createdAt: timestamp("created_at").defaultNow().notNull(),

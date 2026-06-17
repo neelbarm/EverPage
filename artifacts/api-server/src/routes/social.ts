@@ -22,11 +22,11 @@ function requireAuth(req: any, res: any): string | null {
 }
 
 function formatUser(u: typeof npUsers.$inferSelect) {
-  return { id: u.id, username: u.username, displayName: u.displayName, color: u.color, initial: u.initial };
+  return { id: u.id, username: u.username, displayName: u.displayName, color: u.color, initial: u.initial, avatarUrl: u.avatarUrl ?? null };
 }
 
 function formatMe(u: typeof npUsers.$inferSelect) {
-  return { id: u.id, username: u.username, displayName: u.displayName, color: u.color, initial: u.initial, nudgesEnabled: u.nudgesEnabled };
+  return { id: u.id, username: u.username, displayName: u.displayName, color: u.color, initial: u.initial, avatarUrl: u.avatarUrl ?? null, nudgesEnabled: u.nudgesEnabled };
 }
 
 async function getSocialProfile(userId: string) {
@@ -525,6 +525,26 @@ router.get("/social/nudges", async (req, res) => {
     .limit(50);
 
   res.json(rows);
+});
+
+router.patch("/social/me/avatar", async (req, res) => {
+  const userId = requireAuth(req, res);
+  if (!userId) return;
+  const { avatarUrl } = req.body ?? {};
+  if (typeof avatarUrl !== "string" && avatarUrl !== null) {
+    res.status(400).json({ error: "avatarUrl (string | null) required" });
+    return;
+  }
+  const updated = await db
+    .update(npUsers)
+    .set({ avatarUrl: avatarUrl ?? null, updatedAt: new Date() })
+    .where(eq(npUsers.id, userId))
+    .returning();
+  if (!updated[0]) {
+    res.status(404).json({ error: "Social profile not found" });
+    return;
+  }
+  res.json(formatMe(updated[0]));
 });
 
 export default router;

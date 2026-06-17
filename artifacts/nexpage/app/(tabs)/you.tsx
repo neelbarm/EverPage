@@ -3,6 +3,7 @@ import {
   Animated,
   View,
   Text,
+  Image,
   ScrollView,
   TouchableOpacity,
   Pressable,
@@ -10,7 +11,10 @@ import {
   Platform,
   Modal,
   Switch,
+  Alert,
+  ActivityIndicator,
 } from 'react-native';
+import * as ImagePicker from 'expo-image-picker';
 import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Feather, Ionicons } from '@expo/vector-icons';
@@ -18,7 +22,7 @@ import { useColors } from '@/hooks/useColors';
 import { useStore } from '@/context/StoreContext';
 import { useSocial } from '@/context/SocialContext';
 import { BookCover } from '@/components/BookCover';
-import { scheduleDailyReminder, cancelDailyReminder, requestNotificationPermissions } from '@/lib/notifications';
+import { scheduleDailyReminder, cancelDailyReminder, requestNotificationPermissions, getExpoPushToken } from '@/lib/notifications';
 import { DailyGoalModal } from '@/components/DailyGoalModal';
 import { BottomSheet } from '@/components/BottomSheet';
 
@@ -179,11 +183,12 @@ export default function YouScreen() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
   const { profile, streak, reminder, setReminder, setDailyGoal, books, pendingGoalMet, clearPendingGoalMet } = useStore();
-  const { socialProfile, setNudgesEnabled, isRegistered, followers } = useSocial();
+  const { socialProfile, setNudgesEnabled, isRegistered, followers, uploadAvatar, registerPushToken } = useSocial();
   const topPad = insets.top + (Platform.OS === 'web' ? 67 : 0);
   const [showReminderModal, setShowReminderModal] = useState(false);
   const [showGoalModal, setShowGoalModal] = useState(false);
   const [togglingNudges, setTogglingNudges] = useState(false);
+  const [uploadingAvatar, setUploadingAvatar] = useState(false);
   const [showGenreModal, setShowGenreModal] = useState(false);
   const [selectedGenre, setSelectedGenre] = useState('');
 
@@ -191,6 +196,13 @@ export default function YouScreen() {
   const goalToastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const goalToastAnim = useRef<Animated.CompositeAnimation | null>(null);
   const [showGoalToast, setShowGoalToast] = useState(false);
+
+  useEffect(() => {
+    if (!isRegistered || Platform.OS === 'web') return;
+    getExpoPushToken().then(token => {
+      if (token) registerPushToken(token).catch(() => {});
+    }).catch(() => {});
+  }, [isRegistered]);
 
   useEffect(() => {
     if (!pendingGoalMet) return;
@@ -249,12 +261,42 @@ export default function YouScreen() {
     if (value && Platform.OS !== 'web') {
       const granted = await requestNotificationPermissions();
       if (!granted) return;
+      const pushToken = await getExpoPushToken();
+      if (pushToken) {
+        registerPushToken(pushToken).catch(() => {});
+      }
     }
     setTogglingNudges(true);
     try {
       await setNudgesEnabled(value);
     } catch { /* ignore */ } finally {
       setTogglingNudges(false);
+    }
+  }
+
+  async function handlePickAvatar() {
+    if (uploadingAvatar || Platform.OS === 'web') return;
+    const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (!perm.granted) {
+      Alert.alert('Permission needed', 'Allow photo access to set a profile picture.');
+      return;
+    }
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ImagePicker.MediaTypeOptions.Images,
+      allowsEditing: true,
+      aspect: [1, 1],
+      quality: 0.7,
+    });
+    if (result.canceled || !result.assets[0]) return;
+    const asset = result.assets[0];
+    const mimeType = asset.mimeType ?? 'image/jpeg';
+    setUploadingAvatar(true);
+    try {
+      await uploadAvatar(asset.uri, mimeType);
+    } catch {
+      Alert.alert('Upload failed', 'Could not update profile picture. Please try again.');
+    } finally {
+      setUploadingAvatar(false);
     }
   }
 
@@ -297,9 +339,34 @@ export default function YouScreen() {
       >
         {/* Profile card */}
         <View style={[styles.profileCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
-          <View style={[styles.avatar, { backgroundColor: profile.color }]}>
-            <Text style={[styles.avatarInitial, { color: '#fff', fontFamily: 'Inter_700Bold' }]}>{profile.initial}</Text>
-          </View>
+          <TouchableOpacity
+            onPress={handlePickAvatar}
+            disabled={uploadingAvatar || Platform.OS === 'web'}
+            activeOpacity={0.8}
+            style={{ alignSelf: 'center' }}
+          >
+            <View style={[styles.avatar, { backgroundColor: profile.color }]}>
+              {socialProfile?.avatarUrl ? (
+                <Image
+                  source={{ uri: socialProfile.avatarUrl }}
+                  style={StyleSheet.absoluteFill}
+                  resizeMode="cover"
+                />
+              ) : (
+                <Text style={[styles.avatarInitial, { color: '#fff', fontFamily: 'Inter_700Bold' }]}>{profile.initial}</Text>
+              )}
+              {uploadingAvatar && (
+                <View style={[StyleSheet.absoluteFill, styles.avatarUploadOverlay]}>
+                  <ActivityIndicator color="#fff" />
+                </View>
+              )}
+            </View>
+            {Platform.OS !== 'web' && (
+              <View style={[styles.avatarEditBadge, { backgroundColor: colors.primary }]}>
+                <Feather name="camera" size={11} color="#fff" />
+              </View>
+            )}
+          </TouchableOpacity>
           <Text style={[styles.profileName, { color: colors.foreground, fontFamily: 'Inter_700Bold' }]}>{profile.name}</Text>
           <View style={[styles.streakBadge, { backgroundColor: colors.primary }]}>
             <Ionicons name="flame" size={13} color="rgba(255,255,255,0.85)" />
@@ -550,8 +617,10 @@ const styles = StyleSheet.create({
     alignItems: 'center', padding: 28, borderRadius: 20, borderWidth: 1,
     shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.05, shadowRadius: 8, elevation: 1,
   },
-  avatar: { width: 84, height: 84, borderRadius: 42, alignItems: 'center', justifyContent: 'center', marginBottom: 14 },
+  avatar: { width: 84, height: 84, borderRadius: 42, alignItems: 'center', justifyContent: 'center', marginBottom: 14, overflow: 'hidden' },
   avatarInitial: { fontSize: 34 },
+  avatarUploadOverlay: { backgroundColor: 'rgba(0,0,0,0.45)', alignItems: 'center', justifyContent: 'center', borderRadius: 42 },
+  avatarEditBadge: { position: 'absolute', bottom: 14, right: -4, width: 22, height: 22, borderRadius: 11, alignItems: 'center', justifyContent: 'center' },
   profileName: { fontSize: 22, marginBottom: 10, letterSpacing: -0.5 },
   streakBadge: { flexDirection: 'row', alignItems: 'center', gap: 5, paddingHorizontal: 13, paddingVertical: 6, borderRadius: 18 },
   streakBadgeText: { fontSize: 13 },
