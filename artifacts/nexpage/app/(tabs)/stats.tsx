@@ -74,7 +74,7 @@ function LeaderRow({ entry, rank }: { entry: LeaderboardEntry; rank: number }) {
 export default function StatsScreen() {
   const colors = useColors();
   const insets = useSafeAreaInsets();
-  const { streak, profile, recommendedBooks, addBook } = useStore();
+  const { streak, profile, recommendedBooks, addBook, reminder } = useStore();
   const [selectedRec, setSelectedRec] = useState<typeof recommendedBooks[0] | null>(null);
   const [recPagesStr, setRecPagesStr] = useState('');
   const {
@@ -199,14 +199,20 @@ export default function StatsScreen() {
                 </Text>
               </View>
             )}
-            <View style={[styles.nudgeCard, { backgroundColor: colors.muted, borderColor: colors.border }]}>
-              <View style={[styles.nudgeCircle, { backgroundColor: colors.accent }]}>
-                <Ionicons name="time-outline" size={18} color="#fff" />
+            {reminder.enabled && (
+              <View style={[styles.nudgeCard, { backgroundColor: colors.muted, borderColor: colors.border }]}>
+                <View style={[styles.nudgeCircle, { backgroundColor: colors.accent }]}>
+                  <Ionicons name="time-outline" size={18} color="#fff" />
+                </View>
+                <Text style={[styles.nudgeText, { color: colors.foreground, fontFamily: 'Inter_400Regular' }]}>
+                  Your reading reminder is set for{' '}
+                  <Text style={{ fontFamily: 'Inter_600SemiBold' }}>
+                    {reminder.hour % 12 === 0 ? 12 : reminder.hour % 12}:{String(reminder.minute).padStart(2, '0')} {reminder.hour < 12 ? 'AM' : 'PM'}
+                  </Text>
+                  . Ready?
+                </Text>
               </View>
-              <Text style={[styles.nudgeText, { color: colors.foreground, fontFamily: 'Inter_400Regular' }]}>
-                Your usual reading time is 9 PM. Ready?
-              </Text>
-            </View>
+            )}
           </>
         ) : (
           <>

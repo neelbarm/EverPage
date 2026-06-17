@@ -405,8 +405,8 @@ export default function YouScreen() {
           ))}
         </View>
 
-        {/* Wrapped — only visible in December */}
-        {new Date().getMonth() === 11 && <TouchableOpacity
+        {/* Wrapped */}
+        <TouchableOpacity
           style={[styles.wrappedCard, { backgroundColor: colors.primary }]}
           onPress={() => router.push({ pathname: '/wrapped/[year]', params: { year: String(new Date().getFullYear()) } })}
           activeOpacity={0.88}
@@ -420,7 +420,7 @@ export default function YouScreen() {
             </Text>
           </View>
           <Ionicons name="chevron-forward" size={18} color="rgba(255,255,255,0.7)" />
-        </TouchableOpacity>}
+        </TouchableOpacity>
 
         {/* Reading taste */}
         <Text style={[styles.sectionLabel, { color: colors.mutedForeground, fontFamily: 'Inter_600SemiBold' }]}>READING TASTE</Text>

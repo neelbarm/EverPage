@@ -31,6 +31,7 @@ export interface ActivityItem {
   bookAuthor: string;
   durationMinutes: number;
   pagesRead: number;
+  streakDays?: number;
   activityType: 'session' | 'recommendation';
   createdAt: string;
 }

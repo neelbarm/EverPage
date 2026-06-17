@@ -121,19 +121,19 @@ function ActivityCard({ item, readToday }: { item: ActivityItem; readToday: bool
         </Text>
         <View style={styles.cardBottom}>
           <View style={styles.statsRow}>
-            {!isRecommendation && item.streakDays > 0 && (
+            {!isRecommendation && (item.streakDays ?? 0) > 0 && (
               <Text style={[styles.statText, { color: colors.mutedForeground, fontFamily: 'Inter_400Regular' }]}>
                 {item.streakDays} day streak
               </Text>
             )}
             {!isRecommendation && item.durationMinutes > 0 && (
               <Text style={[styles.statText, { color: colors.mutedForeground, fontFamily: 'Inter_400Regular' }]}>
-                {item.streakDays > 0 ? ' · ' : ''}{item.durationMinutes} min
+                {(item.streakDays ?? 0) > 0 ? ' · ' : ''}{item.durationMinutes} min
               </Text>
             )}
             {!isRecommendation && item.pagesRead > 0 && (
               <Text style={[styles.statText, { color: colors.mutedForeground, fontFamily: 'Inter_400Regular' }]}>
-                {(item.streakDays > 0 || item.durationMinutes > 0) ? ' · ' : ''}{item.pagesRead} pages
+                {((item.streakDays ?? 0) > 0 || item.durationMinutes > 0) ? ' · ' : ''}{item.pagesRead} pages
               </Text>
             )}
           </View>

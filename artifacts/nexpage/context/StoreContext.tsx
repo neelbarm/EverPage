@@ -256,9 +256,9 @@ const INITIAL_PROFILE: UserProfile = {
 };
 
 const RECOMMENDED: RecommendedBook[] = [
-  { id: 'rec1', title: 'Demon Copperhead', author: 'Barbara Kingsolver', coverColor: '#B85C38', coverImageUri: 'https://covers.openlibrary.org/b/isbn/9780063251922-M.jpg', reason: 'Because you read Pachinko', friendsCount: 3 },
-  { id: 'rec2', title: 'Normal People', author: 'Sally Rooney', coverColor: '#4A7A9E', coverImageUri: 'https://covers.openlibrary.org/b/isbn/9780571334650-M.jpg', reason: 'Popular in your circle', friendsCount: 2 },
-  { id: 'rec3', title: 'Educated', author: 'Tara Westover', coverColor: '#C09B3A', coverImageUri: 'https://covers.openlibrary.org/b/isbn/9780399590504-M.jpg', reason: 'Loved by Maya', friendsCount: 1 },
+  { id: 'rec1', title: 'Demon Copperhead', author: 'Barbara Kingsolver', coverColor: '#B85C38', coverImageUri: 'https://covers.openlibrary.org/b/isbn/9780063251922-M.jpg', reason: 'Highly rated literary fiction', friendsCount: 0 },
+  { id: 'rec2', title: 'Normal People', author: 'Sally Rooney', coverColor: '#4A7A9E', coverImageUri: 'https://covers.openlibrary.org/b/isbn/9780571334650-M.jpg', reason: 'Popular with readers like you', friendsCount: 0 },
+  { id: 'rec3', title: 'Educated', author: 'Tara Westover', coverColor: '#C09B3A', coverImageUri: 'https://covers.openlibrary.org/b/isbn/9780399590504-M.jpg', reason: 'Award-winning memoir', friendsCount: 0 },
   { id: 'rec4', title: 'Lincoln in the Bardo', author: 'George Saunders', coverColor: '#5E4A7A', coverImageUri: 'https://covers.openlibrary.org/b/isbn/9780812985405-M.jpg', reason: 'Matches your taste', friendsCount: 0 },
 ];
 
@@ -338,7 +338,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
   const { isAuthenticated, isLoading: authLoading } = useAuth();
   const [books, setBooks] = useState<Book[]>([]);
   const [sessions, setSessions] = useState<ReadingSession[]>([]);
-  const [friends] = useState<Friend[]>(MOCK_FRIENDS);
+  const [friends] = useState<Friend[]>([]);
   const [streak, setStreak] = useState<StreakData>(INITIAL_STREAK);
   const [profile, setProfile] = useState<UserProfile>(INITIAL_PROFILE);
   const [reminder, setReminderState] = useState<ReminderSettings>(DEFAULT_REMINDER);

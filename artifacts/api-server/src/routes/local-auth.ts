@@ -130,7 +130,7 @@ router.post("/local-auth/login", async (req: Request, res: Response) => {
 
   const user = rows[0];
 
-  if (!checkPassword(password, user.passwordHash)) {
+  if (!checkPassword(password, user.passwordHash!)) {
     res.status(401).json({ error: "Invalid email or password" });
     return;
   }
