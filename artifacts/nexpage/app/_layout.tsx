@@ -13,7 +13,6 @@ import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { KeyboardProvider } from "react-native-keyboard-controller";
 import { SafeAreaProvider } from "react-native-safe-area-context";
 import { Platform } from "react-native";
-import * as Notifications from "expo-notifications";
 
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { ThemeProvider } from "@/context/ThemeContext";
@@ -23,6 +22,7 @@ import { AuthProvider, useAuth } from "@/lib/auth";
 import {
   requestNotificationPermissions,
   setupNotificationResponseHandler,
+  getExpoPushToken,
 } from "@/lib/notifications";
 
 SplashScreen.preventAutoHideAsync();
@@ -41,8 +41,8 @@ function PushTokenRegistrar() {
       try {
         const granted = await requestNotificationPermissions();
         if (!granted) return;
-        const tokenData = await Notifications.getExpoPushTokenAsync();
-        await registerPushToken(tokenData.data);
+        const token = await getExpoPushToken();
+        if (token) await registerPushToken(token);
       } catch {
         // non-blocking
       }

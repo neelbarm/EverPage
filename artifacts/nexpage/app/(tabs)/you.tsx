@@ -263,7 +263,11 @@ export default function YouScreen() {
       if (!granted) return;
       const pushToken = await getExpoPushToken();
       if (pushToken) {
-        registerPushToken(pushToken).catch(() => {});
+        try {
+          await registerPushToken(pushToken);
+        } catch {
+          // token will be re-registered on next app open via PushTokenRegistrar
+        }
       }
     }
     setTogglingNudges(true);

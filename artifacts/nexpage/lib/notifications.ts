@@ -1,4 +1,5 @@
 import * as Notifications from 'expo-notifications';
+import Constants from 'expo-constants';
 import { Platform } from 'react-native';
 import { router } from 'expo-router';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -33,7 +34,12 @@ export async function getExpoPushToken(): Promise<string | null> {
   try {
     const { status } = await Notifications.getPermissionsAsync();
     if (status !== 'granted') return null;
-    const token = await Notifications.getExpoPushTokenAsync();
+    const projectId: string | undefined =
+      (Constants.easConfig as any)?.projectId ??
+      (Constants.expoConfig?.extra as any)?.eas?.projectId;
+    const token = await Notifications.getExpoPushTokenAsync(
+      projectId ? { projectId } : {},
+    );
     return token.data;
   } catch {
     return null;
