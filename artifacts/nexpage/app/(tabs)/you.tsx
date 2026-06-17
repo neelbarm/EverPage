@@ -18,7 +18,7 @@ import { useColors } from '@/hooks/useColors';
 import { useStore } from '@/context/StoreContext';
 import { useSocial } from '@/context/SocialContext';
 import { BookCover } from '@/components/BookCover';
-import { scheduleDailyReminder, cancelDailyReminder } from '@/lib/notifications';
+import { scheduleDailyReminder, cancelDailyReminder, requestNotificationPermissions } from '@/lib/notifications';
 import { DailyGoalModal } from '@/components/DailyGoalModal';
 import { BottomSheet } from '@/components/BottomSheet';
 
@@ -63,7 +63,6 @@ function ReminderModal({
 
   return (
     <BottomSheet visible={visible} onClose={onClose} backgroundColor={colors.card} paddingBottom={insets.bottom + 16}>
-          <View style={[styles.modalHandle, { backgroundColor: colors.border }]} />
           <Text style={[styles.modalTitle, { color: colors.foreground, fontFamily: 'Inter_700Bold' }]}>
             Reading Reminder
           </Text>
@@ -247,6 +246,10 @@ export default function YouScreen() {
 
   async function handleToggleNudges(value: boolean) {
     if (togglingNudges) return;
+    if (value && Platform.OS !== 'web') {
+      const granted = await requestNotificationPermissions();
+      if (!granted) return;
+    }
     setTogglingNudges(true);
     try {
       await setNudgesEnabled(value);
@@ -312,7 +315,7 @@ export default function YouScreen() {
             >
               <Ionicons name="people-outline" size={14} color={colors.mutedForeground} />
               <Text style={[styles.followersBadgeText, { color: colors.mutedForeground, fontFamily: 'Inter_500Medium' }]}>
-                {followers.length} {followers.length === 1 ? 'follower' : 'followers'}
+                {followers.length} {followers.length === 1 ? 'friend' : 'friends'}
               </Text>
             </TouchableOpacity>
           )}
@@ -470,7 +473,6 @@ export default function YouScreen() {
       />
 
       <BottomSheet visible={showGenreModal} onClose={() => setShowGenreModal(false)} backgroundColor={colors.card} paddingBottom={insets.bottom + 24}>
-            <View style={[styles.modalHandle, { backgroundColor: colors.border }]} />
             <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
               <Text style={[styles.modalTitle, { color: colors.foreground, fontFamily: 'Inter_700Bold' }]}>
                 {selectedGenre}

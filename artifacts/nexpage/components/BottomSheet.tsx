@@ -28,15 +28,20 @@ export function BottomSheet({
       .start(() => { onCloseRef.current(); translateY.setValue(0); });
   }
 
-  const pan = useRef(PanResponder.create({
-    onStartShouldSetPanResponder: () => false,
-    onMoveShouldSetPanResponder: (_, g) => g.dy > 8 && g.dy > Math.abs(g.dx) * 1.5,
-    onPanResponderMove: (_, g) => { if (g.dy > 0) translateY.setValue(g.dy); },
-    onPanResponderRelease: (_, g) => {
-      if (g.dy > 100 || g.vy > 0.8) dismiss();
-      else Animated.spring(translateY, { toValue: 0, useNativeDriver: true }).start();
-    },
-  })).current;
+  function makeHandlers(eager: boolean) {
+    return PanResponder.create({
+      onStartShouldSetPanResponder: () => eager,
+      onMoveShouldSetPanResponder: (_, g) => !eager && g.dy > 8 && g.dy > Math.abs(g.dx) * 1.5,
+      onPanResponderMove: (_, g) => { if (g.dy > 0) translateY.setValue(g.dy); },
+      onPanResponderRelease: (_, g) => {
+        if (g.dy > 100 || g.vy > 0.8) dismiss();
+        else Animated.spring(translateY, { toValue: 0, useNativeDriver: true }).start();
+      },
+    });
+  }
+
+  const handlePan = useRef(makeHandlers(true)).current;
+  const bodyPan = useRef(makeHandlers(false)).current;
 
   return (
     <Modal visible={visible} transparent animationType="slide" onRequestClose={dismiss}>
@@ -44,9 +49,13 @@ export function BottomSheet({
         <Pressable style={StyleSheet.absoluteFillObject} onPress={dismiss} />
         <Animated.View
           style={[styles.sheet, { backgroundColor, paddingBottom, gap }, { transform: [{ translateY }] }]}
-          {...pan.panHandlers}
         >
-          {children}
+          <View style={styles.handleZone} {...handlePan.panHandlers}>
+            <View style={styles.handlePill} />
+          </View>
+          <View style={{ gap }} {...bodyPan.panHandlers}>
+            {children}
+          </View>
         </Animated.View>
       </View>
     </Modal>
@@ -63,6 +72,18 @@ const styles = StyleSheet.create({
     borderTopLeftRadius: 24,
     borderTopRightRadius: 24,
     paddingHorizontal: 20,
-    paddingTop: 12,
+    paddingTop: 0,
+  },
+  handleZone: {
+    alignItems: 'center',
+    paddingTop: 10,
+    paddingBottom: 6,
+    marginHorizontal: -20,
+  },
+  handlePill: {
+    width: 36,
+    height: 4,
+    borderRadius: 2,
+    backgroundColor: 'rgba(0,0,0,0.15)',
   },
 });

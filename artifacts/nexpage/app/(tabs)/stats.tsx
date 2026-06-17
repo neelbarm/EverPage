@@ -341,7 +341,6 @@ export default function StatsScreen() {
         paddingBottom={24}
         gap={16}
       >
-        <View style={{ width: 36, height: 4, borderRadius: 2, backgroundColor: colors.border, alignSelf: 'center', marginBottom: 4 }} />
         {selectedRec && (
           <>
             <View style={{ flexDirection: 'row', gap: 14 }}>

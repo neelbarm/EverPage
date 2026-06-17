@@ -61,7 +61,6 @@ function ClassicTabLayout() {
           shadowOffset: { width: 0, height: 4 },
           shadowOpacity: 0.14,
           shadowRadius: 16,
-          overflow: "hidden",
           ...(isWeb ? { height: 84 } : {}),
         },
         tabBarBackground: () => (

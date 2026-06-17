@@ -49,7 +49,6 @@ export function DailyGoalModal({
       backgroundColor={colors.card}
       paddingBottom={insets.bottom + 16}
     >
-      <View style={[styles.modalHandle, { backgroundColor: colors.border }]} />
       <Text style={[styles.modalTitle, { color: colors.foreground, fontFamily: 'Inter_700Bold' }]}>
         Daily Reading Goal
       </Text>

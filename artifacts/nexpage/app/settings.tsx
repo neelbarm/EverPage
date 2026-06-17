@@ -13,7 +13,7 @@ import { useTheme, type ThemeMode } from '@/context/ThemeContext';
 import { useStore } from '@/context/StoreContext';
 import { useSocial } from '@/context/SocialContext';
 import { useAuth } from '@/lib/auth';
-import { scheduleDailyReminder, cancelDailyReminder } from '@/lib/notifications';
+import { scheduleDailyReminder, cancelDailyReminder, requestNotificationPermissions } from '@/lib/notifications';
 import RegisterModal from '@/components/RegisterModal';
 import { BottomSheet } from '@/components/BottomSheet';
 
@@ -245,7 +245,6 @@ function GoalModal({
 
   return (
     <BottomSheet visible={visible} onClose={onClose} backgroundColor={colors.card} paddingBottom={insets.bottom + 16}>
-          <View style={[styles.handle, { backgroundColor: colors.border }]} />
           <Text style={[styles.sheetTitle, { color: colors.foreground, fontFamily: 'Inter_700Bold' }]}>Daily Reading Goal</Text>
           <Text style={[styles.sheetSub, { color: colors.mutedForeground, fontFamily: 'Inter_600SemiBold' }]}>MINUTES PER DAY</Text>
           <View style={styles.chipGrid}>
@@ -328,7 +327,6 @@ function ReminderModal({
   }
   return (
     <BottomSheet visible={visible} onClose={onClose} backgroundColor={colors.card} paddingBottom={insets.bottom + 16}>
-          <View style={[styles.handle, { backgroundColor: colors.border }]} />
           <Text style={[styles.sheetTitle, { color: colors.foreground, fontFamily: 'Inter_700Bold' }]}>Reading Reminder</Text>
           <View style={[styles.toggleRow, { borderBottomColor: colors.border }]}>
             <View style={[styles.iconBox, { backgroundColor: colors.muted }]}>
