@@ -260,28 +260,30 @@ export default function LandingScreen() {
       {phase === 'splash' && (
         <Animated.View style={[styles.splash, { opacity: splashOpacity }]} pointerEvents="none">
           <FlippingBook />
-          <Animated.Text
-            style={[
-              styles.splashName,
-              {
-                opacity: splashNameAnim,
-                transform: [{ translateY: splashNameAnim.interpolate({ inputRange: [0, 1], outputRange: [16, 0] }) }],
-              },
-            ]}
-          >
-            EverPage
-          </Animated.Text>
-          <Animated.Text
-            style={[
-              styles.splashSub,
-              {
-                opacity: splashSubAnim,
-                transform: [{ translateY: splashSubAnim.interpolate({ inputRange: [0, 1], outputRange: [10, 0] }) }],
-              },
-            ]}
-          >
-            Read together. Build your streak.
-          </Animated.Text>
+          <View style={styles.splashTextGroup}>
+            <Animated.Text
+              style={[
+                styles.splashName,
+                {
+                  opacity: splashNameAnim,
+                  transform: [{ translateY: splashNameAnim.interpolate({ inputRange: [0, 1], outputRange: [16, 0] }) }],
+                },
+              ]}
+            >
+              EverPage
+            </Animated.Text>
+            <Animated.Text
+              style={[
+                styles.splashSub,
+                {
+                  opacity: splashSubAnim,
+                  transform: [{ translateY: splashSubAnim.interpolate({ inputRange: [0, 1], outputRange: [10, 0] }) }],
+                },
+              ]}
+            >
+              Read together. Build your streak.
+            </Animated.Text>
+          </View>
         </Animated.View>
       )}
 
@@ -406,8 +408,12 @@ const styles = StyleSheet.create({
     ...StyleSheet.absoluteFillObject,
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 28,
     zIndex: 10,
+  },
+  splashTextGroup: {
+    alignItems: 'center',
+    gap: 8,
+    marginTop: 24,
   },
   splashName: {
     fontSize: 42,
@@ -416,10 +422,10 @@ const styles = StyleSheet.create({
     letterSpacing: -1,
   },
   splashSub: {
-    fontSize: 16,
+    fontSize: 15,
     color: PALETTE.muted,
     fontFamily: 'Inter_400Regular',
-    letterSpacing: 0.2,
+    letterSpacing: 0.3,
   },
 
   scroll: { alignItems: 'center', paddingHorizontal: 22 },
