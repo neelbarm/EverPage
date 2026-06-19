@@ -8,6 +8,9 @@ import { useStore } from '@/context/StoreContext';
 import { BookCover } from '@/components/BookCover';
 import { DailyGoalModal } from '@/components/DailyGoalModal';
 
+const REC_CARD_W = 116;
+const REC_COVER_H = 154;
+
 function formatDate(): string {
   const d = new Date();
   const days = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
@@ -160,18 +163,18 @@ export default function ShelfScreen() {
     <View style={[styles.root, { backgroundColor: colors.background }]}>
       <View style={[styles.header, { paddingTop: topPad + 12 }]}>
         <View>
-          <Text style={[styles.dateText, { color: colors.mutedForeground, fontFamily: 'Inter_400Regular' }]}>{formatDate()}</Text>
-          <Text style={[styles.shelfLabel, { color: colors.foreground, fontFamily: 'Inter_700Bold' }]}>Your shelf</Text>
+          <Text style={[styles.dateText, { color: colors.mutedForeground, fontFamily: 'Inter_500Medium', fontStyle: 'italic' }]}>{formatDate()}</Text>
+          <Text style={[styles.shelfLabel, { color: colors.foreground, fontFamily: 'Inter_700Bold' }]}>Your Shelf</Text>
         </View>
         <TouchableOpacity
-          style={[styles.streakBadge, { backgroundColor: colors.tabBar }]}
+          style={[styles.streakBadge, { backgroundColor: '#7FB5C5' }]}
           onPress={() => router.push('/(tabs)/stats')}
           activeOpacity={0.8}
         >
-          <Text style={[styles.streakNum, { color: colors.foreground, fontFamily: 'Inter_700Bold' }]}>
+          <Text style={[styles.streakNum, { color: '#ffffff', fontFamily: 'Inter_700Bold' }]}>
             {streak.currentStreak}
           </Text>
-          <Text style={[styles.streakLabel, { color: colors.mutedForeground, fontFamily: 'Inter_400Regular' }]}>
+          <Text style={[styles.streakLabel, { color: 'rgba(255,255,255,0.85)', fontFamily: 'Inter_400Regular' }]}>
             {'day\nstreak'}
           </Text>
         </TouchableOpacity>
@@ -229,7 +232,7 @@ export default function ShelfScreen() {
                 onPress={() => router.push(`/book/${heroBook.id}`)}
                 activeOpacity={0.92}
               >
-                <Text style={[styles.continueLabel, { color: 'rgba(255,255,255,0.65)', fontFamily: 'Inter_700Bold' }]}>CONTINUE</Text>
+                <Text style={[styles.continueLabel, { color: 'rgba(255,255,255,0.65)', fontFamily: 'Inter_500Medium', fontStyle: 'italic' }]}>CURRENTLY READING</Text>
                 <View style={styles.heroContent}>
                   <BookCover bookId={heroBook.id} coverColor={heroBook.coverColor} coverImageUri={heroBook.coverImageUri} width={82} height={120} borderRadius={8} />
                   <View style={styles.heroInfo}>
@@ -292,25 +295,30 @@ export default function ShelfScreen() {
             )}
 
             {recommendedBooks.length > 0 && (
-              <View style={[styles.recSection, { backgroundColor: colors.primary, borderRadius: 18 }]}>
-                <Text style={[styles.recLabel, { color: 'rgba(255,255,255,0.72)', fontFamily: 'Inter_600SemiBold' }]}>PICKED FOR YOU</Text>
-                <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 12, paddingVertical: 2 }}>
+              <View style={styles.recSection}>
+                <Text style={[styles.recLabel, { color: colors.primary, fontFamily: 'Inter_600SemiBold', fontStyle: 'italic' }]}>YOUR NEXT RECOMMENDED READS</Text>
+                <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 10, paddingVertical: 2 }}>
                   {recommendedBooks.map(book => (
                     <TouchableOpacity
                       key={book.id}
-                      style={[styles.recCard, { backgroundColor: '#ffffff', borderColor: 'transparent' }]}
+                      style={styles.recCard}
                       onPress={() => { setSelectedRec(book); setRecPagesStr(''); }}
                       activeOpacity={0.85}
                     >
-                      <BookCover bookId={book.id} coverColor={book.coverColor} coverImageUri={book.coverImageUri} width={140} height={90} borderRadius={0} />
+                      <View style={styles.recCoverClip}>
+                        <BookCover bookId={book.id} coverColor={book.coverColor} coverImageUri={book.coverImageUri} width={REC_CARD_W} height={REC_COVER_H} borderRadius={0} />
+                      </View>
                       <View style={styles.recBody}>
-                        <Text style={[styles.recTitle, { color: colors.foreground, fontFamily: 'Inter_600SemiBold' }]} numberOfLines={2}>{book.title}</Text>
-                        <Text style={[styles.recAuthor, { color: colors.mutedForeground, fontFamily: 'Inter_400Regular' }]} numberOfLines={1}>{book.author}</Text>
-                        <Text style={[styles.recReason, { color: colors.teal, fontFamily: 'Inter_400Regular' }]} numberOfLines={1}>{book.reason}</Text>
+                        <Text style={[styles.recTitle, { color: '#ffffff', fontFamily: 'Inter_700Bold' }]} numberOfLines={2}>{book.title}</Text>
+                        <Text style={[styles.recAuthor, { color: 'rgba(255,255,255,0.75)', fontFamily: 'Inter_400Regular' }]} numberOfLines={1}>{book.author}</Text>
+                        <Text style={[styles.recReason, { color: 'rgba(255,255,255,0.6)', fontFamily: 'Inter_400Regular', fontStyle: 'italic' }]} numberOfLines={2}>Because {book.reason}</Text>
                       </View>
                     </TouchableOpacity>
                   ))}
                 </ScrollView>
+                <View style={{ alignItems: 'center', marginTop: 4 }}>
+                  <Ionicons name="arrow-down-circle" size={26} color={colors.primary} />
+                </View>
               </View>
             )}
           </>
@@ -462,13 +470,13 @@ const styles = StyleSheet.create({
     flexDirection: 'row', justifyContent: 'space-between',
     alignItems: 'flex-start', paddingHorizontal: 20, paddingBottom: 16,
   },
-  dateText: { fontSize: 13, marginBottom: 2 },
-  shelfLabel: { fontSize: 26, letterSpacing: -0.5 },
+  dateText: { fontSize: 14, marginBottom: 3 },
+  shelfLabel: { fontSize: 32, letterSpacing: -0.8 },
   streakBadge: {
     flexDirection: 'row', alignItems: 'center',
-    paddingHorizontal: 14, paddingVertical: 8, borderRadius: 22, gap: 7,
+    paddingHorizontal: 14, paddingVertical: 9, borderRadius: 16, gap: 8,
   },
-  streakNum: { fontSize: 22, lineHeight: 26 },
+  streakNum: { fontSize: 28, lineHeight: 32 },
   streakLabel: { fontSize: 11, lineHeight: 14 },
   goalStrip: {
     marginHorizontal: 16, marginBottom: 10, borderRadius: 14, borderWidth: 1,
@@ -515,11 +523,20 @@ const styles = StyleSheet.create({
   },
   emptyTitle: { fontSize: 18 },
   emptySub: { fontSize: 14, textAlign: 'center', lineHeight: 20 },
-  recSection: { marginTop: 16, marginHorizontal: 16, gap: 10, padding: 14 },
-  recLabel: { fontSize: 11, letterSpacing: 1.5 },
-  recCard: { width: 140, borderRadius: 12, borderWidth: 1, overflow: 'hidden', shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.06, shadowRadius: 6, elevation: 2 },
-  recBody: { padding: 10, gap: 2 },
-  recTitle: { fontSize: 13, lineHeight: 17, letterSpacing: -0.2 },
+  recSection: {
+    marginTop: 16, marginHorizontal: 16, gap: 12, padding: 16,
+    backgroundColor: '#EDE8DF', borderRadius: 18,
+  },
+  recLabel: { fontSize: 11, letterSpacing: 1.2 },
+  recCard: {
+    width: REC_CARD_W, borderRadius: 14, overflow: 'hidden',
+    backgroundColor: '#7FB5C5',
+    shadowColor: '#000', shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1, shadowRadius: 6, elevation: 3,
+  },
+  recCoverClip: { width: REC_CARD_W, height: REC_COVER_H, overflow: 'hidden' },
+  recBody: { padding: 10, gap: 3 },
+  recTitle: { fontSize: 14, lineHeight: 18, letterSpacing: -0.2 },
   recAuthor: { fontSize: 12 },
   recReason: { fontSize: 11, marginTop: 2 },
   goalToast: {
