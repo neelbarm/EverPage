@@ -7,51 +7,33 @@ import {
   StyleSheet,
   Animated,
   Easing,
+  Image,
+  Dimensions,
 } from 'react-native';
 import { Redirect } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAuth } from '@/lib/auth';
 import RegisterModal from '@/components/RegisterModal';
 
+const SCR_W = Dimensions.get('window').width;
+const CARD_SIZE = Math.floor((SCR_W - 44 - 10) / 2);
+const BANNER_H = Math.floor((SCR_W - 44) * 0.38);
+
 const PALETTE = {
-  bg: '#f2e9db',
-  fg: '#1a1732',
-  muted: '#8a7865',
+  bg: '#3C0A0A',
+  fg: '#f2e9db',
+  muted: 'rgba(242,233,219,0.65)',
   primary: '#8a2333',
   card: '#ffffff',
   border: '#e8ddd0',
-  tan: '#C4946A',
-  blue: '#6AB5D0',
-  teal: '#2B5973',
-  wine: '#8a2333',
-  ctaBtn: '#6AADCB',
+  ctaBtn: '#7FB5C5',
 };
 
-const FEATURES: { emoji: string; title: string; description: string; bg: string }[] = [
-  {
-    emoji: '📚',
-    title: 'Your Reading Shelf',
-    description: 'Track every book page by page. Keep everything you\'re reading — or have ever read — in one beautiful place.',
-    bg: PALETTE.tan,
-  },
-  {
-    emoji: '🔥',
-    title: 'Daily Streaks & Goals',
-    description: 'Set a daily goal in minutes and build your streak. Streak freezes keep your progress safe on busy days.',
-    bg: PALETTE.blue,
-  },
-  {
-    emoji: '👥',
-    title: 'Read with Friends',
-    description: 'See what friends are reading, climb the leaderboard together, and share quotes from books you love.',
-    bg: PALETTE.teal,
-  },
-  {
-    emoji: '✨',
-    title: 'Beautiful Reading Stats',
-    description: 'Weekly charts, all-time totals, and a yearly Wrapped — a personal story of your reading year.',
-    bg: PALETTE.wine,
-  },
+const CARD_IMAGES = [
+  require('../assets/landing/card_shelf.png'),
+  require('../assets/landing/card_streaks.png'),
+  require('../assets/landing/card_friends.png'),
+  require('../assets/landing/card_stats.png'),
 ];
 
 const PAGE_W = 54;
@@ -304,7 +286,7 @@ export default function LandingScreen() {
                 opacity: heroAnim,
                 transform: [{ translateY: heroAnim.interpolate({ inputRange: [0, 1], outputRange: [28, 0] }) }],
                 alignItems: 'center',
-                marginBottom: 28,
+                marginBottom: 22,
               }}
             >
               <Text style={styles.appName}>EverPage</Text>
@@ -313,38 +295,33 @@ export default function LandingScreen() {
               </Text>
             </Animated.View>
 
-            {/* Book illustrations card */}
+            {/* Banner image */}
             <Animated.View
-              style={[
-                styles.booksCard,
-                {
-                  opacity: booksAnim,
-                  transform: [{ translateY: booksAnim.interpolate({ inputRange: [0, 1], outputRange: [24, 0] }) }],
-                },
-              ]}
+              style={{
+                opacity: booksAnim,
+                transform: [{ translateY: booksAnim.interpolate({ inputRange: [0, 1], outputRange: [24, 0] }) }],
+                width: '100%',
+                marginBottom: 10,
+              }}
             >
-              <Text style={styles.bookEmoji}>📘</Text>
-              <Text style={[styles.bookEmoji, styles.bookEmojiCenter]}>📚</Text>
-              <Text style={styles.bookEmoji}>📱</Text>
+              <Image
+                source={require('../assets/landing/banner.png')}
+                style={styles.bannerImage}
+                resizeMode="cover"
+              />
             </Animated.View>
 
             {/* 2×2 feature grid */}
             <View style={styles.grid}>
-              {FEATURES.map((f, i) => (
+              {CARD_IMAGES.map((src, i) => (
                 <Animated.View
-                  key={f.title}
-                  style={[
-                    styles.featureCard,
-                    { backgroundColor: f.bg },
-                    {
-                      opacity: featAnims[i],
-                      transform: [{ translateY: featAnims[i].interpolate({ inputRange: [0, 1], outputRange: [22, 0] }) }],
-                    },
-                  ]}
+                  key={i}
+                  style={{
+                    opacity: featAnims[i],
+                    transform: [{ translateY: featAnims[i].interpolate({ inputRange: [0, 1], outputRange: [22, 0] }) }],
+                  }}
                 >
-                  <Text style={styles.featureEmoji}>{f.emoji}</Text>
-                  <Text style={styles.featureTitle}>{f.title}</Text>
-                  <Text style={styles.featureDesc}>{f.description}</Text>
+                  <Image source={src} style={styles.featureCardImage} resizeMode="cover" />
                 </Animated.View>
               ))}
             </View>
@@ -360,9 +337,9 @@ export default function LandingScreen() {
               ]}
             >
               <Text style={styles.quoteText}>
-                A reader lives a thousand lives before he dies. The man who never reads lives only one.
+                "A reader lives a thousand lives before he dies. The man who never reads lives only one."
               </Text>
-              <Text style={styles.quoteAuthor}>- George R.R. Martin</Text>
+              <Text style={styles.quoteAuthor}>— George R.R. Martin</Text>
             </Animated.View>
 
             {/* CTA */}
@@ -431,45 +408,26 @@ const styles = StyleSheet.create({
   scroll: { alignItems: 'center', paddingHorizontal: 22 },
 
   appName: {
-    fontSize: 44,
-    color: PALETTE.fg,
+    fontSize: 46,
+    color: '#f2e9db',
     fontFamily: 'Inter_700Bold',
     letterSpacing: -1.5,
     marginBottom: 10,
+    textAlign: 'center',
   },
   tagline: {
     fontSize: 16,
-    color: PALETTE.muted,
+    color: 'rgba(242,233,219,0.75)',
     fontFamily: 'Inter_400Regular',
     textAlign: 'center',
     lineHeight: 24,
   },
 
-  booksCard: {
-    backgroundColor: PALETTE.card,
-    borderRadius: 20,
-    borderWidth: 1,
-    borderColor: PALETTE.border,
+  bannerImage: {
     width: '100%',
-    flexDirection: 'row',
-    justifyContent: 'center',
-    alignItems: 'center',
-    paddingVertical: 22,
-    paddingHorizontal: 24,
-    gap: 24,
-    marginBottom: 16,
-    shadowColor: '#201b15',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.07,
-    shadowRadius: 8,
-    elevation: 3,
-  },
-  bookEmoji: {
-    fontSize: 52,
-  },
-  bookEmojiCenter: {
-    fontSize: 64,
-    marginTop: -6,
+    height: BANNER_H,
+    borderRadius: 18,
+    overflow: 'hidden',
   },
 
   grid: {
@@ -477,56 +435,38 @@ const styles = StyleSheet.create({
     flexWrap: 'wrap',
     gap: 10,
     width: '100%',
-    marginBottom: 16,
+    marginBottom: 14,
+    marginTop: 2,
   },
-  featureCard: {
-    width: '48.4%',
+  featureCardImage: {
+    width: CARD_SIZE,
+    height: CARD_SIZE,
     borderRadius: 18,
-    padding: 14,
-    minHeight: 164,
-    justifyContent: 'flex-start',
-  },
-  featureEmoji: {
-    fontSize: 26,
-    marginBottom: 8,
-  },
-  featureTitle: {
-    fontSize: 14,
-    color: '#ffffff',
-    fontFamily: 'Inter_700Bold',
-    lineHeight: 20,
-    marginBottom: 6,
-  },
-  featureDesc: {
-    fontSize: 11,
-    color: 'rgba(255,255,255,0.88)',
-    fontFamily: 'Inter_400Regular',
-    lineHeight: 16,
+    overflow: 'hidden',
   },
 
   quoteBlock: {
-    backgroundColor: PALETTE.card,
-    borderRadius: 18,
-    borderWidth: 1,
-    borderColor: PALETTE.border,
-    paddingVertical: 22,
+    backgroundColor: '#f2e9db',
+    borderRadius: 20,
+    paddingVertical: 24,
     paddingHorizontal: 24,
     width: '100%',
     alignItems: 'center',
     gap: 10,
-    marginBottom: 28,
+    marginBottom: 24,
   },
   quoteText: {
-    fontSize: 15,
-    color: PALETTE.fg,
+    fontSize: 16,
+    color: '#4A1010',
     fontFamily: 'Inter_400Regular',
     textAlign: 'center',
-    lineHeight: 24,
+    lineHeight: 26,
   },
   quoteAuthor: {
     fontSize: 13,
-    color: PALETTE.muted,
+    color: '#7a3030',
     fontFamily: 'Inter_500Medium',
+    textAlign: 'center',
   },
 
   cta: { width: '100%', alignItems: 'center', gap: 14 },
@@ -534,31 +474,31 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: PALETTE.ctaBtn,
+    backgroundColor: '#7FB5C5',
     borderRadius: 50,
-    paddingVertical: 16,
+    paddingVertical: 17,
     paddingHorizontal: 28,
     width: '100%',
-    shadowColor: PALETTE.ctaBtn,
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.28,
-    shadowRadius: 10,
-    elevation: 5,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.2,
+    shadowRadius: 8,
+    elevation: 4,
   },
   getStartedText: {
-    fontSize: 16,
+    fontSize: 17,
     color: '#ffffff',
-    fontFamily: 'Inter_600SemiBold',
+    fontFamily: 'Inter_700Bold',
     letterSpacing: 0.2,
   },
   signinRow: { alignItems: 'center' },
   signinText: {
-    fontSize: 13,
-    color: PALETTE.muted,
+    fontSize: 14,
+    color: 'rgba(242,233,219,0.65)',
     fontFamily: 'Inter_400Regular',
   },
   signinLink: {
-    color: PALETTE.fg,
+    color: '#f2e9db',
     fontFamily: 'Inter_700Bold',
   },
 });
