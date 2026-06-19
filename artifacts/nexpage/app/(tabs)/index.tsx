@@ -4,6 +4,7 @@ import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Feather, Ionicons } from '@expo/vector-icons';
 import { useColors } from '@/hooks/useColors';
+import { useTheme } from '@/context/ThemeContext';
 import { useStore } from '@/context/StoreContext';
 import { BookCover } from '@/components/BookCover';
 import { DailyGoalModal } from '@/components/DailyGoalModal';
