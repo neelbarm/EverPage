@@ -7,36 +7,35 @@ import {
   StyleSheet,
   Animated,
   Easing,
-  Image,
   Dimensions,
 } from 'react-native';
 import { Redirect } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { Ionicons, Feather } from '@expo/vector-icons';
 import { useAuth } from '@/lib/auth';
 import RegisterModal from '@/components/RegisterModal';
 
 const SCR_W = Dimensions.get('window').width;
 const H_PAD = 20;
 const CARD_GAP = 10;
-const CARD_SIZE = Math.floor((SCR_W - H_PAD * 2 - CARD_GAP) / 2);
-const BANNER_W = SCR_W - H_PAD * 2;
-const BANNER_H = Math.floor(BANNER_W * (738 / 2186));
+const CARD_W = Math.floor((SCR_W - H_PAD * 2 - CARD_GAP) / 2);
 
 const PALETTE = {
   bg: '#3C0A0A',
   fg: '#f2e9db',
-  muted: 'rgba(242,233,219,0.65)',
-  primary: '#8a2333',
-  card: '#ffffff',
-  border: '#e8ddd0',
+  muted: 'rgba(242,233,219,0.60)',
+  card: 'rgba(255,255,255,0.07)',
+  cardBorder: 'rgba(242,233,219,0.12)',
+  quoteCard: '#f2e9db',
   ctaBtn: '#7FB5C5',
+  teal: '#1B6B72',
 };
 
-const CARD_IMAGES = [
-  require('../assets/landing/card_shelf.png'),
-  require('../assets/landing/card_streaks.png'),
-  require('../assets/landing/card_friends.png'),
-  require('../assets/landing/card_stats.png'),
+const FEATURES: { icon: string; title: string; body: string; color: string }[] = [
+  { icon: 'book-outline', title: 'Your Shelf', body: 'Track every book, page by page.', color: '#7FB5C5' },
+  { icon: 'flame-outline', title: 'Streaks', body: 'Daily goals. Unbroken momentum.', color: '#c87060' },
+  { icon: 'people-outline', title: 'Friends', body: 'Read together. Share discoveries.', color: '#4A7A52' },
+  { icon: 'bar-chart-outline', title: 'Stats', body: 'See your year in books.', color: '#b87355' },
 ];
 
 const PAGE_W = 54;
@@ -49,29 +48,15 @@ function FlippingBook() {
 
   useEffect(() => {
     Animated.spring(scaleIn, {
-      toValue: 1,
-      tension: 55,
-      friction: 7,
-      delay: 150,
-      useNativeDriver: true,
+      toValue: 1, tension: 55, friction: 7, delay: 150, useNativeDriver: true,
     }).start();
 
     setTimeout(() => {
       Animated.loop(
         Animated.sequence([
-          Animated.timing(flipAnim, {
-            toValue: 1,
-            duration: 850,
-            easing: Easing.inOut(Easing.ease),
-            useNativeDriver: true,
-          }),
+          Animated.timing(flipAnim, { toValue: 1, duration: 850, easing: Easing.inOut(Easing.ease), useNativeDriver: true }),
           Animated.delay(320),
-          Animated.timing(flipAnim, {
-            toValue: 0,
-            duration: 850,
-            easing: Easing.inOut(Easing.ease),
-            useNativeDriver: true,
-          }),
+          Animated.timing(flipAnim, { toValue: 0, duration: 850, easing: Easing.inOut(Easing.ease), useNativeDriver: true }),
           Animated.delay(900),
         ])
       ).start();
@@ -85,14 +70,8 @@ function FlippingBook() {
     ).start();
   }, []);
 
-  const rightPageScaleX = flipAnim.interpolate({
-    inputRange: [0, 0.5, 1],
-    outputRange: [1, 0, 1],
-  });
-  const rightPageBg = flipAnim.interpolate({
-    inputRange: [0, 0.49, 0.5, 1],
-    outputRange: ['#fff8f0', '#fff8f0', '#eee4d6', '#eee4d6'],
-  });
+  const rightPageScaleX = flipAnim.interpolate({ inputRange: [0, 0.5, 1], outputRange: [1, 0, 1] });
+  const rightPageBg = flipAnim.interpolate({ inputRange: [0, 0.49, 0.5, 1], outputRange: ['#fff8f0', '#fff8f0', '#eee4d6', '#eee4d6'] });
   const glowScale = glowPulse.interpolate({ inputRange: [0, 1], outputRange: [1, 1.15] });
   const glowOpacity = glowPulse.interpolate({ inputRange: [0, 1], outputRange: [0.18, 0.32] });
 
@@ -129,31 +108,63 @@ function FlippingBook() {
 
 const bookStyles = StyleSheet.create({
   glow: {
-    position: 'absolute',
-    width: 160, height: 160, borderRadius: 80,
-    backgroundColor: PALETTE.primary,
-    top: -20,
+    position: 'absolute', width: 160, height: 160, borderRadius: 80,
+    backgroundColor: PALETTE.bg, top: -20,
   },
   book: {
-    flexDirection: 'row',
-    width: PAGE_W * 2 + 10,
-    height: PAGE_H + 20,
-    borderRadius: 6,
-    overflow: 'hidden',
-    shadowColor: '#201b15',
-    shadowOffset: { width: 0, height: 10 },
-    shadowOpacity: 0.28,
-    shadowRadius: 18,
-    elevation: 12,
+    flexDirection: 'row', width: PAGE_W * 2 + 10, height: PAGE_H + 20,
+    borderRadius: 6, overflow: 'hidden',
+    shadowColor: '#201b15', shadowOffset: { width: 0, height: 10 },
+    shadowOpacity: 0.28, shadowRadius: 18, elevation: 12,
   },
   page: { width: PAGE_W, height: PAGE_H + 20, padding: 9 },
-  spine: { width: 10, height: PAGE_H + 20, backgroundColor: PALETTE.primary },
+  spine: { width: 10, height: PAGE_H + 20, backgroundColor: '#8a2333' },
   line: { height: 4, backgroundColor: '#ddd0be', borderRadius: 2 },
   bookShadow: {
     width: 80, height: 10, borderRadius: 40,
     backgroundColor: '#201b15', opacity: 0.12,
     marginTop: 6, alignSelf: 'center',
   },
+});
+
+function FeatureCard({ icon, title, body, color, anim }: {
+  icon: string; title: string; body: string; color: string;
+  anim: Animated.Value;
+}) {
+  return (
+    <Animated.View
+      style={{
+        width: CARD_W,
+        opacity: anim,
+        transform: [{ translateY: anim.interpolate({ inputRange: [0, 1], outputRange: [18, 0] }) }],
+      }}
+    >
+      <View style={[featureStyles.card, { borderColor: PALETTE.cardBorder }]}>
+        <View style={[featureStyles.iconCircle, { backgroundColor: color + '22' }]}>
+          <Ionicons name={icon as any} size={22} color={color} />
+        </View>
+        <Text style={[featureStyles.cardTitle, { color: PALETTE.fg, fontFamily: 'Inter_700Bold' }]}>{title}</Text>
+        <Text style={[featureStyles.cardBody, { color: PALETTE.muted, fontFamily: 'Inter_400Regular' }]}>{body}</Text>
+      </View>
+    </Animated.View>
+  );
+}
+
+const featureStyles = StyleSheet.create({
+  card: {
+    backgroundColor: PALETTE.card,
+    borderRadius: 18,
+    borderWidth: 1,
+    padding: 16,
+    gap: 8,
+    minHeight: 130,
+  },
+  iconCircle: {
+    width: 40, height: 40, borderRadius: 20,
+    alignItems: 'center', justifyContent: 'center',
+  },
+  cardTitle: { fontSize: 15, letterSpacing: -0.2 },
+  cardBody: { fontSize: 13, lineHeight: 18 },
 });
 
 export default function LandingScreen() {
@@ -167,7 +178,6 @@ export default function LandingScreen() {
   const landingOpacity = useRef(new Animated.Value(0)).current;
 
   const heroAnim = useRef(new Animated.Value(0)).current;
-  const booksAnim = useRef(new Animated.Value(0)).current;
   const feat0 = useRef(new Animated.Value(0)).current;
   const feat1 = useRef(new Animated.Value(0)).current;
   const feat2 = useRef(new Animated.Value(0)).current;
@@ -181,17 +191,18 @@ export default function LandingScreen() {
 
   const authDoneRef = useRef(false);
   const timerDoneRef = useRef(false);
+  const transitionedRef = useRef(false);
 
   function doTransition() {
     if (!authDoneRef.current || !timerDoneRef.current) return;
-    Animated.parallel([
-      Animated.timing(splashOpacity, { toValue: 0, duration: 380, useNativeDriver: true }),
-      Animated.timing(landingOpacity, { toValue: 1, duration: 380, useNativeDriver: true }),
-    ]).start(() => {
+    if (transitionedRef.current) return;
+    transitionedRef.current = true;
+
+    Animated.timing(splashOpacity, { toValue: 0, duration: 380, useNativeDriver: true }).start(() => {
       setPhase('landing');
-      Animated.stagger(65, [
+      landingOpacity.setValue(1);
+      Animated.stagger(80, [
         Animated.spring(heroAnim, { toValue: 1, tension: 70, friction: 9, useNativeDriver: true }),
-        Animated.spring(booksAnim, { toValue: 1, tension: 70, friction: 9, useNativeDriver: true }),
         Animated.spring(feat0, { toValue: 1, tension: 70, friction: 9, useNativeDriver: true }),
         Animated.spring(feat1, { toValue: 1, tension: 70, friction: 9, useNativeDriver: true }),
         Animated.spring(feat2, { toValue: 1, tension: 70, friction: 9, useNativeDriver: true }),
@@ -220,7 +231,7 @@ export default function LandingScreen() {
     const t = setTimeout(() => {
       timerDoneRef.current = true;
       doTransition();
-    }, 5000);
+    }, 2800);
     return () => clearTimeout(t);
   }, []);
 
@@ -247,24 +258,18 @@ export default function LandingScreen() {
           <FlippingBook />
           <View style={styles.splashTextGroup}>
             <Animated.Text
-              style={[
-                styles.splashName,
-                {
-                  opacity: splashNameAnim,
-                  transform: [{ translateY: splashNameAnim.interpolate({ inputRange: [0, 1], outputRange: [16, 0] }) }],
-                },
-              ]}
+              style={[styles.splashName, {
+                opacity: splashNameAnim,
+                transform: [{ translateY: splashNameAnim.interpolate({ inputRange: [0, 1], outputRange: [16, 0] }) }],
+              }]}
             >
               EverPage
             </Animated.Text>
             <Animated.Text
-              style={[
-                styles.splashSub,
-                {
-                  opacity: splashSubAnim,
-                  transform: [{ translateY: splashSubAnim.interpolate({ inputRange: [0, 1], outputRange: [10, 0] }) }],
-                },
-              ]}
+              style={[styles.splashSub, {
+                opacity: splashSubAnim,
+                transform: [{ translateY: splashSubAnim.interpolate({ inputRange: [0, 1], outputRange: [10, 0] }) }],
+              }]}
             >
               Read together. Build your streak.
             </Animated.Text>
@@ -274,106 +279,81 @@ export default function LandingScreen() {
 
       {/* ── Landing ── */}
       {phase === 'landing' && (
-        <Animated.View style={[{ flex: 1 }, { opacity: landingOpacity }]}>
-          <ScrollView
-            contentContainerStyle={[
-              styles.scroll,
-              { paddingTop: Math.max(insets.top, 44) + 20, paddingBottom: insets.bottom + 40 },
-            ]}
-            showsVerticalScrollIndicator={false}
+        <ScrollView
+          contentContainerStyle={[
+            styles.scroll,
+            { paddingTop: Math.max(insets.top, 44) + 16, paddingBottom: insets.bottom + 48 },
+          ]}
+          showsVerticalScrollIndicator={false}
+        >
+          {/* Hero */}
+          <Animated.View
+            style={{
+              opacity: heroAnim,
+              transform: [{ translateY: heroAnim.interpolate({ inputRange: [0, 1], outputRange: [24, 0] }) }],
+              alignItems: 'center',
+              marginBottom: 28,
+            }}
           >
+            <Text style={styles.appName}>EverPage</Text>
+            <Text style={styles.tagline}>
+              Read together. Track everything.{'\n'}Build your streak.
+            </Text>
+          </Animated.View>
 
-            {/* Hero */}
-            <Animated.View
-              style={{
-                opacity: heroAnim,
-                transform: [{ translateY: heroAnim.interpolate({ inputRange: [0, 1], outputRange: [28, 0] }) }],
-                alignItems: 'center',
-                marginBottom: 22,
-              }}
-            >
-              <Text style={styles.appName}>EverPage</Text>
-              <Text style={styles.tagline}>
-                Read together. Track everything.{'\n'}Build your streak.
-              </Text>
-            </Animated.View>
+          {/* Feature grid */}
+          <View style={styles.grid}>
+            {FEATURES.map((f, i) => (
+              <FeatureCard key={f.title} {...f} anim={featAnims[i]} />
+            ))}
+          </View>
 
-            {/* Banner image */}
-            <Animated.View
-              style={{
-                opacity: booksAnim,
-                transform: [{ translateY: booksAnim.interpolate({ inputRange: [0, 1], outputRange: [24, 0] }) }],
-                width: '100%',
-                marginBottom: 10,
-              }}
-            >
-              <View style={styles.bannerClip}>
-                <Image
-                  source={require('../assets/landing/banner.png')}
-                  style={styles.bannerImage}
-                  resizeMode="cover"
-                />
-              </View>
-            </Animated.View>
+          {/* Divider line */}
+          <Animated.View
+            style={[styles.divider, { opacity: quoteAnim }]}
+          />
 
-            {/* 2×2 feature grid */}
-            <View style={styles.grid}>
-              {CARD_IMAGES.map((src, i) => (
-                <Animated.View
-                  key={i}
-                  style={{
-                    opacity: featAnims[i],
-                    transform: [{ translateY: featAnims[i].interpolate({ inputRange: [0, 1], outputRange: [22, 0] }) }],
-                  }}
-                >
-                  <View style={styles.cardClip}>
-                    <Image source={src} style={styles.featureCardImage} resizeMode="cover" />
-                  </View>
-                </Animated.View>
-              ))}
-            </View>
+          {/* Quote */}
+          <Animated.View
+            style={[
+              styles.quoteBlock,
+              {
+                opacity: quoteAnim,
+                transform: [{ translateY: quoteAnim.interpolate({ inputRange: [0, 1], outputRange: [18, 0] }) }],
+              },
+            ]}
+          >
+            <Ionicons name="chatbubble-ellipses-outline" size={20} color='rgba(74,16,16,0.5)' />
+            <Text style={styles.quoteText}>
+              "A reader lives a thousand lives before he dies. The man who never reads lives only one."
+            </Text>
+            <Text style={styles.quoteAuthor}>— George R.R. Martin</Text>
+          </Animated.View>
 
-            {/* Quote */}
-            <Animated.View
-              style={[
-                styles.quoteBlock,
-                {
-                  opacity: quoteAnim,
-                  transform: [{ translateY: quoteAnim.interpolate({ inputRange: [0, 1], outputRange: [22, 0] }) }],
-                },
-              ]}
-            >
-              <Text style={styles.quoteText}>
-                "A reader lives a thousand lives before he dies. The man who never reads lives only one."
-              </Text>
-              <Text style={styles.quoteAuthor}>— George R.R. Martin</Text>
-            </Animated.View>
-
-            {/* CTA */}
-            <Animated.View
-              style={[
-                styles.cta,
-                {
-                  opacity: ctaAnim,
-                  transform: [{ translateY: ctaAnim.interpolate({ inputRange: [0, 1], outputRange: [28, 0] }) }],
-                },
-              ]}
-            >
-              <Animated.View style={{ width: '100%', transform: [{ scale: ctaPulse }] }}>
-                <TouchableOpacity style={styles.getStartedBtn} onPress={openRegister} activeOpacity={0.85}>
-                  <Text style={styles.getStartedText}>Get Started – It's Free  →</Text>
-                </TouchableOpacity>
-              </Animated.View>
-              <TouchableOpacity onPress={openLogin} activeOpacity={0.7} style={styles.signinRow}>
-                <Text style={styles.signinText}>
-                  Already have an account?{'  '}
-                  <Text style={styles.signinLink}>Sign in</Text>
-                </Text>
+          {/* CTA */}
+          <Animated.View
+            style={[
+              styles.cta,
+              {
+                opacity: ctaAnim,
+                transform: [{ translateY: ctaAnim.interpolate({ inputRange: [0, 1], outputRange: [24, 0] }) }],
+              },
+            ]}
+          >
+            <Animated.View style={{ width: '100%', transform: [{ scale: ctaPulse }] }}>
+              <TouchableOpacity style={styles.getStartedBtn} onPress={openRegister} activeOpacity={0.85}>
+                <Text style={styles.getStartedText}>Get Started – It's Free</Text>
+                <Feather name="arrow-right" size={18} color="#fff" />
               </TouchableOpacity>
             </Animated.View>
-
-          </ScrollView>
-        </Animated.View>
+            <TouchableOpacity onPress={openLogin} activeOpacity={0.7} style={styles.signinRow}>
+              <Text style={styles.signinText}>
+                Already have an account?{'  '}
+                <Text style={styles.signinLink}>Sign in</Text>
+              </Text>
+            </TouchableOpacity>
+          </Animated.View>
+        </ScrollView>
       )}
 
       <RegisterModal
@@ -394,126 +374,76 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     zIndex: 10,
   },
-  splashTextGroup: {
-    alignItems: 'center',
-    gap: 8,
-    marginTop: 24,
-  },
+  splashTextGroup: { alignItems: 'center', gap: 8, marginTop: 24 },
   splashName: {
-    fontSize: 42,
-    color: PALETTE.fg,
-    fontFamily: 'Inter_700Bold',
-    letterSpacing: -1,
+    fontSize: 42, color: PALETTE.fg,
+    fontFamily: 'Inter_700Bold', letterSpacing: -1,
   },
   splashSub: {
-    fontSize: 15,
-    color: PALETTE.muted,
-    fontFamily: 'Inter_400Regular',
-    letterSpacing: 0.3,
+    fontSize: 15, color: PALETTE.muted,
+    fontFamily: 'Inter_400Regular', letterSpacing: 0.3,
   },
 
   scroll: { alignItems: 'center', paddingHorizontal: H_PAD },
 
   appName: {
-    fontSize: 48,
-    color: '#f2e9db',
-    fontFamily: 'Inter_700Bold',
-    letterSpacing: -1.5,
-    marginBottom: 10,
-    textAlign: 'center',
+    fontSize: 46, color: PALETTE.fg,
+    fontFamily: 'Inter_700Bold', letterSpacing: -1.5,
+    marginBottom: 10, textAlign: 'center',
   },
   tagline: {
-    fontSize: 16,
-    color: 'rgba(242,233,219,0.72)',
-    fontFamily: 'Inter_400Regular',
-    textAlign: 'center',
-    lineHeight: 24,
-  },
-
-  bannerClip: {
-    width: BANNER_W,
-    height: BANNER_H,
-    borderRadius: 18,
-    overflow: 'hidden',
-  },
-  bannerImage: {
-    width: BANNER_W,
-    height: BANNER_H,
+    fontSize: 16, color: PALETTE.muted,
+    fontFamily: 'Inter_400Regular', textAlign: 'center', lineHeight: 24,
   },
 
   grid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: CARD_GAP,
-    width: '100%',
-    marginBottom: 14,
-    marginTop: 2,
+    flexDirection: 'row', flexWrap: 'wrap',
+    gap: CARD_GAP, width: '100%', marginBottom: 20,
   },
-  cardClip: {
-    width: CARD_SIZE,
-    height: CARD_SIZE,
-    borderRadius: 18,
-    overflow: 'hidden',
-  },
-  featureCardImage: {
-    width: CARD_SIZE,
-    height: CARD_SIZE,
+
+  divider: {
+    width: 40, height: 2, borderRadius: 1,
+    backgroundColor: 'rgba(242,233,219,0.2)',
+    marginBottom: 20,
   },
 
   quoteBlock: {
-    backgroundColor: '#f2e9db',
+    backgroundColor: PALETTE.quoteCard,
     borderRadius: 20,
-    paddingVertical: 24,
-    paddingHorizontal: 24,
-    width: '100%',
-    alignItems: 'center',
-    gap: 10,
-    marginBottom: 24,
+    paddingVertical: 22, paddingHorizontal: 22,
+    width: '100%', alignItems: 'center', gap: 10, marginBottom: 28,
   },
   quoteText: {
-    fontSize: 16,
-    color: '#4A1010',
-    fontFamily: 'Inter_400Regular',
-    textAlign: 'center',
-    lineHeight: 26,
+    fontSize: 15, color: '#4A1010',
+    fontFamily: 'Inter_400Regular', textAlign: 'center', lineHeight: 24,
   },
   quoteAuthor: {
-    fontSize: 13,
-    color: '#7a3030',
-    fontFamily: 'Inter_500Medium',
-    textAlign: 'center',
+    fontSize: 13, color: '#7a3030',
+    fontFamily: 'Inter_500Medium', textAlign: 'center',
   },
 
-  cta: { width: '100%', alignItems: 'center', gap: 14 },
+  cta: { width: '100%', alignItems: 'center', gap: 16 },
   getStartedBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: '#7FB5C5',
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
+    gap: 8,
+    backgroundColor: PALETTE.ctaBtn,
     borderRadius: 50,
-    paddingVertical: 17,
-    paddingHorizontal: 28,
+    paddingVertical: 17, paddingHorizontal: 28,
     width: '100%',
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 3 },
-    shadowOpacity: 0.2,
-    shadowRadius: 8,
-    elevation: 4,
+    shadowOpacity: 0.2, shadowRadius: 8, elevation: 4,
   },
   getStartedText: {
-    fontSize: 17,
-    color: '#ffffff',
-    fontFamily: 'Inter_700Bold',
-    letterSpacing: 0.2,
+    fontSize: 17, color: '#ffffff',
+    fontFamily: 'Inter_700Bold', letterSpacing: 0.2,
   },
   signinRow: { alignItems: 'center' },
   signinText: {
-    fontSize: 14,
-    color: 'rgba(242,233,219,0.65)',
+    fontSize: 14, color: PALETTE.muted,
     fontFamily: 'Inter_400Regular',
   },
   signinLink: {
-    color: '#f2e9db',
-    fontFamily: 'Inter_700Bold',
+    color: PALETTE.fg, fontFamily: 'Inter_700Bold',
   },
 });
