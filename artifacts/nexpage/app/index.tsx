@@ -16,8 +16,11 @@ import { useAuth } from '@/lib/auth';
 import RegisterModal from '@/components/RegisterModal';
 
 const SCR_W = Dimensions.get('window').width;
-const CARD_SIZE = Math.floor((SCR_W - 44 - 10) / 2);
-const BANNER_H = Math.floor((SCR_W - 44) * 0.38);
+const H_PAD = 20;
+const CARD_GAP = 10;
+const CARD_SIZE = Math.floor((SCR_W - H_PAD * 2 - CARD_GAP) / 2);
+const BANNER_W = SCR_W - H_PAD * 2;
+const BANNER_H = Math.floor(BANNER_W * (738 / 2186));
 
 const PALETTE = {
   bg: '#3C0A0A',
@@ -275,7 +278,7 @@ export default function LandingScreen() {
           <ScrollView
             contentContainerStyle={[
               styles.scroll,
-              { paddingTop: Math.max(insets.top, 44) + 24, paddingBottom: insets.bottom + 32 },
+              { paddingTop: Math.max(insets.top, 44) + 20, paddingBottom: insets.bottom + 40 },
             ]}
             showsVerticalScrollIndicator={false}
           >
@@ -304,11 +307,13 @@ export default function LandingScreen() {
                 marginBottom: 10,
               }}
             >
-              <Image
-                source={require('../assets/landing/banner.png')}
-                style={styles.bannerImage}
-                resizeMode="cover"
-              />
+              <View style={styles.bannerClip}>
+                <Image
+                  source={require('../assets/landing/banner.png')}
+                  style={styles.bannerImage}
+                  resizeMode="cover"
+                />
+              </View>
             </Animated.View>
 
             {/* 2×2 feature grid */}
@@ -321,7 +326,9 @@ export default function LandingScreen() {
                     transform: [{ translateY: featAnims[i].interpolate({ inputRange: [0, 1], outputRange: [22, 0] }) }],
                   }}
                 >
-                  <Image source={src} style={styles.featureCardImage} resizeMode="cover" />
+                  <View style={styles.cardClip}>
+                    <Image source={src} style={styles.featureCardImage} resizeMode="cover" />
+                  </View>
                 </Animated.View>
               ))}
             </View>
@@ -405,10 +412,10 @@ const styles = StyleSheet.create({
     letterSpacing: 0.3,
   },
 
-  scroll: { alignItems: 'center', paddingHorizontal: 22 },
+  scroll: { alignItems: 'center', paddingHorizontal: H_PAD },
 
   appName: {
-    fontSize: 46,
+    fontSize: 48,
     color: '#f2e9db',
     fontFamily: 'Inter_700Bold',
     letterSpacing: -1.5,
@@ -417,32 +424,40 @@ const styles = StyleSheet.create({
   },
   tagline: {
     fontSize: 16,
-    color: 'rgba(242,233,219,0.75)',
+    color: 'rgba(242,233,219,0.72)',
     fontFamily: 'Inter_400Regular',
     textAlign: 'center',
     lineHeight: 24,
   },
 
-  bannerImage: {
-    width: '100%',
+  bannerClip: {
+    width: BANNER_W,
     height: BANNER_H,
     borderRadius: 18,
     overflow: 'hidden',
+  },
+  bannerImage: {
+    width: BANNER_W,
+    height: BANNER_H,
   },
 
   grid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: 10,
+    gap: CARD_GAP,
     width: '100%',
     marginBottom: 14,
     marginTop: 2,
   },
-  featureCardImage: {
+  cardClip: {
     width: CARD_SIZE,
     height: CARD_SIZE,
     borderRadius: 18,
     overflow: 'hidden',
+  },
+  featureCardImage: {
+    width: CARD_SIZE,
+    height: CARD_SIZE,
   },
 
   quoteBlock: {
