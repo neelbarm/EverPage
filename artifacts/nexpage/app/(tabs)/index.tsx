@@ -297,7 +297,7 @@ export default function ShelfScreen() {
 
             {recommendedBooks.length > 0 && (
               <View style={styles.recSection}>
-                <Text style={[styles.recLabel, { color: colors.primary, fontFamily: 'Inter_600SemiBold', fontStyle: 'italic' }]}>YOUR NEXT RECOMMENDED READS</Text>
+                <Text style={[styles.recLabel, { color: 'rgba(255,255,255,0.65)', fontFamily: 'Inter_600SemiBold' }]}>YOUR NEXT RECOMMENDED READS</Text>
                 <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 10, paddingVertical: 2 }}>
                   {recommendedBooks.map(book => (
                     <TouchableOpacity
@@ -310,15 +310,15 @@ export default function ShelfScreen() {
                         <BookCover bookId={book.id} coverColor={book.coverColor} coverImageUri={book.coverImageUri} width={REC_CARD_W} height={REC_COVER_H} borderRadius={0} />
                       </View>
                       <View style={styles.recBody}>
-                        <Text style={[styles.recTitle, { color: '#ffffff', fontFamily: 'Inter_700Bold' }]} numberOfLines={2}>{book.title}</Text>
-                        <Text style={[styles.recAuthor, { color: 'rgba(255,255,255,0.75)', fontFamily: 'Inter_400Regular' }]} numberOfLines={1}>{book.author}</Text>
-                        <Text style={[styles.recReason, { color: 'rgba(255,255,255,0.6)', fontFamily: 'Inter_400Regular', fontStyle: 'italic' }]} numberOfLines={2}>Because {book.reason}</Text>
+                        <Text style={[styles.recTitle, { color: colors.foreground, fontFamily: 'Inter_700Bold' }]} numberOfLines={2}>{book.title}</Text>
+                        <Text style={[styles.recAuthor, { color: colors.mutedForeground, fontFamily: 'Inter_400Regular' }]} numberOfLines={1}>{book.author}</Text>
+                        <Text style={[styles.recReason, { color: colors.mutedForeground, fontFamily: 'Inter_400Regular', fontStyle: 'italic' }]} numberOfLines={2}>Because {book.reason}</Text>
                       </View>
                     </TouchableOpacity>
                   ))}
                 </ScrollView>
                 <View style={{ alignItems: 'center', marginTop: 4 }}>
-                  <Ionicons name="arrow-down-circle" size={26} color={colors.primary} />
+                  <Ionicons name="arrow-down-circle" size={26} color="rgba(255,255,255,0.5)" />
                 </View>
               </View>
             )}
@@ -475,7 +475,7 @@ const styles = StyleSheet.create({
   shelfLabel: { fontSize: 32, letterSpacing: -0.8 },
   streakBadge: {
     flexDirection: 'row', alignItems: 'center',
-    paddingHorizontal: 14, paddingVertical: 9, borderRadius: 16, gap: 8,
+    paddingHorizontal: 18, paddingVertical: 9, borderRadius: 24, gap: 8,
   },
   streakNum: { fontSize: 28, lineHeight: 32 },
   streakLabel: { fontSize: 11, lineHeight: 14 },
@@ -526,12 +526,12 @@ const styles = StyleSheet.create({
   emptySub: { fontSize: 14, textAlign: 'center', lineHeight: 20 },
   recSection: {
     marginTop: 16, marginHorizontal: 16, gap: 12, padding: 16,
-    backgroundColor: '#EDE8DF', borderRadius: 18,
+    backgroundColor: '#8a2333', borderRadius: 18,
   },
   recLabel: { fontSize: 11, letterSpacing: 1.2 },
   recCard: {
     width: REC_CARD_W, borderRadius: 14, overflow: 'hidden',
-    backgroundColor: '#7FB5C5',
+    backgroundColor: '#faf5ed',
     shadowColor: '#000', shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.1, shadowRadius: 6, elevation: 3,
   },

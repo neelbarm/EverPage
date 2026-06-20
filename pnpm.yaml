@@ -1,0 +1,4 @@
+onlyBuiltDependencies:
+  - esbuild
+  - better-sqlite3
+  - bcryptjs
