@@ -34,6 +34,10 @@ const AuthContext = createContext<AuthContextValue>({
 });
 
 function getApiBaseUrl(): string {
+  // Explicit override for local development (e.g. http://localhost:3001)
+  if (process.env.EXPO_PUBLIC_API_URL) {
+    return process.env.EXPO_PUBLIC_API_URL.replace(/\/$/, "");
+  }
   if (process.env.EXPO_PUBLIC_DOMAIN) {
     return `https://${process.env.EXPO_PUBLIC_DOMAIN}`;
   }

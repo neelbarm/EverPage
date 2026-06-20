@@ -14,6 +14,8 @@ import { getItem as getStoredItem } from '@/lib/storage';
 const AUTH_TOKEN_KEY = 'auth_session_token';
 
 function getApiBase(): string {
+  const override = (process.env.EXPO_PUBLIC_API_URL ?? '').trim();
+  if (override) return `${override.replace(/\/$/, '')}/api`;
   const domain = (process.env.EXPO_PUBLIC_DOMAIN ?? '').trim();
   if (domain) return `https://${domain}/api`;
   return '/api';
