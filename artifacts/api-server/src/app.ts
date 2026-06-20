@@ -26,6 +26,8 @@ function isOriginAllowed(origin: string, allowed: Set<string>): boolean {
   if (allowed.has(origin)) return true;
   // Expo Go and Replit tunnel subdomains (e.g. *.expo.picard.replit.dev)
   if (origin.endsWith(".replit.dev") || origin.endsWith(".replit.app")) return true;
+  // Local development
+  if (origin.startsWith("http://localhost:") || origin.startsWith("http://127.0.0.1:")) return true;
   return false;
 }
 
