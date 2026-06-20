@@ -157,8 +157,8 @@ export default function StatsScreen() {
           <>
             <View style={[styles.card, { backgroundColor: colors.card, borderColor: colors.border }]}>
               <Text style={[styles.cardSectionLabel, { color: colors.mutedForeground, fontFamily: 'Inter_600SemiBold' }]}>CURRENT STREAK</Text>
-              <Text style={[styles.streakBigNum, { color: colors.primary, fontFamily: 'Inter_700Bold' }]}>{streak.currentStreak}</Text>
-              <Text style={[styles.streakDaysLabel, { color: colors.mutedForeground, fontFamily: 'Inter_400Regular' }]}>{streak.currentStreak === 1 ? 'day in a row' : 'days in a row'}</Text>
+              <Text style={[styles.streakBigNum, { color: colors.accent, fontFamily: 'Inter_700Bold' }]}>{streak.currentStreak}</Text>
+              <Text style={[styles.streakDaysLabel, { color: colors.foreground, fontFamily: 'Inter_400Regular' }]}>{streak.currentStreak === 1 ? 'day in a row' : 'days in a row'}</Text>
               <View style={styles.dotRow}>
                 {DAYS.map((d, i) => (
                   <StreakDot key={i} checked={streak.checkedDays.includes(weekDates[i])} day={d} />

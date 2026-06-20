@@ -310,9 +310,9 @@ export default function ShelfScreen() {
                         <BookCover bookId={book.id} coverColor={book.coverColor} coverImageUri={book.coverImageUri} width={REC_CARD_W} height={REC_COVER_H} borderRadius={0} />
                       </View>
                       <View style={styles.recBody}>
-                        <Text style={[styles.recTitle, { color: colors.foreground, fontFamily: 'Inter_700Bold' }]} numberOfLines={2}>{book.title}</Text>
-                        <Text style={[styles.recAuthor, { color: colors.mutedForeground, fontFamily: 'Inter_400Regular' }]} numberOfLines={1}>{book.author}</Text>
-                        <Text style={[styles.recReason, { color: colors.mutedForeground, fontFamily: 'Inter_400Regular', fontStyle: 'italic' }]} numberOfLines={2}>Because {book.reason}</Text>
+                        <Text style={[styles.recTitle, { color: '#201b15', fontFamily: 'Inter_700Bold' }]} numberOfLines={2}>{book.title}</Text>
+                        <Text style={[styles.recAuthor, { color: '#6b5d4f', fontFamily: 'Inter_400Regular' }]} numberOfLines={1}>{book.author}</Text>
+                        <Text style={[styles.recReason, { color: '#8a7865', fontFamily: 'Inter_400Regular', fontStyle: 'italic' }]} numberOfLines={2}>Because {book.reason}</Text>
                       </View>
                     </TouchableOpacity>
                   ))}

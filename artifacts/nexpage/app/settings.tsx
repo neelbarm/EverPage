@@ -193,7 +193,7 @@ function SettingsRow({
       ) : null}
       <Text style={[
         styles.rowLabel,
-        { color: destructive ? colors.primary : colors.foreground, fontFamily: 'Inter_400Regular' },
+        { color: destructive ? colors.destructive : colors.foreground, fontFamily: 'Inter_400Regular' },
         !icon && { marginLeft: 4 },
       ]}>
         {label}
