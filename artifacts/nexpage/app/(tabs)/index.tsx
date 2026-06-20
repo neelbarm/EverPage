@@ -168,7 +168,7 @@ export default function ShelfScreen() {
           <Text style={[styles.shelfLabel, { color: colors.foreground, fontFamily: 'Inter_700Bold' }]}>Your Shelf</Text>
         </View>
         <TouchableOpacity
-          style={[styles.streakBadge, { backgroundColor: '#7FB5C5' }]}
+          style={[styles.streakBadge, { backgroundColor: '#A8C5D6' }]}
           onPress={() => router.push('/(tabs)/stats')}
           activeOpacity={0.8}
         >
@@ -229,7 +229,7 @@ export default function ShelfScreen() {
           <>
             {heroBook && (
               <TouchableOpacity
-                style={[styles.heroCard, { backgroundColor: colors.teal, borderColor: 'transparent' }]}
+                style={[styles.heroCard, { backgroundColor: '#0F3E49', borderColor: 'transparent' }]}
                 onPress={() => router.push(`/book/${heroBook.id}`)}
                 activeOpacity={0.92}
               >
@@ -245,7 +245,7 @@ export default function ShelfScreen() {
                     </Text>
                     <View style={styles.heroProgressRow}>
                       <Text style={[styles.heroPages, { color: 'rgba(255,255,255,0.65)', fontFamily: 'Inter_500Medium' }]}>
-                        p. {heroBook.currentPage} / {heroBook.totalPages}
+                        Page {heroBook.currentPage}/{heroBook.totalPages}
                       </Text>
                       <Text style={[styles.heroPct, { color: '#ffffff', fontFamily: 'Inter_700Bold' }]}>
                         {Math.round(heroProgress * 100)}%

@@ -8,10 +8,10 @@ import {
   Animated,
   Easing,
   Dimensions,
+  Image,
 } from 'react-native';
 import { Redirect } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { Ionicons } from '@expo/vector-icons';
 import { useAuth } from '@/lib/auth';
 import { useColors } from '@/hooks/useColors';
 import { useTheme } from '@/context/ThemeContext';
@@ -19,8 +19,28 @@ import RegisterModal from '@/components/RegisterModal';
 
 const SCR_W = Dimensions.get('window').width;
 const H_PAD = 20;
-const CARD_GAP = 10;
-const ICON_CARD_W = Math.floor((SCR_W - H_PAD * 2 - CARD_GAP) / 2);
+const CARD_GAP = 12;
+const CONTENT_W = SCR_W - H_PAD * 2;
+const TILE_W = Math.floor((CONTENT_W - CARD_GAP) / 2);
+
+// Aspect ratios of the design assets (width / height)
+const TITLE_AR = 1400 / 492;   // ~2.85
+const BANNER_AR = 1400 / 470;  // ~2.98
+const CTA_AR_LIGHT = 1264 / 729;  // ~1.73
+const CTA_AR_DARK = 1928 / 1086;  // ~1.78
+
+const ASSETS = {
+  title_light: require('@/assets/landing/title_light.png'),
+  title_dark: require('@/assets/landing/title_dark.png'),
+  banner_light: require('@/assets/landing/banner_light.png'),
+  banner_dark: require('@/assets/landing/banner_dark.png'),
+  tile_shelf: require('@/assets/landing/tile_shelf.png'),
+  tile_streaks: require('@/assets/landing/tile_streaks.png'),
+  tile_friends: require('@/assets/landing/tile_friends.png'),
+  tile_stats: require('@/assets/landing/tile_stats.png'),
+  cta_light: require('@/assets/landing/cta_light.png'),
+  cta_dark: require('@/assets/landing/cta_dark.png'),
+};
 
 const PAGE_W = 54;
 const PAGE_H = 74;
@@ -111,27 +131,11 @@ const bookStyles = StyleSheet.create({
   },
 });
 
-const FEATURE_TILES: { title: string; body: string; bg: string }[] = [
-  {
-    title: 'Your Reading Shelf',
-    body: 'Add books, track your progress page by page, and keep every title you\'re reading, or have ever read, in one beautiful place.',
-    bg: '#C4AA82',
-  },
-  {
-    title: 'Daily Streaks & Goals',
-    body: 'Set a daily reading goal in minutes. Hit it every day to build your streak. Streak freezes keep your progress safe on busy days.',
-    bg: '#A8C5D6',
-  },
-  {
-    title: 'Read with Friends',
-    body: 'See what your friends are reading right now, cheer each other on the leaderboard, and share quotes from the books you love.',
-    bg: '#1B4A52',
-  },
-  {
-    title: 'Beautiful Reading Stats',
-    body: 'Charts of your reading minutes, pages per week, and a yearly Wrapped — a personal story of your reading year.',
-    bg: '#8A2333',
-  },
+const TILES = [
+  ASSETS.tile_shelf,
+  ASSETS.tile_streaks,
+  ASSETS.tile_friends,
+  ASSETS.tile_stats,
 ];
 
 export default function LandingScreen() {
@@ -139,6 +143,7 @@ export default function LandingScreen() {
   const { isAuthenticated, isLoading } = useAuth();
   const colors = useColors();
   const { resolvedScheme } = useTheme();
+  const isDark = resolvedScheme === 'dark';
   const [phase, setPhase] = useState<'splash' | 'landing'>('splash');
   const [modalVisible, setModalVisible] = useState(false);
   const [defaultMode, setDefaultMode] = useState<'register' | 'login'>('register');
@@ -147,11 +152,11 @@ export default function LandingScreen() {
   const landingOpacity = useRef(new Animated.Value(0)).current;
 
   const heroAnim = useRef(new Animated.Value(0)).current;
+  const bannerAnim = useRef(new Animated.Value(0)).current;
   const feat0 = useRef(new Animated.Value(0)).current;
   const feat1 = useRef(new Animated.Value(0)).current;
   const feat2 = useRef(new Animated.Value(0)).current;
   const feat3 = useRef(new Animated.Value(0)).current;
-  const quoteAnim = useRef(new Animated.Value(0)).current;
   const ctaAnim = useRef(new Animated.Value(0)).current;
   const ctaPulse = useRef(new Animated.Value(1)).current;
 
@@ -172,11 +177,11 @@ export default function LandingScreen() {
       landingOpacity.setValue(1);
       Animated.stagger(80, [
         Animated.spring(heroAnim, { toValue: 1, tension: 70, friction: 9, useNativeDriver: true }),
+        Animated.spring(bannerAnim, { toValue: 1, tension: 70, friction: 9, useNativeDriver: true }),
         Animated.spring(feat0, { toValue: 1, tension: 70, friction: 9, useNativeDriver: true }),
         Animated.spring(feat1, { toValue: 1, tension: 70, friction: 9, useNativeDriver: true }),
         Animated.spring(feat2, { toValue: 1, tension: 70, friction: 9, useNativeDriver: true }),
         Animated.spring(feat3, { toValue: 1, tension: 70, friction: 9, useNativeDriver: true }),
-        Animated.spring(quoteAnim, { toValue: 1, tension: 70, friction: 9, useNativeDriver: true }),
         Animated.spring(ctaAnim, { toValue: 1, tension: 70, friction: 9, useNativeDriver: true }),
       ]).start(() => {
         Animated.loop(
@@ -218,12 +223,15 @@ export default function LandingScreen() {
 
   const featAnims = [feat0, feat1, feat2, feat3];
 
-  // Theme-dependent colors
-  const splashBg = resolvedScheme === 'dark' ? '#380A0A' : '#EDE8DF';
-  const headingColor = resolvedScheme === 'dark' ? '#f2e9db' : '#1C5A60';
-  const mutedColor = resolvedScheme === 'dark' ? 'rgba(242,233,219,0.65)' : 'rgba(28,90,96,0.65)';
-  const iconCardBg = resolvedScheme === 'dark' ? '#4E1212' : '#E0D9CF';
-  const quoteCardBg = resolvedScheme === 'dark' ? '#f2e9db' : '#FFFFFF';
+  const splashBg = isDark ? '#380A0A' : '#EDE8DF';
+  const headingColor = isDark ? '#f2e9db' : '#1C5A60';
+  const mutedColor = isDark ? 'rgba(242,233,219,0.65)' : 'rgba(28,90,96,0.65)';
+
+  // CTA image geometry — used to place transparent tap targets over the
+  // "Get Started" button and "Sign in" text baked into the artwork.
+  const ctaImg = isDark ? ASSETS.cta_dark : ASSETS.cta_light;
+  const ctaAR = isDark ? CTA_AR_DARK : CTA_AR_LIGHT;
+  const ctaH = CONTENT_W / ctaAR;
 
   return (
     <View style={[styles.root, { backgroundColor: colors.background }]}>
@@ -260,101 +268,91 @@ export default function LandingScreen() {
         <ScrollView
           contentContainerStyle={[
             styles.scroll,
-            { paddingTop: Math.max(insets.top, 44) + 16, paddingBottom: insets.bottom + 48 },
+            { paddingTop: Math.max(insets.top, 44) + 12, paddingBottom: insets.bottom + 40 },
           ]}
           showsVerticalScrollIndicator={false}
         >
-          {/* Hero heading */}
+          {/* Title + tagline */}
           <Animated.View
             style={{
+              width: CONTENT_W,
               opacity: heroAnim,
               transform: [{ translateY: heroAnim.interpolate({ inputRange: [0, 1], outputRange: [24, 0] }) }],
-              alignItems: 'center',
-              marginBottom: 24,
+              marginBottom: 18,
             }}
           >
-            <Text style={[styles.appName, { color: headingColor }]}>EverPage</Text>
-            <Text style={[styles.tagline, { color: headingColor }]}>
-              Read together. Track everything.{'\n'}Build your streak.
-            </Text>
+            <Image
+              source={isDark ? ASSETS.title_dark : ASSETS.title_light}
+              style={{ width: CONTENT_W, aspectRatio: TITLE_AR }}
+              resizeMode="contain"
+            />
           </Animated.View>
 
-          {/* Two icon cards side by side */}
+          {/* Icon banner */}
           <Animated.View
             style={{
-              opacity: feat0,
-              transform: [{ translateY: feat0.interpolate({ inputRange: [0, 1], outputRange: [18, 0] }) }],
-              flexDirection: 'row',
-              gap: CARD_GAP,
-              width: '100%',
-              marginBottom: 12,
+              width: CONTENT_W,
+              opacity: bannerAnim,
+              transform: [{ translateY: bannerAnim.interpolate({ inputRange: [0, 1], outputRange: [20, 0] }) }],
+              marginBottom: 20,
             }}
           >
-            <View style={[styles.iconCard, { backgroundColor: iconCardBg, width: ICON_CARD_W }]}>
-              <Ionicons name="book-outline" size={40} color={headingColor} />
-            </View>
-            <View style={[styles.iconCard, { backgroundColor: iconCardBg, width: ICON_CARD_W }]}>
-              <Ionicons name="tablet-landscape-outline" size={40} color={headingColor} />
-            </View>
+            <Image
+              source={isDark ? ASSETS.banner_dark : ASSETS.banner_light}
+              style={{ width: CONTENT_W, aspectRatio: BANNER_AR }}
+              resizeMode="contain"
+            />
           </Animated.View>
 
-          {/* 2x2 feature tile grid */}
-          <View style={styles.tileGrid}>
-            {FEATURE_TILES.map((tile, i) => (
+          {/* Feature tiles 2×2 */}
+          <View style={styles.grid}>
+            {TILES.map((tile, i) => (
               <Animated.View
-                key={tile.title}
+                key={i}
                 style={{
-                  width: ICON_CARD_W,
+                  width: TILE_W,
                   opacity: featAnims[i],
                   transform: [{ translateY: featAnims[i].interpolate({ inputRange: [0, 1], outputRange: [18, 0] }) }],
                 }}
               >
-                <View style={[styles.featureTile, { backgroundColor: tile.bg }]}>
-                  <Text style={styles.featureTileTitle}>{tile.title}</Text>
-                  <Text style={styles.featureTileBody}>{tile.body}</Text>
-                </View>
+                <Image
+                  source={tile}
+                  style={{ width: TILE_W, height: TILE_W }}
+                  resizeMode="contain"
+                />
               </Animated.View>
             ))}
           </View>
 
-          {/* Quote card */}
+          {/* Quote + CTA (artwork with tap overlays) */}
           <Animated.View
-            style={[
-              styles.quoteBlock,
-              {
-                backgroundColor: quoteCardBg,
-                opacity: quoteAnim,
-                transform: [{ translateY: quoteAnim.interpolate({ inputRange: [0, 1], outputRange: [18, 0] }) }],
-              },
-            ]}
+            style={{
+              width: CONTENT_W,
+              marginTop: 22,
+              opacity: ctaAnim,
+              transform: [
+                { translateY: ctaAnim.interpolate({ inputRange: [0, 1], outputRange: [24, 0] }) },
+                { scale: ctaPulse },
+              ],
+            }}
           >
-            <Text style={styles.quoteText}>
-              "A reader lives a thousand lives before he dies. The man who never reads lives only one."
-            </Text>
-            <Text style={styles.quoteAuthor}>- George R.R. Martin</Text>
-          </Animated.View>
-
-          {/* CTA */}
-          <Animated.View
-            style={[
-              styles.cta,
-              {
-                opacity: ctaAnim,
-                transform: [{ translateY: ctaAnim.interpolate({ inputRange: [0, 1], outputRange: [24, 0] }) }],
-              },
-            ]}
-          >
-            <Animated.View style={{ width: '100%', transform: [{ scale: ctaPulse }] }}>
-              <TouchableOpacity style={styles.getStartedBtn} onPress={openRegister} activeOpacity={0.85}>
-                <Text style={styles.getStartedText}>Get Started – It's Free →</Text>
-              </TouchableOpacity>
-            </Animated.View>
-            <TouchableOpacity onPress={openLogin} activeOpacity={0.7} style={styles.signinRow}>
-              <Text style={[styles.signinText, { color: mutedColor }]}>
-                Already have an account?{'  '}
-                <Text style={[styles.signinLink, { color: headingColor }]}>Sign in</Text>
-              </Text>
-            </TouchableOpacity>
+            <Image
+              source={ctaImg}
+              style={{ width: CONTENT_W, height: ctaH }}
+              resizeMode="contain"
+            />
+            {/* "Get Started" button tap target (~58%–84% of height) */}
+            <TouchableOpacity
+              activeOpacity={0.7}
+              onPress={openRegister}
+              style={{ position: 'absolute', left: 0, right: 0, top: ctaH * 0.56, height: ctaH * 0.28 }}
+            />
+            {/* "Sign in" tap target (bottom band) */}
+            <TouchableOpacity
+              activeOpacity={0.7}
+              onPress={openLogin}
+              style={{ position: 'absolute', left: 0, right: 0, top: ctaH * 0.86, height: ctaH * 0.14 }}
+            />
           </Animated.View>
         </ScrollView>
       )}
@@ -389,93 +387,8 @@ const styles = StyleSheet.create({
 
   scroll: { alignItems: 'center', paddingHorizontal: H_PAD },
 
-  appName: {
-    fontSize: 46,
-    fontFamily: 'Inter_700Bold', letterSpacing: -1.5,
-    marginBottom: 10, textAlign: 'center',
-  },
-  tagline: {
-    fontSize: 16,
-    fontFamily: 'Inter_400Regular', textAlign: 'center', lineHeight: 24,
-  },
-
-  iconCard: {
-    height: 130,
-    borderRadius: 18,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-
-  tileGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: CARD_GAP,
-    width: '100%',
-    marginBottom: 20,
-  },
-
-  featureTile: {
-    borderRadius: 18,
-    padding: 16,
-    minHeight: 160,
-    gap: 10,
-    justifyContent: 'flex-start',
-  },
-  featureTileTitle: {
-    fontSize: 15,
-    color: '#ffffff',
-    fontFamily: 'Inter_700Bold',
-    letterSpacing: -0.2,
-    lineHeight: 20,
-  },
-  featureTileBody: {
-    fontSize: 12,
-    color: 'rgba(255,255,255,0.85)',
-    fontFamily: 'Inter_400Regular',
-    lineHeight: 17,
-  },
-
-  quoteBlock: {
-    borderRadius: 20,
-    paddingVertical: 22, paddingHorizontal: 22,
-    width: '100%', alignItems: 'center', gap: 10, marginBottom: 28,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.06, shadowRadius: 8, elevation: 2,
-  },
-  quoteText: {
-    fontSize: 15, color: '#1C5A60',
-    fontFamily: 'Inter_400Regular', textAlign: 'center', lineHeight: 24,
-    fontStyle: 'italic',
-  },
-  quoteAuthor: {
-    fontSize: 13, color: '#1C5A60',
-    fontFamily: 'Inter_500Medium', textAlign: 'center',
-    opacity: 0.7,
-  },
-
-  cta: { width: '100%', alignItems: 'center', gap: 16 },
-  getStartedBtn: {
-    flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
-    gap: 8,
-    backgroundColor: '#A8C5D6',
-    borderRadius: 50,
-    paddingVertical: 17, paddingHorizontal: 28,
-    width: '100%',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 3 },
-    shadowOpacity: 0.2, shadowRadius: 8, elevation: 4,
-  },
-  getStartedText: {
-    fontSize: 17, color: '#ffffff',
-    fontFamily: 'Inter_700Bold', letterSpacing: 0.2,
-  },
-  signinRow: { alignItems: 'center' },
-  signinText: {
-    fontSize: 14,
-    fontFamily: 'Inter_400Regular',
-  },
-  signinLink: {
-    fontFamily: 'Inter_700Bold',
+  grid: {
+    flexDirection: 'row', flexWrap: 'wrap',
+    gap: CARD_GAP, width: CONTENT_W, justifyContent: 'space-between',
   },
 });
