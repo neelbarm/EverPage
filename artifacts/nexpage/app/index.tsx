@@ -233,6 +233,10 @@ export default function LandingScreen() {
   const ctaAR = isDark ? CTA_AR_DARK : CTA_AR_LIGHT;
   const ctaH = CONTENT_W / ctaAR;
 
+  // Explicit pixel heights (native iOS doesn't reliably constrain Image via aspectRatio)
+  const titleH = CONTENT_W / TITLE_AR;
+  const bannerH = CONTENT_W / BANNER_AR;
+
   return (
     <View style={[styles.root, { backgroundColor: colors.background }]}>
 
@@ -283,7 +287,7 @@ export default function LandingScreen() {
           >
             <Image
               source={isDark ? ASSETS.title_dark : ASSETS.title_light}
-              style={{ width: CONTENT_W, aspectRatio: TITLE_AR }}
+              style={{ width: CONTENT_W, height: titleH }}
               resizeMode="contain"
             />
           </Animated.View>
@@ -299,7 +303,7 @@ export default function LandingScreen() {
           >
             <Image
               source={isDark ? ASSETS.banner_dark : ASSETS.banner_light}
-              style={{ width: CONTENT_W, aspectRatio: BANNER_AR }}
+              style={{ width: CONTENT_W, height: bannerH }}
               resizeMode="contain"
             />
           </Animated.View>
