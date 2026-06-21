@@ -8,6 +8,7 @@ import { Ionicons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { useColors } from '@/hooks/useColors';
+import { useTheme } from '@/context/ThemeContext';
 import { useSocial, ActivityItem, SocialUser, NudgeHistoryItem, LeaderboardEntry } from '@/context/SocialContext';
 import { useStore } from '@/context/StoreContext';
 import RegisterModal from '@/components/RegisterModal';
@@ -384,58 +385,68 @@ function NudgeHistoryCard({ item }: { item: NudgeHistoryItem }) {
   );
 }
 
-function CompareBar({ label, value, unit, max, color, trackColor, mutedColor }: {
-  label: string; value: number; unit: string; max: number; color: string; trackColor: string; mutedColor: string;
+function CompareBar({ label, value, unit, max, color, trackColor, mutedColor, leader }: {
+  label: string; value: number; unit: string; max: number; color: string; trackColor: string; mutedColor: string; leader?: boolean;
 }) {
   const pct = max > 0 ? value / max : 0;
   return (
     <View style={styles.cmpBarRow}>
-      <Text style={[styles.cmpBarLabel, { color: mutedColor, fontFamily: 'Inter_500Medium' }]} numberOfLines={1}>{label}</Text>
+      <Text style={[styles.cmpBarLabel, { color: leader ? color : mutedColor, fontFamily: leader ? 'Inter_600SemiBold' : 'Inter_500Medium' }]} numberOfLines={1}>{label}</Text>
       <View style={[styles.cmpTrack, { backgroundColor: trackColor }]}>
-        <View style={[styles.cmpFill, { width: `${Math.round(pct * 100)}%` as any, backgroundColor: color }]} />
+        <View style={[styles.cmpFill, { width: `${Math.round(pct * 100)}%` as any, backgroundColor: color, opacity: leader ? 1 : 0.72 }]} />
       </View>
-      <Text style={[styles.cmpVal, { color: color, fontFamily: 'Inter_700Bold' }]}>{value}{unit}</Text>
+      <Text style={[styles.cmpVal, { color, opacity: leader ? 1 : 0.75, fontFamily: 'Inter_700Bold' }]}>{value}{unit}</Text>
     </View>
   );
 }
 
-function CompareCard({ row, myMinutes, myPages, myColor }: {
+function CompareCard({ row, myMinutes, myPages }: {
   row: { user: SocialUser; minutes: number; pages: number };
-  myMinutes: number; myPages: number; myColor: string;
+  myMinutes: number; myPages: number;
 }) {
   const colors = useColors();
+  const { resolvedScheme } = useTheme();
   const router = useRouter();
+  const isDark = resolvedScheme === 'dark';
   const { user, minutes, pages } = row;
   const minMax = Math.max(minutes, myMinutes, 1);
   const pageMax = Math.max(pages, myPages, 1);
   const tie = myMinutes === minutes;
   const ahead = myMinutes > minutes;
   const status = tie ? 'Tied' : ahead ? "You're ahead" : 'Behind';
-  const statusColor = tie ? colors.mutedForeground : ahead ? '#3A6645' : colors.accent;
   const firstName = user.displayName.split(' ')[0];
-  const trackColor = colors.mutedForeground + '26';
+
+  // Fixed, high-contrast two-tone palette (legible on both cream + dark cards).
+  const friendColor = isDark ? '#E0BC66' : '#9A7B2E'; // gold
+  const youColor = isDark ? '#8FC7D6' : '#1C5A60';    // teal
+  const track = isDark ? 'rgba(242,233,219,0.12)' : 'rgba(28,58,73,0.09)';
+  const aheadColor = isDark ? '#86CCA0' : '#3A6645';
+  const behindColor = isDark ? '#E3936F' : '#A8512C';
+  const statusColor = tie ? colors.mutedForeground : ahead ? aheadColor : behindColor;
+  const cardBg = isDark ? '#46140F' : '#FBF7EF';
+  const cardBorder = isDark ? 'rgba(224,188,102,0.18)' : 'rgba(28,90,96,0.12)';
 
   return (
-    <View style={[styles.cmpCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
+    <View style={[styles.cmpCard, { backgroundColor: cardBg, borderColor: cardBorder }]}>
       <View style={styles.cmpHeader}>
         <TouchableOpacity onPress={() => router.push(`/profile/${user.id}` as any)} activeOpacity={0.75}>
-          <AvatarCircle initial={user.initial} color={user.color} size={36} />
+          <AvatarCircle initial={user.initial} color={user.color} size={38} />
         </TouchableOpacity>
-        <Text style={[styles.cmpName, { color: colors.foreground, fontFamily: 'Inter_600SemiBold' }]} numberOfLines={1}>
+        <Text style={[styles.cmpName, { color: colors.foreground, fontFamily: 'Inter_700Bold' }]} numberOfLines={1}>
           {user.displayName}
         </Text>
-        <View style={[styles.cmpBadge, { backgroundColor: statusColor + '1A' }]}>
-          <Text style={[styles.cmpBadgeText, { color: statusColor, fontFamily: 'Inter_600SemiBold' }]}>{status}</Text>
+        <View style={[styles.cmpBadge, { backgroundColor: statusColor + '24', borderColor: statusColor + '55' }]}>
+          <Text style={[styles.cmpBadgeText, { color: statusColor, fontFamily: 'Inter_700Bold' }]}>{status}</Text>
         </View>
       </View>
 
       <Text style={[styles.cmpSection, { color: colors.mutedForeground, fontFamily: 'Inter_600SemiBold' }]}>MINUTES</Text>
-      <CompareBar label={firstName} value={minutes} unit="m" max={minMax} color={user.color} trackColor={trackColor} mutedColor={colors.mutedForeground} />
-      <CompareBar label="You" value={myMinutes} unit="m" max={minMax} color={myColor} trackColor={trackColor} mutedColor={colors.mutedForeground} />
+      <CompareBar label={firstName} value={minutes} unit="m" max={minMax} color={friendColor} trackColor={track} mutedColor={colors.mutedForeground} leader={minutes >= myMinutes && minutes > 0} />
+      <CompareBar label="You" value={myMinutes} unit="m" max={minMax} color={youColor} trackColor={track} mutedColor={colors.mutedForeground} leader={myMinutes > minutes} />
 
-      <Text style={[styles.cmpSection, { color: colors.mutedForeground, fontFamily: 'Inter_600SemiBold', marginTop: 10 }]}>PAGES</Text>
-      <CompareBar label={firstName} value={pages} unit="p" max={pageMax} color={user.color} trackColor={trackColor} mutedColor={colors.mutedForeground} />
-      <CompareBar label="You" value={myPages} unit="p" max={pageMax} color={myColor} trackColor={trackColor} mutedColor={colors.mutedForeground} />
+      <Text style={[styles.cmpSection, { color: colors.mutedForeground, fontFamily: 'Inter_600SemiBold', marginTop: 12 }]}>PAGES</Text>
+      <CompareBar label={firstName} value={pages} unit="p" max={pageMax} color={friendColor} trackColor={track} mutedColor={colors.mutedForeground} leader={pages >= myPages && pages > 0} />
+      <CompareBar label="You" value={myPages} unit="p" max={pageMax} color={youColor} trackColor={track} mutedColor={colors.mutedForeground} leader={myPages > pages} />
     </View>
   );
 }
@@ -443,7 +454,7 @@ function CompareCard({ row, myMinutes, myPages, myColor }: {
 export default function FriendsScreen() {
   const colors = useColors();
   const insets = useSafeAreaInsets();
-  const { isRegistered, feed, following, followers, suggestedUsers, nudgeHistory, unreadNudgeCount, markNudgesRead, isLoading, refreshFeed, followUser, unfollowUser, isFollowing, leaderboard, socialProfile } = useSocial();
+  const { isRegistered, feed, following, followers, suggestedUsers, nudgeHistory, unreadNudgeCount, markNudgesRead, isLoading, refreshFeed, followUser, unfollowUser, isFollowing, leaderboard } = useSocial();
   const { sessions } = useStore();
   const { openFollowers } = useLocalSearchParams<{ openFollowers?: string }>();
   const [mode, setMode] = useState<'today' | 'week' | 'compare'>('today');
@@ -491,7 +502,6 @@ export default function FriendsScreen() {
       return { user: u, minutes: e?.weekMinutes ?? 0, pages: e?.weekPages ?? 0 };
     })
     .sort((a, b) => (b.minutes - a.minutes) || (b.pages - a.pages));
-  const myColor = socialProfile?.color ?? colors.primary;
 
   if (!isRegistered) {
     return (
@@ -708,17 +718,17 @@ export default function FriendsScreen() {
             </View>
           ) : (
             <>
-              <View style={[styles.cmpSummary, { borderBottomColor: colors.border }]}>
-                <Text style={[styles.cmpSummaryLabel, { color: colors.mutedForeground, fontFamily: 'Inter_600SemiBold' }]}>YOUR WEEK</Text>
-                <Text style={[styles.cmpSummaryValue, { color: colors.foreground, fontFamily: 'Inter_700Bold' }]}>
+              <View style={styles.cmpSummary}>
+                <Text style={[styles.cmpSummaryLabel, { color: 'rgba(242,233,219,0.65)', fontFamily: 'Inter_600SemiBold' }]}>YOUR WEEK</Text>
+                <Text style={[styles.cmpSummaryValue, { color: '#F4ECDD', fontFamily: 'Inter_700Bold' }]}>
                   {myWeekMinutes} min · {myWeekPages} pages
                 </Text>
-                <Text style={[styles.cmpSummarySub, { color: colors.mutedForeground, fontFamily: 'Inter_400Regular' }]}>
+                <Text style={[styles.cmpSummarySub, { color: 'rgba(242,233,219,0.6)', fontFamily: 'Inter_400Regular' }]}>
                   How you stack up against friends this week
                 </Text>
               </View>
               {compareRows.map(row => (
-                <CompareCard key={row.user.id} row={row} myMinutes={myWeekMinutes} myPages={myWeekPages} myColor={myColor} />
+                <CompareCard key={row.user.id} row={row} myMinutes={myWeekMinutes} myPages={myWeekPages} />
               ))}
             </>
           )}
@@ -871,19 +881,27 @@ const styles = StyleSheet.create({
   followerUsername: { fontSize: 12, marginTop: 1 },
   followBackBtn: { paddingHorizontal: 14, paddingVertical: 6, borderRadius: 18, borderWidth: 1.5, minWidth: 98, alignItems: 'center' },
   followBackBtnText: { fontSize: 13 },
-  cmpSummary: { paddingHorizontal: 20, paddingTop: 14, paddingBottom: 16, gap: 3, borderBottomWidth: StyleSheet.hairlineWidth },
-  cmpSummaryLabel: { fontSize: 11, letterSpacing: 1.5 },
-  cmpSummaryValue: { fontSize: 22, letterSpacing: -0.5 },
+  cmpSummary: {
+    marginHorizontal: 16, marginTop: 14, marginBottom: 2,
+    paddingHorizontal: 18, paddingVertical: 16, gap: 3,
+    borderRadius: 18, backgroundColor: '#14424A',
+    shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.22, shadowRadius: 12, elevation: 5,
+  },
+  cmpSummaryLabel: { fontSize: 11, letterSpacing: 1.8 },
+  cmpSummaryValue: { fontSize: 24, letterSpacing: -0.6 },
   cmpSummarySub: { fontSize: 13 },
-  cmpCard: { marginHorizontal: 16, marginTop: 12, borderRadius: 16, borderWidth: 1, padding: 14, gap: 2 },
-  cmpHeader: { flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: 8 },
-  cmpName: { flex: 1, fontSize: 15, letterSpacing: -0.2 },
-  cmpBadge: { paddingHorizontal: 9, paddingVertical: 4, borderRadius: 10 },
-  cmpBadgeText: { fontSize: 11 },
-  cmpSection: { fontSize: 10, letterSpacing: 1.2, marginBottom: 5 },
-  cmpBarRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 5 },
-  cmpBarLabel: { width: 52, fontSize: 12 },
-  cmpTrack: { flex: 1, height: 10, borderRadius: 5, overflow: 'hidden' },
-  cmpFill: { height: 10, borderRadius: 5, minWidth: 2 },
-  cmpVal: { width: 42, fontSize: 12, textAlign: 'right' },
+  cmpCard: {
+    marginHorizontal: 16, marginTop: 12, borderRadius: 18, borderWidth: 1, padding: 16, gap: 2,
+    shadowColor: '#000', shadowOffset: { width: 0, height: 3 }, shadowOpacity: 0.14, shadowRadius: 10, elevation: 3,
+  },
+  cmpHeader: { flexDirection: 'row', alignItems: 'center', gap: 11, marginBottom: 12 },
+  cmpName: { flex: 1, fontSize: 16, letterSpacing: -0.3 },
+  cmpBadge: { paddingHorizontal: 10, paddingVertical: 4, borderRadius: 11, borderWidth: 1 },
+  cmpBadgeText: { fontSize: 11, letterSpacing: 0.2 },
+  cmpSection: { fontSize: 10, letterSpacing: 1.6, marginBottom: 6 },
+  cmpBarRow: { flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: 7 },
+  cmpBarLabel: { width: 52, fontSize: 12.5 },
+  cmpTrack: { flex: 1, height: 12, borderRadius: 6, overflow: 'hidden' },
+  cmpFill: { height: 12, borderRadius: 6, minWidth: 6 },
+  cmpVal: { width: 44, fontSize: 12.5, textAlign: 'right' },
 });
