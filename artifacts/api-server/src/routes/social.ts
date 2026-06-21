@@ -1,6 +1,6 @@
 import { Router, type IRouter } from "express";
 import { db } from "@workspace/db";
-import { npUsers, npFollows, npActivity, npNudges } from "@workspace/db/schema";
+import { npUsers, npFollows, npActivity, npNudges, npBooks } from "@workspace/db/schema";
 import { eq, ilike, or, and, ne, sql, desc, not, inArray, gte } from "drizzle-orm";
 
 const router: IRouter = Router();
@@ -545,6 +545,118 @@ router.patch("/social/me/avatar", async (req, res) => {
     return;
   }
   res.json(formatMe(updated[0]));
+});
+
+// Curated fallbacks so a fresh app (no friends, empty catalog) is never empty.
+const CURATED_RECS = [
+  { id: "rec_demon", title: "Demon Copperhead", author: "Barbara Kingsolver", coverColor: "#B85C38", coverImageUri: "https://covers.openlibrary.org/b/isbn/9780063251922-M.jpg", reason: "it's a modern classic", friendsCount: 0 },
+  { id: "rec_normal", title: "Normal People", author: "Sally Rooney", coverColor: "#4A7A9E", coverImageUri: "https://covers.openlibrary.org/b/isbn/9780571334650-M.jpg", reason: "new readers love it", friendsCount: 0 },
+  { id: "rec_educated", title: "Educated", author: "Tara Westover", coverColor: "#C09B3A", coverImageUri: "https://covers.openlibrary.org/b/isbn/9780399590504-M.jpg", reason: "it's an award-winning memoir", friendsCount: 0 },
+  { id: "rec_lincoln", title: "Lincoln in the Bardo", author: "George Saunders", coverColor: "#5E4A7A", coverImageUri: "https://covers.openlibrary.org/b/isbn/9780812985405-M.jpg", reason: "it's bold and inventive", friendsCount: 0 },
+];
+
+const normKey = (t: string, a: string) =>
+  `${(t ?? "").trim().toLowerCase()}|${(a ?? "").trim().toLowerCase()}`;
+
+// Data-driven recommendations: books friends are reading, then your top genre, then trending.
+router.get("/social/recommendations", async (req, res) => {
+  const userId = requireAuth(req, res);
+  if (!userId) return;
+
+  // Books already on my shelf (to exclude) + my top genre
+  const myBooks = await db
+    .select({ title: npBooks.title, author: npBooks.author, genre: npBooks.genre })
+    .from(npBooks)
+    .where(eq(npBooks.userId, userId));
+  const myKeys = new Set(myBooks.map((b) => normKey(b.title, b.author)));
+  const genreCount: Record<string, number> = {};
+  for (const b of myBooks) if (b.genre) genreCount[b.genre] = (genreCount[b.genre] ?? 0) + 1;
+  const myTopGenre = Object.entries(genreCount).sort((a, b) => b[1] - a[1])[0]?.[0] ?? null;
+
+  // Who I follow
+  const followRows = await db
+    .select({ id: npFollows.followingId })
+    .from(npFollows)
+    .where(eq(npFollows.followerId, userId));
+  const friendIds = new Set(followRows.map((r) => r.id));
+
+  // Candidate books from everyone else
+  const others = await db
+    .select({
+      userId: npBooks.userId,
+      title: npBooks.title,
+      author: npBooks.author,
+      genre: npBooks.genre,
+      coverColor: npBooks.coverColor,
+      coverImageUri: npBooks.coverImageUri,
+    })
+    .from(npBooks)
+    .where(ne(npBooks.userId, userId))
+    .limit(2000);
+
+  type Agg = {
+    title: string; author: string; genre: string;
+    coverColor: string; coverImageUri: string | null;
+    owners: Set<string>; friends: Set<string>;
+  };
+  const map = new Map<string, Agg>();
+  for (const b of others) {
+    const key = normKey(b.title, b.author);
+    if (myKeys.has(key)) continue;
+    let a = map.get(key);
+    if (!a) {
+      a = { title: b.title, author: b.author, genre: b.genre, coverColor: b.coverColor, coverImageUri: b.coverImageUri ?? null, owners: new Set(), friends: new Set() };
+      map.set(key, a);
+    }
+    a.owners.add(b.userId);
+    if (friendIds.has(b.userId)) a.friends.add(b.userId);
+    if (!a.coverImageUri && b.coverImageUri) a.coverImageUri = b.coverImageUri;
+  }
+  const aggs = [...map.values()];
+
+  const picked: any[] = [];
+  const used = new Set<string>();
+  const push = (a: Agg, reason: string) => {
+    const key = normKey(a.title, a.author);
+    if (used.has(key)) return;
+    used.add(key);
+    picked.push({
+      id: `rec_${key}`.replace(/[^a-z0-9_]/gi, "_").slice(0, 60),
+      title: a.title,
+      author: a.author,
+      coverColor: a.coverColor || "#5C849E",
+      coverImageUri: a.coverImageUri ?? undefined,
+      reason,
+      friendsCount: a.friends.size,
+    });
+  };
+
+  // Tier 1 — friends are reading it
+  aggs.filter((a) => a.friends.size > 0)
+    .sort((x, y) => y.friends.size - x.friends.size)
+    .forEach((a) => push(a, a.friends.size === 1 ? "a friend is reading it" : `${a.friends.size} friends are reading it`));
+
+  // Tier 2 — your top genre
+  if (myTopGenre) {
+    aggs.filter((a) => a.genre === myTopGenre)
+      .sort((x, y) => y.owners.size - x.owners.size)
+      .forEach((a) => push(a, `you read ${myTopGenre.toLowerCase()}`));
+  }
+
+  // Tier 3 — trending overall
+  aggs.sort((x, y) => y.owners.size - x.owners.size)
+    .forEach((a) => push(a, "it's popular right now"));
+
+  // Fallback — curated, so the section is never empty
+  for (const c of CURATED_RECS) {
+    if (picked.length >= 6) break;
+    const key = normKey(c.title, c.author);
+    if (myKeys.has(key) || used.has(key)) continue;
+    used.add(key);
+    picked.push(c);
+  }
+
+  res.json(picked.slice(0, 8));
 });
 
 export default router;

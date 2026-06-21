@@ -8,7 +8,8 @@ import { Ionicons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { useColors } from '@/hooks/useColors';
-import { useSocial, ActivityItem, SocialUser, NudgeHistoryItem } from '@/context/SocialContext';
+import { useSocial, ActivityItem, SocialUser, NudgeHistoryItem, LeaderboardEntry } from '@/context/SocialContext';
+import { useStore } from '@/context/StoreContext';
 import RegisterModal from '@/components/RegisterModal';
 
 function AvatarCircle({ initial, color, size = 44 }: { initial: string; color: string; size?: number }) {
@@ -383,12 +384,70 @@ function NudgeHistoryCard({ item }: { item: NudgeHistoryItem }) {
   );
 }
 
+function CompareBar({ label, value, unit, max, color, trackColor, mutedColor }: {
+  label: string; value: number; unit: string; max: number; color: string; trackColor: string; mutedColor: string;
+}) {
+  const pct = max > 0 ? value / max : 0;
+  return (
+    <View style={styles.cmpBarRow}>
+      <Text style={[styles.cmpBarLabel, { color: mutedColor, fontFamily: 'Inter_500Medium' }]} numberOfLines={1}>{label}</Text>
+      <View style={[styles.cmpTrack, { backgroundColor: trackColor }]}>
+        <View style={[styles.cmpFill, { width: `${Math.round(pct * 100)}%` as any, backgroundColor: color }]} />
+      </View>
+      <Text style={[styles.cmpVal, { color: color, fontFamily: 'Inter_700Bold' }]}>{value}{unit}</Text>
+    </View>
+  );
+}
+
+function CompareCard({ row, myMinutes, myPages, myColor }: {
+  row: { user: SocialUser; minutes: number; pages: number };
+  myMinutes: number; myPages: number; myColor: string;
+}) {
+  const colors = useColors();
+  const router = useRouter();
+  const { user, minutes, pages } = row;
+  const minMax = Math.max(minutes, myMinutes, 1);
+  const pageMax = Math.max(pages, myPages, 1);
+  const tie = myMinutes === minutes;
+  const ahead = myMinutes > minutes;
+  const status = tie ? 'Tied' : ahead ? "You're ahead" : 'Behind';
+  const statusColor = tie ? colors.mutedForeground : ahead ? '#3A6645' : colors.accent;
+  const firstName = user.displayName.split(' ')[0];
+  const trackColor = colors.mutedForeground + '26';
+
+  return (
+    <View style={[styles.cmpCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
+      <View style={styles.cmpHeader}>
+        <TouchableOpacity onPress={() => router.push(`/profile/${user.id}` as any)} activeOpacity={0.75}>
+          <AvatarCircle initial={user.initial} color={user.color} size={36} />
+        </TouchableOpacity>
+        <Text style={[styles.cmpName, { color: colors.foreground, fontFamily: 'Inter_600SemiBold' }]} numberOfLines={1}>
+          {user.displayName}
+        </Text>
+        <View style={[styles.cmpBadge, { backgroundColor: statusColor + '1A' }]}>
+          <Text style={[styles.cmpBadgeText, { color: statusColor, fontFamily: 'Inter_600SemiBold' }]}>{status}</Text>
+        </View>
+      </View>
+
+      <Text style={[styles.cmpSection, { color: colors.mutedForeground, fontFamily: 'Inter_600SemiBold' }]}>MINUTES</Text>
+      <CompareBar label={firstName} value={minutes} unit="m" max={minMax} color={user.color} trackColor={trackColor} mutedColor={colors.mutedForeground} />
+      <CompareBar label="You" value={myMinutes} unit="m" max={minMax} color={myColor} trackColor={trackColor} mutedColor={colors.mutedForeground} />
+
+      <Text style={[styles.cmpSection, { color: colors.mutedForeground, fontFamily: 'Inter_600SemiBold', marginTop: 10 }]}>PAGES</Text>
+      <CompareBar label={firstName} value={pages} unit="p" max={pageMax} color={user.color} trackColor={trackColor} mutedColor={colors.mutedForeground} />
+      <CompareBar label="You" value={myPages} unit="p" max={pageMax} color={myColor} trackColor={trackColor} mutedColor={colors.mutedForeground} />
+    </View>
+  );
+}
+
 export default function FriendsScreen() {
   const colors = useColors();
   const insets = useSafeAreaInsets();
-  const { isRegistered, feed, following, followers, suggestedUsers, nudgeHistory, unreadNudgeCount, markNudgesRead, isLoading, refreshFeed, followUser, unfollowUser, isFollowing } = useSocial();
+  const { isRegistered, feed, following, followers, suggestedUsers, nudgeHistory, unreadNudgeCount, markNudgesRead, isLoading, refreshFeed, followUser, unfollowUser, isFollowing, leaderboard, socialProfile } = useSocial();
+  const { sessions } = useStore();
   const { openFollowers } = useLocalSearchParams<{ openFollowers?: string }>();
-  const [showWeek, setShowWeek] = useState(false);
+  const [mode, setMode] = useState<'today' | 'week' | 'compare'>('today');
+  const showWeek = mode === 'week';
   const [showSearch, setShowSearch] = useState(false);
   const [showRegister, setShowRegister] = useState(false);
   const [showNudges, setShowNudges] = useState(false);
@@ -419,6 +478,20 @@ export default function FriendsScreen() {
   );
 
   const friendsAtRisk = following.filter(u => !usersReadToday.has(u.id));
+
+  // Compare tab — my week totals vs each friend's (head-to-head)
+  const weekCutoff = (() => { const d = new Date(); d.setDate(d.getDate() - 6); return d.toISOString().split('T')[0]; })();
+  const myWeekSessions = sessions.filter(s => s.date >= weekCutoff);
+  const myWeekMinutes = myWeekSessions.reduce((a, s) => a + s.durationMinutes, 0);
+  const myWeekPages = myWeekSessions.reduce((a, s) => a + Math.max(0, s.endPage - s.startPage), 0);
+  const lbById = new Map(leaderboard.map(e => [e.userId, e] as const));
+  const compareRows = following
+    .map(u => {
+      const e = lbById.get(u.id);
+      return { user: u, minutes: e?.weekMinutes ?? 0, pages: e?.weekPages ?? 0 };
+    })
+    .sort((a, b) => (b.minutes - a.minutes) || (b.pages - a.pages));
+  const myColor = socialProfile?.color ?? colors.primary;
 
   if (!isRegistered) {
     return (
@@ -500,24 +573,24 @@ export default function FriendsScreen() {
           </View>
         </View>
         <View style={[styles.toggle, { backgroundColor: colors.muted }]}>
-          {[{ label: 'Today', week: false }, { label: 'This week', week: true }].map(opt => (
+          {([{ label: 'Today', m: 'today' }, { label: 'This week', m: 'week' }, { label: 'Compare', m: 'compare' }] as const).map(opt => (
             <TouchableOpacity
               key={opt.label}
               style={[
                 styles.toggleBtn,
-                (showWeek === opt.week) && {
+                (mode === opt.m) && {
                   backgroundColor: colors.card,
                   shadowColor: '#000', shadowOpacity: 0.08,
                   shadowRadius: 4, shadowOffset: { width: 0, height: 1 }, elevation: 2,
                 },
               ]}
-              onPress={() => setShowWeek(opt.week)}
+              onPress={() => setMode(opt.m)}
               activeOpacity={0.8}
             >
               <Text style={[
                 styles.toggleText,
-                { color: showWeek === opt.week ? colors.foreground : colors.mutedForeground,
-                  fontFamily: showWeek === opt.week ? 'Inter_600SemiBold' : 'Inter_400Regular' },
+                { color: mode === opt.m ? colors.foreground : colors.mutedForeground,
+                  fontFamily: mode === opt.m ? 'Inter_600SemiBold' : 'Inter_400Regular' },
               ]}>
                 {opt.label}
               </Text>
@@ -620,7 +693,37 @@ export default function FriendsScreen() {
         </View>
       )}
 
-      {isLoading && feed.length === 0 ? (
+      {mode === 'compare' ? (
+        <ScrollView contentContainerStyle={{ paddingBottom: 100 }} showsVerticalScrollIndicator={false}>
+          {following.length === 0 ? (
+            <View style={styles.empty}>
+              <Ionicons name="podium-outline" size={48} color={colors.mutedForeground} />
+              <Text style={[styles.emptyTitle, { color: colors.foreground, fontFamily: 'Inter_600SemiBold' }]}>Nobody to compare with</Text>
+              <Text style={[styles.emptyText, { color: colors.mutedForeground, fontFamily: 'Inter_400Regular' }]}>
+                Follow some readers to see who's reading more this week.
+              </Text>
+              <TouchableOpacity style={[styles.ctaBtn, { backgroundColor: colors.primary }]} onPress={() => setShowSearch(true)} activeOpacity={0.85}>
+                <Text style={[styles.ctaBtnText, { color: colors.primaryForeground, fontFamily: 'Inter_600SemiBold' }]}>Find Readers</Text>
+              </TouchableOpacity>
+            </View>
+          ) : (
+            <>
+              <View style={[styles.cmpSummary, { borderBottomColor: colors.border }]}>
+                <Text style={[styles.cmpSummaryLabel, { color: colors.mutedForeground, fontFamily: 'Inter_600SemiBold' }]}>YOUR WEEK</Text>
+                <Text style={[styles.cmpSummaryValue, { color: colors.foreground, fontFamily: 'Inter_700Bold' }]}>
+                  {myWeekMinutes} min · {myWeekPages} pages
+                </Text>
+                <Text style={[styles.cmpSummarySub, { color: colors.mutedForeground, fontFamily: 'Inter_400Regular' }]}>
+                  How you stack up against friends this week
+                </Text>
+              </View>
+              {compareRows.map(row => (
+                <CompareCard key={row.user.id} row={row} myMinutes={myWeekMinutes} myPages={myWeekPages} myColor={myColor} />
+              ))}
+            </>
+          )}
+        </ScrollView>
+      ) : isLoading && feed.length === 0 ? (
         <View style={styles.loadingContainer}>
           <ActivityIndicator size="large" color={colors.primary} />
         </View>
@@ -768,4 +871,19 @@ const styles = StyleSheet.create({
   followerUsername: { fontSize: 12, marginTop: 1 },
   followBackBtn: { paddingHorizontal: 14, paddingVertical: 6, borderRadius: 18, borderWidth: 1.5, minWidth: 98, alignItems: 'center' },
   followBackBtnText: { fontSize: 13 },
+  cmpSummary: { paddingHorizontal: 20, paddingTop: 14, paddingBottom: 16, gap: 3, borderBottomWidth: StyleSheet.hairlineWidth },
+  cmpSummaryLabel: { fontSize: 11, letterSpacing: 1.5 },
+  cmpSummaryValue: { fontSize: 22, letterSpacing: -0.5 },
+  cmpSummarySub: { fontSize: 13 },
+  cmpCard: { marginHorizontal: 16, marginTop: 12, borderRadius: 16, borderWidth: 1, padding: 14, gap: 2 },
+  cmpHeader: { flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: 8 },
+  cmpName: { flex: 1, fontSize: 15, letterSpacing: -0.2 },
+  cmpBadge: { paddingHorizontal: 9, paddingVertical: 4, borderRadius: 10 },
+  cmpBadgeText: { fontSize: 11 },
+  cmpSection: { fontSize: 10, letterSpacing: 1.2, marginBottom: 5 },
+  cmpBarRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 5 },
+  cmpBarLabel: { width: 52, fontSize: 12 },
+  cmpTrack: { flex: 1, height: 10, borderRadius: 5, overflow: 'hidden' },
+  cmpFill: { height: 10, borderRadius: 5, minWidth: 2 },
+  cmpVal: { width: 42, fontSize: 12, textAlign: 'right' },
 });

@@ -345,6 +345,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
   const [profile, setProfile] = useState<UserProfile>(INITIAL_PROFILE);
   const [reminder, setReminderState] = useState<ReminderSettings>(DEFAULT_REMINDER);
   const [isLoaded, setIsLoaded] = useState(false);
+  const [recommendedBooks, setRecommendedBooks] = useState<RecommendedBook[]>(RECOMMENDED);
   const [pendingFreezeEarned, setPendingFreezeEarned] = useState(false);
   const [pendingGoalMet, setPendingGoalMet] = useState(false);
   const cloudSyncedRef = useRef(false);
@@ -385,7 +386,17 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
     if (cloudSyncedRef.current) return;
     cloudSyncedRef.current = true;
     hydrateFromCloud();
+    fetchRecommendations();
   }, [isAuthenticated, authLoading, isLoaded]);
+
+  async function fetchRecommendations() {
+    try {
+      const recs = await apiFetch<RecommendedBook[]>('/social/recommendations');
+      if (Array.isArray(recs) && recs.length > 0) setRecommendedBooks(recs);
+    } catch {
+      // keep curated defaults on failure
+    }
+  }
 
   useEffect(() => {
     if (!isLoaded) return;
@@ -634,7 +645,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
   return (
     <StoreContext.Provider value={{
       books, sessions, friends, streak, profile, reminder,
-      recommendedBooks: RECOMMENDED,
+      recommendedBooks,
       suggestedFriends: SUGGESTED,
       isLoaded,
       pendingFreezeEarned,
