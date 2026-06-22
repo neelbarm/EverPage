@@ -25,15 +25,36 @@ interface OpenLibResult {
 
 function mapSubjectToGenre(subjects: string[]): string {
   const joined = subjects.join(' ').toLowerCase();
-  if (/science fiction|sci-fi|sci fi/.test(joined)) return 'Science Fiction';
-  if (/fantasy/.test(joined)) return 'Science Fiction';
-  if (/mystery|thriller|crime|detective|noir/.test(joined)) return 'Mystery';
-  if (/romance|love stor/.test(joined)) return 'Literary Fiction';
-  if (/biography|autobiography|memoir/.test(joined)) return 'Biography';
-  if (/history|historical fiction/.test(joined)) return 'Historical Fiction';
-  if (/self.help|psychology|business|personal development/.test(joined)) return 'Non-Fiction';
-  if (/non.fiction|nonfiction|essay|journalism|politics|science|economics/.test(joined)) return 'Non-Fiction';
-  return 'Literary Fiction';
+  // Memoir/biography can be tagged as either fiction or non-fiction — check first.
+  if (/memoir|autobiography|\bbiography\b/.test(joined)) return 'Biography';
+  const isFiction = /\bfiction\b/.test(joined) && !/non.?fiction/.test(joined);
+  if (isFiction) {
+    if (/science fiction|sci-fi|sci fi|dystopia|space opera|cyberpunk|speculative|fantasy|magic|mythology|dragons/.test(joined)) return 'Science Fiction';
+    if (/mystery|thriller|crime|detective|noir|suspense|murder|spy|espionage/.test(joined)) return 'Mystery';
+    if (/historical fiction|world war|civil war|war stories|medieval|ancient rome|set in the/.test(joined)) return 'Historical Fiction';
+    return 'Literary Fiction';
+  }
+  // Everything without a "fiction" tag is treated as non-fiction.
+  return 'Non-Fiction';
+}
+
+// Look up a book's genre from OpenLibrary by title (+ optional author).
+async function detectGenre(title: string, author: string): Promise<string | null> {
+  try {
+    const q = author
+      ? `title=${encodeURIComponent(title)}&author=${encodeURIComponent(author)}`
+      : `title=${encodeURIComponent(title)}`;
+    const url = `https://openlibrary.org/search.json?${q}&limit=1&fields=subject_facet`;
+    const res = await fetch(url);
+    if (!res.ok) return null;
+    const data = await res.json();
+    const doc = data?.docs?.[0];
+    const subjects: string[] = Array.isArray(doc?.subject_facet) ? doc.subject_facet.slice(0, 15) : [];
+    if (subjects.length === 0) return null;
+    return mapSubjectToGenre(subjects);
+  } catch {
+    return null;
+  }
 }
 
 function BookRow({ book, onPress }: { book: Book; onPress: () => void }) {
@@ -192,11 +213,29 @@ export default function LogScreen() {
   const [author, setAuthor] = useState('');
   const [pages, setPages] = useState('');
   const [genre, setGenre] = useState('Literary Fiction');
+  const [genreTouched, setGenreTouched] = useState(false);
+  const [genreAutoFilled, setGenreAutoFilled] = useState(false);
   const [coverImageUri, setCoverImageUri] = useState<string | undefined>(undefined);
 
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const activeBooks = books.filter(b => !b.finishedAt);
+
+  // Auto-detect genre as the user types a title manually (skips if they picked
+  // a search result or chose a genre themselves).
+  useEffect(() => {
+    if (selectedResult || genreTouched) return;
+    const t = title.trim();
+    if (t.length < 3) { setGenreAutoFilled(false); return; }
+    const handle = setTimeout(async () => {
+      const detected = await detectGenre(t, author.trim());
+      if (detected && !genreTouched && !selectedResult) {
+        setGenre(detected);
+        setGenreAutoFilled(true);
+      }
+    }, 700);
+    return () => clearTimeout(handle);
+  }, [title, author, selectedResult, genreTouched]);
 
   function startSession(book: Book) {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
@@ -221,6 +260,8 @@ export default function LogScreen() {
     setAuthor('');
     setPages('');
     setGenre('Literary Fiction');
+    setGenreTouched(false);
+    setGenreAutoFilled(false);
     setCoverImageUri(undefined);
   }
 
@@ -231,6 +272,8 @@ export default function LogScreen() {
     setPages(result.pages ? String(result.pages) : '');
     setCoverImageUri(result.coverUri);
     setGenre(mapSubjectToGenre(result.subjects ?? []));
+    setGenreTouched(false);
+    setGenreAutoFilled(true);
     setSearchResults([]);
     setSearchQuery('');
     Haptics.selectionAsync();
@@ -473,7 +516,12 @@ export default function LogScreen() {
               ))}
 
               <View style={styles.field}>
-                <Text style={[styles.fieldLabel, { color: colors.mutedForeground, fontFamily: 'Inter_500Medium' }]}>Genre</Text>
+                <View style={styles.genreLabelRow}>
+                  <Text style={[styles.fieldLabel, { color: colors.mutedForeground, fontFamily: 'Inter_500Medium' }]}>Genre</Text>
+                  {genreAutoFilled && !genreTouched && (
+                    <Text style={[styles.genreAutoHint, { color: colors.accent, fontFamily: 'Inter_600SemiBold' }]}>✨ Auto-detected</Text>
+                  )}
+                </View>
                 <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8 }}>
                   {GENRES.map(g => (
                     <TouchableOpacity
@@ -482,7 +530,7 @@ export default function LogScreen() {
                         styles.genreChip,
                         { backgroundColor: genre === g ? colors.primary : colors.muted, borderColor: genre === g ? colors.primary : colors.border },
                       ]}
-                      onPress={() => setGenre(g)}
+                      onPress={() => { setGenre(g); setGenreTouched(true); setGenreAutoFilled(false); }}
                       activeOpacity={0.8}
                     >
                       <Text style={[styles.genreText, { color: genre === g ? '#fff' : colors.foreground, fontFamily: genre === g ? 'Inter_600SemiBold' : 'Inter_400Regular' }]}>
@@ -556,6 +604,8 @@ const styles = StyleSheet.create({
   selectedAuthor: { fontSize: 12 },
   selectedPages: { fontSize: 12 },
   input: { borderRadius: 10, borderWidth: 1, paddingHorizontal: 14, paddingVertical: 13, fontSize: 15 },
+  genreLabelRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 2 },
+  genreAutoHint: { fontSize: 11 },
   genreChip: { paddingHorizontal: 14, paddingVertical: 8, borderRadius: 20, borderWidth: 1 },
   genreText: { fontSize: 13 },
   submitBtn: { marginHorizontal: 20, marginTop: 32, paddingVertical: 16, borderRadius: 14, alignItems: 'center' },
