@@ -82,7 +82,7 @@ export default function SessionLogScreen() {
         </View>
 
         <View style={[styles.bookRow, { backgroundColor: colors.card, borderColor: colors.border }]}>
-          <BookCover bookId={book.id} coverColor={book.coverColor} coverImageUri={book.coverImageUri} width={44} height={62} borderRadius={5} />
+          <BookCover bookId={book.id} coverColor={book.coverColor} coverImageUri={book.coverImageUri} title={book.title} width={44} height={62} borderRadius={5} />
           <View style={{ flex: 1, gap: 3 }}>
             <Text style={[styles.bookTitle, { color: colors.foreground, fontFamily: 'Inter_600SemiBold' }]} numberOfLines={1}>
               {book.title}

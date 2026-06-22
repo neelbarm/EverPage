@@ -573,7 +573,7 @@ export default function YouScreen() {
                           i < genreBooks.length - 1 && { borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: colors.border },
                         ]}
                       >
-                        <BookCover bookId={b.id} coverColor={b.coverColor} coverImageUri={b.coverImageUri} width={40} height={56} borderRadius={5} />
+                        <BookCover bookId={b.id} coverColor={b.coverColor} coverImageUri={b.coverImageUri} title={b.title} width={40} height={56} borderRadius={5} />
                         <View style={{ flex: 1, gap: 3 }}>
                           <Text style={[{ fontSize: 15, letterSpacing: -0.2, color: colors.foreground, fontFamily: 'Inter_600SemiBold' }]} numberOfLines={1}>{b.title}</Text>
                           <Text style={[{ fontSize: 13, color: colors.mutedForeground, fontFamily: 'Inter_400Regular' }]}>{b.author}</Text>

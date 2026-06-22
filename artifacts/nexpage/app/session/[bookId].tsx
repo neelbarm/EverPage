@@ -77,7 +77,7 @@ export default function SessionScreen() {
         <Text style={[styles.nowLabel, { color: 'rgba(242,233,219,0.38)', fontFamily: 'Inter_600SemiBold' }]}>
           NOW READING
         </Text>
-        <BookCover bookId={book.id} coverColor={book.coverColor} coverImageUri={book.coverImageUri} width={72} height={106} borderRadius={8} />
+        <BookCover bookId={book.id} coverColor={book.coverColor} coverImageUri={book.coverImageUri} title={book.title} width={72} height={106} borderRadius={8} />
         <Text style={[styles.bookTitle, { color: '#f2e9db', fontFamily: 'Inter_700Bold' }]} numberOfLines={2}>
           {book.title}
         </Text>

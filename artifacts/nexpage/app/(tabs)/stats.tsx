@@ -252,7 +252,7 @@ export default function StatsScreen() {
                   onPress={() => { setSelectedRec(book); setRecPagesStr(''); }}
                   activeOpacity={0.85}
                 >
-                  <BookCover bookId={book.id} coverColor={book.coverColor} coverImageUri={book.coverImageUri} width={158} height={100} borderRadius={0} />
+                  <BookCover bookId={book.id} coverColor={book.coverColor} coverImageUri={book.coverImageUri} title={book.title} width={158} height={100} borderRadius={0} />
                   <View style={styles.recBody}>
                     <Text style={[styles.recTitle, { color: colors.foreground, fontFamily: 'Inter_600SemiBold' }]} numberOfLines={2}>{book.title}</Text>
                     <Text style={[styles.recAuthor, { color: colors.mutedForeground, fontFamily: 'Inter_400Regular' }]} numberOfLines={1}>{book.author}</Text>
@@ -350,7 +350,7 @@ export default function StatsScreen() {
         {selectedRec && (
           <>
             <View style={{ flexDirection: 'row', gap: 14 }}>
-              <BookCover bookId={selectedRec.id} coverColor={selectedRec.coverColor} coverImageUri={selectedRec.coverImageUri} width={72} height={104} borderRadius={8} />
+              <BookCover bookId={selectedRec.id} coverColor={selectedRec.coverColor} coverImageUri={selectedRec.coverImageUri} title={selectedRec.title} width={72} height={104} borderRadius={8} />
               <View style={{ flex: 1, gap: 4, justifyContent: 'center' }}>
                 <Text style={{ color: colors.foreground, fontFamily: 'Inter_700Bold', fontSize: 16, lineHeight: 22 }} numberOfLines={3}>{selectedRec.title}</Text>
                 <Text style={{ color: colors.mutedForeground, fontFamily: 'Inter_400Regular', fontSize: 14 }}>{selectedRec.author}</Text>

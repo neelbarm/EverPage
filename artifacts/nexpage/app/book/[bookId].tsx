@@ -190,7 +190,7 @@ export default function BookDetailScreen() {
       >
         {/* Book hero */}
         <View style={styles.bookHero}>
-          <BookCover bookId={book.id} coverColor={book.coverColor} coverImageUri={book.coverImageUri} width={100} height={146} borderRadius={10} />
+          <BookCover bookId={book.id} coverColor={book.coverColor} coverImageUri={book.coverImageUri} title={book.title} width={100} height={146} borderRadius={10} />
           <View style={styles.bookMeta}>
             <Text style={[styles.bookTitle, { color: colors.foreground, fontFamily: 'Inter_700Bold' }]}>{book.title}</Text>
             <Text style={[styles.bookAuthor, { color: colors.mutedForeground, fontFamily: 'Inter_400Regular' }]}>{book.author}</Text>

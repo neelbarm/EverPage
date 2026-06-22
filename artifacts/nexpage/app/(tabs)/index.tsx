@@ -235,7 +235,7 @@ export default function ShelfScreen() {
               >
                 <Text style={[styles.continueLabel, { color: 'rgba(255,255,255,0.65)', fontFamily: 'Inter_500Medium', fontStyle: 'italic' }]}>CURRENTLY READING</Text>
                 <View style={styles.heroContent}>
-                  <BookCover bookId={heroBook.id} coverColor={heroBook.coverColor} coverImageUri={heroBook.coverImageUri} width={82} height={120} borderRadius={8} />
+                  <BookCover bookId={heroBook.id} coverColor={heroBook.coverColor} coverImageUri={heroBook.coverImageUri} title={heroBook.title} width={82} height={120} borderRadius={8} />
                   <View style={styles.heroInfo}>
                     <Text style={[styles.heroTitle, { color: '#ffffff', fontFamily: 'Inter_700Bold' }]} numberOfLines={2}>
                       {heroBook.title}
@@ -279,7 +279,7 @@ export default function ShelfScreen() {
                       onPress={() => router.push(`/book/${book.id}`)}
                       activeOpacity={0.8}
                     >
-                      <BookCover bookId={book.id} coverColor={book.coverColor} coverImageUri={book.coverImageUri} width={40} height={56} borderRadius={4} />
+                      <BookCover bookId={book.id} coverColor={book.coverColor} coverImageUri={book.coverImageUri} title={book.title} width={40} height={56} borderRadius={4} />
                       <View style={styles.alsoInfo}>
                         <Text style={[styles.alsoTitle, { color: colors.foreground, fontFamily: 'Inter_600SemiBold' }]} numberOfLines={1}>
                           {book.title}
@@ -307,7 +307,7 @@ export default function ShelfScreen() {
                       activeOpacity={0.85}
                     >
                       <View style={styles.recCoverClip}>
-                        <BookCover bookId={book.id} coverColor={book.coverColor} coverImageUri={book.coverImageUri} width={REC_CARD_W} height={REC_COVER_H} borderRadius={0} />
+                        <BookCover bookId={book.id} coverColor={book.coverColor} coverImageUri={book.coverImageUri} title={book.title} width={REC_CARD_W} height={REC_COVER_H} borderRadius={0} />
                       </View>
                       <View style={styles.recBody}>
                         <Text style={[styles.recTitle, { color: '#201b15', fontFamily: 'Inter_700Bold' }]} numberOfLines={2}>{book.title}</Text>
@@ -398,7 +398,7 @@ export default function ShelfScreen() {
                   <BookCover
                     bookId={selectedRec.id}
                     coverColor={selectedRec.coverColor}
-                    coverImageUri={selectedRec.coverImageUri}
+                    coverImageUri={selectedRec.coverImageUri} title={selectedRec.title}
                     width={72}
                     height={104}
                     borderRadius={8}

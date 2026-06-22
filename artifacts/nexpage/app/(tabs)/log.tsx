@@ -38,22 +38,28 @@ function mapSubjectToGenre(subjects: string[]): string {
   return 'Non-Fiction';
 }
 
-// Look up a book's genre from OpenLibrary by title (+ optional author).
-async function detectGenre(title: string, author: string): Promise<string | null> {
+// Look up a book's genre AND cover from OpenLibrary by title (+ optional author),
+// in a single request so manual entry gets a cover for free.
+async function detectBookMeta(
+  title: string,
+  author: string,
+): Promise<{ genre: string | null; coverUri: string | null }> {
   try {
     const q = author
       ? `title=${encodeURIComponent(title)}&author=${encodeURIComponent(author)}`
       : `title=${encodeURIComponent(title)}`;
-    const url = `https://openlibrary.org/search.json?${q}&limit=1&fields=subject_facet`;
+    const url = `https://openlibrary.org/search.json?${q}&limit=1&fields=subject_facet,cover_i`;
     const res = await fetch(url);
-    if (!res.ok) return null;
+    if (!res.ok) return { genre: null, coverUri: null };
     const data = await res.json();
     const doc = data?.docs?.[0];
     const subjects: string[] = Array.isArray(doc?.subject_facet) ? doc.subject_facet.slice(0, 15) : [];
-    if (subjects.length === 0) return null;
-    return mapSubjectToGenre(subjects);
+    const genre = subjects.length > 0 ? mapSubjectToGenre(subjects) : null;
+    const coverUri =
+      typeof doc?.cover_i === 'number' ? `https://covers.openlibrary.org/b/id/${doc.cover_i}-M.jpg` : null;
+    return { genre, coverUri };
   } catch {
-    return null;
+    return { genre: null, coverUri: null };
   }
 }
 
@@ -66,7 +72,7 @@ function BookRow({ book, onPress }: { book: Book; onPress: () => void }) {
       onPress={onPress}
       activeOpacity={0.8}
     >
-      <BookCover bookId={book.id} coverColor={book.coverColor} coverImageUri={book.coverImageUri} width={48} height={68} borderRadius={5} />
+      <BookCover bookId={book.id} coverColor={book.coverColor} coverImageUri={book.coverImageUri} title={book.title} width={48} height={68} borderRadius={5} />
       <View style={styles.bookInfo}>
         <Text style={[styles.bookTitle, { color: colors.foreground, fontFamily: 'Inter_600SemiBold' }]} numberOfLines={1}>
           {book.title}
@@ -226,13 +232,16 @@ export default function LogScreen() {
   useEffect(() => {
     if (selectedResult || genreTouched) return;
     const t = title.trim();
-    if (t.length < 3) { setGenreAutoFilled(false); return; }
+    if (t.length < 3) { setGenreAutoFilled(false); setCoverImageUri(undefined); return; }
     const handle = setTimeout(async () => {
-      const detected = await detectGenre(t, author.trim());
-      if (detected && !genreTouched && !selectedResult) {
-        setGenre(detected);
+      const meta = await detectBookMeta(t, author.trim());
+      if (genreTouched || selectedResult) return;
+      if (meta.genre) {
+        setGenre(meta.genre);
         setGenreAutoFilled(true);
       }
+      // Auto-fill a cover for manual entries when one is found.
+      if (meta.coverUri) setCoverImageUri(meta.coverUri);
     }, 700);
     return () => clearTimeout(handle);
   }, [title, author, selectedResult, genreTouched]);
