@@ -69,35 +69,43 @@ const TERMS_SECTIONS = [
     body: `You agree not to use EverPage to harass, threaten, or harm other users; post spam, misleading content, or content you do not have the right to share; attempt to access other users' accounts or our systems without authorization; or violate any applicable laws or regulations.`,
   },
   {
-    title: '5. User Content',
+    title: '5. Objectionable Content & Zero Tolerance',
+    body: `EverPage has zero tolerance for objectionable content and abusive behavior. You may not post, share, or transmit content that is harassing, threatening, hateful, sexually explicit, violent, defamatory, or otherwise objectionable, and you may not abuse, stalk, or impersonate other users. We do not permit this content anywhere in the app, including profiles, usernames, margin notes, and room messages.`,
+  },
+  {
+    title: '6. Reporting, Blocking & Moderation',
+    body: `You can report objectionable content or users at any time — tap the report option on a message or note, or open a user's profile and choose "Report user." You can also block any user from their profile, which immediately hides their content from you and yours from them and removes any connection between you. We review every report and act on violations — including removing content and suspending or terminating accounts — within 24 hours. To reach our moderation team directly, contact ${CONTACT_EMAIL}.`,
+  },
+  {
+    title: '7. User Content',
     body: `You own the content you create in EverPage (margin notes, quotes, messages). By posting content visible to others, you grant EverPage a limited license to display that content within the app. We reserve the right to remove content that violates these Terms.`,
   },
   {
-    title: '6. Intellectual Property',
+    title: '8. Intellectual Property',
     body: `Book cover images are sourced from OpenLibrary (openlibrary.org) and are used under their open access terms. Book titles, author names, and metadata are factual information not subject to copyright. EverPage's interface, design, and code are our intellectual property.`,
   },
   {
-    title: '7. Disclaimers',
+    title: '9. Disclaimers',
     body: `EverPage is provided "as is" without warranties of any kind. We do not guarantee that the service will be uninterrupted, error-free, or that data will never be lost. We are not responsible for the content of books referenced within the app.`,
   },
   {
-    title: '8. Limitation of Liability',
+    title: '10. Limitation of Liability',
     body: `To the fullest extent permitted by law, EverPage shall not be liable for any indirect, incidental, special, or consequential damages arising from your use of the app.`,
   },
   {
-    title: '9. Termination',
+    title: '11. Termination',
     body: `We may suspend or terminate your account if you violate these Terms. You may delete your account at any time via Settings.`,
   },
   {
-    title: '10. Governing Law',
+    title: '12. Governing Law',
     body: `These Terms are governed by applicable law. Disputes shall be resolved through binding arbitration or small claims court, not class action.`,
   },
   {
-    title: '11. Changes',
+    title: '13. Changes',
     body: `We may update these Terms. We will notify you of material changes. Continued use after changes constitutes acceptance.`,
   },
   {
-    title: '12. Contact',
+    title: '14. Contact',
     body: `Questions? Contact us at ${CONTACT_EMAIL}.`,
   },
 ];

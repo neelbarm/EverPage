@@ -92,7 +92,7 @@ export default function PublicProfileScreen() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
   const { userId } = useLocalSearchParams<{ userId: string }>();
-  const { followUser, unfollowUser, isFollowing, socialProfile } = useSocial();
+  const { followUser, unfollowUser, isFollowing, socialProfile, blockUser, reportUser } = useSocial();
 
   const [profile, setProfile] = useState<ProfileData | null>(null);
   const [loading, setLoading] = useState(true);
@@ -137,6 +137,49 @@ export default function PublicProfileScreen() {
     }
   }
 
+  function reportProfile() {
+    if (!userId) return;
+    reportUser(userId).catch(() => {});
+    Alert.alert('Report submitted', "Thanks for flagging this. We'll review it within 24 hours.");
+  }
+
+  function blockProfile() {
+    if (!userId || !profile) return;
+    Alert.alert(
+      `Block ${profile.displayName}?`,
+      "They won't be able to see your profile or activity, and you won't see theirs. This also removes any follow between you.",
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Block',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              await blockUser(userId);
+              Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+              router.back();
+            } catch {
+              Alert.alert('Something went wrong', 'Please try again.');
+            }
+          },
+        },
+      ],
+    );
+  }
+
+  function showModerationMenu() {
+    if (!profile) return;
+    Alert.alert(
+      profile.displayName,
+      undefined,
+      [
+        { text: 'Report user', onPress: reportProfile },
+        { text: 'Block user', style: 'destructive', onPress: blockProfile },
+        { text: 'Cancel', style: 'cancel' },
+      ],
+    );
+  }
+
   const topPad = insets.top + (Platform.OS === 'web' ? 67 : 0);
 
   return (
@@ -148,7 +191,13 @@ export default function PublicProfileScreen() {
         <Text style={[styles.headerTitle, { color: colors.foreground, fontFamily: 'Inter_600SemiBold' }]}>
           {profile ? profile.displayName : 'Profile'}
         </Text>
-        <View style={{ width: 38 }} />
+        {!isSelf && profile ? (
+          <TouchableOpacity onPress={showModerationMenu} style={styles.backBtn} activeOpacity={0.7} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
+            <Ionicons name="ellipsis-horizontal" size={22} color={colors.foreground} />
+          </TouchableOpacity>
+        ) : (
+          <View style={{ width: 38 }} />
+        )}
       </View>
 
       {loading ? (

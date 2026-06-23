@@ -371,12 +371,70 @@ function ReminderModal({
   );
 }
 
+function BlockedAccountsModal({
+  visible, blocked, onUnblock, onClose,
+}: {
+  visible: boolean;
+  blocked: { id: string; displayName: string; username: string; color: string; initial: string }[];
+  onUnblock: (id: string) => Promise<void>;
+  onClose: () => void;
+}) {
+  const colors = useColors();
+  const insets = useSafeAreaInsets();
+  const [busyId, setBusyId] = useState<string | null>(null);
+
+  async function handleUnblock(id: string) {
+    setBusyId(id);
+    try {
+      await onUnblock(id);
+    } finally {
+      setBusyId(null);
+    }
+  }
+
+  return (
+    <BottomSheet visible={visible} onClose={onClose} backgroundColor={colors.card} paddingBottom={insets.bottom + 16}>
+      <Text style={[styles.sheetTitle, { color: colors.foreground, fontFamily: 'Inter_700Bold' }]}>Blocked Accounts</Text>
+      {blocked.length === 0 ? (
+        <Text style={[styles.sheetSub, { color: colors.mutedForeground, fontFamily: 'Inter_400Regular', marginBottom: 8 }]}>
+          You haven't blocked anyone. Blocked accounts can't see your profile or activity, and you won't see theirs.
+        </Text>
+      ) : (
+        blocked.map((u) => (
+          <View
+            key={u.id}
+            style={[styles.row, { borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: colors.border }]}
+          >
+            <View style={[styles.iconBox, { backgroundColor: u.color, alignItems: 'center', justifyContent: 'center' }]}>
+              <Text style={{ color: '#fff', fontFamily: 'Inter_700Bold', fontSize: 13 }}>{u.initial}</Text>
+            </View>
+            <View style={{ flex: 1 }}>
+              <Text style={[styles.rowLabel, { color: colors.foreground, fontFamily: 'Inter_500Medium' }]}>{u.displayName}</Text>
+              <Text style={{ color: colors.mutedForeground, fontFamily: 'Inter_400Regular', fontSize: 12 }}>@{u.username}</Text>
+            </View>
+            <TouchableOpacity
+              onPress={() => handleUnblock(u.id)}
+              disabled={busyId === u.id}
+              style={[styles.unblockBtn, { borderColor: colors.border }]}
+              activeOpacity={0.7}
+            >
+              {busyId === u.id
+                ? <ActivityIndicator size="small" color={colors.primary} />
+                : <Text style={{ color: colors.primary, fontFamily: 'Inter_600SemiBold', fontSize: 13 }}>Unblock</Text>}
+            </TouchableOpacity>
+          </View>
+        ))
+      )}
+    </BottomSheet>
+  );
+}
+
 export default function SettingsScreen() {
   const colors = useColors();
   const insets = useSafeAreaInsets();
   const router = useRouter();
   const { profile, streak, reminder, setReminder, setDailyGoal, updateProfile } = useStore();
-  const { socialProfile, isRegistered, setNudgesEnabled } = useSocial();
+  const { socialProfile, isRegistered, setNudgesEnabled, blockedUsers, unblockUser } = useSocial();
   const { user, isAuthenticated, logout, changePassword, deleteAccount } = useAuth();
 
   const { themeMode, setThemeMode } = useTheme();
@@ -394,6 +452,7 @@ export default function SettingsScreen() {
   const [showChangePassword, setShowChangePassword] = useState(false);
   const [passwordChanged, setPasswordChanged] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [showBlocked, setShowBlocked] = useState(false);
   const [deletePassword, setDeletePassword] = useState('');
   const [deleteError, setDeleteError] = useState('');
   const [deletingAccount, setDeletingAccount] = useState(false);
@@ -585,7 +644,6 @@ export default function SettingsScreen() {
               <SettingsRow
                 icon="users"
                 label="Allow nudges"
-                isLast
                 rightElement={
                   <Switch
                     value={nudgesEnabled}
@@ -595,6 +653,13 @@ export default function SettingsScreen() {
                     thumbColor="#fff"
                   />
                 }
+              />
+              <SettingsRow
+                icon="slash"
+                label="Blocked accounts"
+                value={blockedUsers.length > 0 ? String(blockedUsers.length) : 'None'}
+                onPress={() => setShowBlocked(true)}
+                isLast
               />
             </SettingsGroup>
           </>
@@ -728,6 +793,12 @@ export default function SettingsScreen() {
         visible={showChangePassword}
         onClose={() => setShowChangePassword(false)}
         onSuccess={() => { setShowChangePassword(false); setPasswordChanged(true); }}
+      />
+      <BlockedAccountsModal
+        visible={showBlocked}
+        blocked={blockedUsers}
+        onUnblock={unblockUser}
+        onClose={() => setShowBlocked(false)}
       />
       <Modal visible={passwordChanged} transparent animationType="fade" onRequestClose={() => setPasswordChanged(false)}>
         <TouchableOpacity style={styles.overlay} activeOpacity={1} onPress={() => setPasswordChanged(false)}>
@@ -873,6 +944,7 @@ const styles = StyleSheet.create({
   iconBox: { width: 32, height: 32, borderRadius: 8, alignItems: 'center', justifyContent: 'center' },
   rowLabel: { flex: 1, fontSize: 14 },
   rowValue: { fontSize: 14 },
+  unblockBtn: { paddingHorizontal: 14, paddingVertical: 7, borderRadius: 16, borderWidth: 1, minWidth: 78, alignItems: 'center' },
   overlay: { flex: 1, justifyContent: 'flex-end', backgroundColor: 'rgba(0,0,0,0.4)' },
   sheet: { borderTopLeftRadius: 24, borderTopRightRadius: 24, paddingHorizontal: 20, paddingTop: 12, gap: 14 },
   handle: { width: 36, height: 4, borderRadius: 2, alignSelf: 'center', marginBottom: 4 },

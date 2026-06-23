@@ -57,6 +57,40 @@ export const npNudges = pgTable("np_nudges", {
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 
+// User blocking — required by App Store Guideline 1.2 (UGC apps must let users
+// block abusive accounts). Blocking is one-directional from blocker -> blocked.
+export const npBlocks = pgTable(
+  "np_blocks",
+  {
+    blockerId: text("blocker_id")
+      .notNull()
+      .references(() => npUsers.id, { onDelete: "cascade" }),
+    blockedId: text("blocked_id")
+      .notNull()
+      .references(() => npUsers.id, { onDelete: "cascade" }),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+  },
+  (t) => [
+    primaryKey({ columns: [t.blockerId, t.blockedId] }),
+  ],
+);
+
+// Content/user reports — required by App Store Guideline 1.2 (UGC apps must let
+// users report objectionable content and demonstrate a moderation pipeline).
+export const npReports = pgTable("np_reports", {
+  id: text("id").primaryKey(),
+  reporterId: text("reporter_id")
+    .notNull()
+    .references(() => npUsers.id, { onDelete: "cascade" }),
+  // Who/what is being reported.
+  contentType: text("content_type").notNull(), // "user" | "room_message" | "margin_note" | "activity"
+  contentId: text("content_id").notNull(),
+  reportedUserId: text("reported_user_id"), // nullable; set when a user is reported
+  reason: text("reason"),
+  status: text("status").notNull().default("pending"), // "pending" | "reviewed" | "actioned" | "dismissed"
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
 export const insertNpUserSchema = createInsertSchema(npUsers).omit({ createdAt: true, updatedAt: true });
 export const insertNpActivitySchema = createInsertSchema(npActivity).omit({ createdAt: true });
 

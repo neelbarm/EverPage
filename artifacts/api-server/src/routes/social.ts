@@ -1,9 +1,37 @@
 import { Router, type IRouter } from "express";
 import { db } from "@workspace/db";
-import { npUsers, npFollows, npActivity, npNudges, npBooks } from "@workspace/db/schema";
+import { npUsers, npFollows, npActivity, npNudges, npBooks, npBlocks } from "@workspace/db/schema";
 import { eq, ilike, or, and, ne, sql, desc, not, inArray, gte } from "drizzle-orm";
 
 const router: IRouter = Router();
+
+// Returns every user id that should be hidden from `userId`: anyone they blocked,
+// plus anyone who blocked them. Blocking hides accounts in both directions.
+async function getHiddenUserIds(userId: string): Promise<string[]> {
+  const rows = await db
+    .select({ blockerId: npBlocks.blockerId, blockedId: npBlocks.blockedId })
+    .from(npBlocks)
+    .where(or(eq(npBlocks.blockerId, userId), eq(npBlocks.blockedId, userId)));
+  const ids = new Set<string>();
+  for (const r of rows) {
+    ids.add(r.blockerId === userId ? r.blockedId : r.blockerId);
+  }
+  return [...ids];
+}
+
+async function isBlockedBetween(a: string, b: string): Promise<boolean> {
+  const rows = await db
+    .select({ blockerId: npBlocks.blockerId })
+    .from(npBlocks)
+    .where(
+      or(
+        and(eq(npBlocks.blockerId, a), eq(npBlocks.blockedId, b)),
+        and(eq(npBlocks.blockerId, b), eq(npBlocks.blockedId, a)),
+      ),
+    )
+    .limit(1);
+  return rows.length > 0;
+}
 
 const EXPO_PUSH_URL = "https://exp.host/--/api/v2/push/send";
 const NUDGE_RETENTION_DAYS = 30;
@@ -98,6 +126,7 @@ router.get("/social/users/search", async (req, res) => {
     return;
   }
   const pattern = `%${q}%`;
+  const hidden = await getHiddenUserIds(userId);
   const rows = await db
     .select()
     .from(npUsers)
@@ -105,6 +134,7 @@ router.get("/social/users/search", async (req, res) => {
       and(
         or(ilike(npUsers.username, pattern), ilike(npUsers.displayName, pattern)),
         ne(npUsers.id, userId),
+        hidden.length ? not(inArray(npUsers.id, hidden)) : undefined,
       ),
     )
     .limit(20);
@@ -124,6 +154,10 @@ router.post("/social/users/:id/follow", async (req, res) => {
     res.status(404).json({ error: "Create your social profile first" });
     return;
   }
+  if (await isBlockedBetween(userId, targetId)) {
+    res.status(403).json({ error: "Cannot follow a blocked user" });
+    return;
+  }
   await db
     .insert(npFollows)
     .values({ followerId: userId, followingId: targetId })
@@ -138,6 +172,61 @@ router.delete("/social/users/:id/follow", async (req, res) => {
     .delete(npFollows)
     .where(and(eq(npFollows.followerId, userId), eq(npFollows.followingId, req.params.id)));
   res.json({ ok: true });
+});
+
+router.post("/social/users/:id/block", async (req, res) => {
+  const userId = requireAuth(req, res);
+  if (!userId) return;
+  const targetId = req.params.id;
+  if (targetId === userId) {
+    res.status(400).json({ error: "Cannot block yourself" });
+    return;
+  }
+  const target = await getSocialProfile(targetId);
+  if (!target) {
+    res.status(404).json({ error: "User not found" });
+    return;
+  }
+  await db
+    .insert(npBlocks)
+    .values({ blockerId: userId, blockedId: targetId })
+    .onConflictDoNothing();
+  // Blocking severs the relationship both ways.
+  await db.delete(npFollows).where(
+    or(
+      and(eq(npFollows.followerId, userId), eq(npFollows.followingId, targetId)),
+      and(eq(npFollows.followerId, targetId), eq(npFollows.followingId, userId)),
+    ),
+  );
+  res.json({ ok: true });
+});
+
+router.delete("/social/users/:id/block", async (req, res) => {
+  const userId = requireAuth(req, res);
+  if (!userId) return;
+  await db
+    .delete(npBlocks)
+    .where(and(eq(npBlocks.blockerId, userId), eq(npBlocks.blockedId, req.params.id)));
+  res.json({ ok: true });
+});
+
+router.get("/social/blocked", async (req, res) => {
+  const userId = requireAuth(req, res);
+  if (!userId) return;
+  const rows = await db
+    .select({
+      id: npUsers.id,
+      username: npUsers.username,
+      displayName: npUsers.displayName,
+      color: npUsers.color,
+      initial: npUsers.initial,
+      avatarUrl: npUsers.avatarUrl,
+    })
+    .from(npBlocks)
+    .innerJoin(npUsers, eq(npBlocks.blockedId, npUsers.id))
+    .where(eq(npBlocks.blockerId, userId))
+    .orderBy(desc(npBlocks.createdAt));
+  res.json(rows.map((r) => ({ ...r, avatarUrl: r.avatarUrl ?? null })));
 });
 
 router.get("/social/following", async (req, res) => {
@@ -183,6 +272,7 @@ router.get("/social/feed", async (req, res) => {
     .from(npFollows)
     .where(eq(npFollows.followerId, userId));
 
+  const hidden = await getHiddenUserIds(userId);
   const rows = await db
     .select({
       id: npActivity.id,
@@ -200,7 +290,12 @@ router.get("/social/feed", async (req, res) => {
     })
     .from(npActivity)
     .innerJoin(npUsers, eq(npActivity.userId, npUsers.id))
-    .where(inArray(npActivity.userId, followingSubq))
+    .where(
+      and(
+        inArray(npActivity.userId, followingSubq),
+        hidden.length ? not(inArray(npActivity.userId, hidden)) : undefined,
+      ),
+    )
     .orderBy(desc(npActivity.createdAt))
     .limit(50);
   res.json(rows);
@@ -246,6 +341,7 @@ router.get("/social/leaderboard", async (req, res) => {
     .from(npFollows)
     .where(eq(npFollows.followerId, userId));
 
+  const hidden = await getHiddenUserIds(userId);
   const now = new Date();
   const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
   const weekStart = new Date(todayStart);
@@ -265,7 +361,12 @@ router.get("/social/leaderboard", async (req, res) => {
     })
     .from(npActivity)
     .innerJoin(npUsers, eq(npActivity.userId, npUsers.id))
-    .where(inArray(npActivity.userId, followingSubq))
+    .where(
+      and(
+        inArray(npActivity.userId, followingSubq),
+        hidden.length ? not(inArray(npActivity.userId, hidden)) : undefined,
+      ),
+    )
     .groupBy(npActivity.userId, npUsers.username, npUsers.displayName, npUsers.color, npUsers.initial)
     .orderBy(desc(sql`today_minutes`));
 
@@ -288,6 +389,12 @@ router.get("/social/users/:id/profile", async (req, res) => {
   if (!currentUserId) return;
 
   const targetId = req.params.id;
+
+  // Hide profiles where a block exists in either direction.
+  if (await isBlockedBetween(currentUserId, targetId)) {
+    res.status(404).json({ error: "User not found" });
+    return;
+  }
 
   const userRows = await db.select().from(npUsers).where(eq(npUsers.id, targetId)).limit(1);
   const user = userRows[0];
@@ -370,6 +477,7 @@ router.get("/social/suggested", async (req, res) => {
     .from(npFollows)
     .where(eq(npFollows.followerId, userId));
 
+  const hidden = await getHiddenUserIds(userId);
   const rows = await db
     .select()
     .from(npUsers)
@@ -377,6 +485,7 @@ router.get("/social/suggested", async (req, res) => {
       and(
         ne(npUsers.id, userId),
         not(inArray(npUsers.id, followingSubq)),
+        hidden.length ? not(inArray(npUsers.id, hidden)) : undefined,
       ),
     )
     .limit(10);
@@ -580,7 +689,8 @@ router.get("/social/recommendations", async (req, res) => {
     .where(eq(npFollows.followerId, userId));
   const friendIds = new Set(followRows.map((r) => r.id));
 
-  // Candidate books from everyone else
+  // Candidate books from everyone else (excluding blocked users)
+  const hidden = await getHiddenUserIds(userId);
   const others = await db
     .select({
       userId: npBooks.userId,
@@ -591,7 +701,12 @@ router.get("/social/recommendations", async (req, res) => {
       coverImageUri: npBooks.coverImageUri,
     })
     .from(npBooks)
-    .where(ne(npBooks.userId, userId))
+    .where(
+      and(
+        ne(npBooks.userId, userId),
+        hidden.length ? not(inArray(npBooks.userId, hidden)) : undefined,
+      ),
+    )
     .limit(2000);
 
   type Agg = {

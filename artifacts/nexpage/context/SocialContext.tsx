@@ -80,6 +80,11 @@ interface SocialContextType {
   refreshFeed: () => Promise<void>;
   isFollowing: (userId: string) => boolean;
   sendNudge: (userId: string) => Promise<{ alreadyNudged: boolean }>;
+  blockedUsers: SocialUser[];
+  blockUser: (userId: string) => Promise<void>;
+  unblockUser: (userId: string) => Promise<void>;
+  isBlocked: (userId: string) => boolean;
+  reportUser: (userId: string, reason?: string) => Promise<void>;
   registerPushToken: (token: string) => Promise<void>;
   setNudgesEnabled: (enabled: boolean) => Promise<void>;
   markNudgesRead: () => void;
@@ -131,6 +136,7 @@ export function SocialProvider({ children }: { children: React.ReactNode }) {
   const [leaderboard, setLeaderboard] = useState<LeaderboardEntry[]>([]);
   const [suggestedUsers, setSuggestedUsers] = useState<SocialUser[]>([]);
   const [nudgeHistory, setNudgeHistory] = useState<NudgeHistoryItem[]>([]);
+  const [blockedUsers, setBlockedUsers] = useState<SocialUser[]>([]);
   const [lastReadNudgeTime, setLastReadNudgeTime] = useState<number>(() => Date.now());
   const [isLoading, setIsLoading] = useState(false);
   const initialized = useRef(false);
@@ -151,6 +157,7 @@ export function SocialProvider({ children }: { children: React.ReactNode }) {
       setLeaderboard([]);
       setSuggestedUsers([]);
       setNudgeHistory([]);
+      setBlockedUsers([]);
       initialized.current = false;
       return;
     }
@@ -173,13 +180,14 @@ export function SocialProvider({ children }: { children: React.ReactNode }) {
   async function loadSocialData() {
     setIsLoading(true);
     try {
-      const [followingData, followersData, feedData, boardData, suggestData, nudgesData] = await Promise.allSettled([
+      const [followingData, followersData, feedData, boardData, suggestData, nudgesData, blockedData] = await Promise.allSettled([
         apiFetch<SocialUser[]>('/social/following'),
         apiFetch<SocialUser[]>('/social/followers'),
         apiFetch<ActivityItem[]>('/social/feed'),
         apiFetch<LeaderboardEntry[]>('/social/leaderboard'),
         apiFetch<SocialUser[]>('/social/suggested'),
         apiFetch<NudgeHistoryItem[]>('/social/nudges'),
+        apiFetch<SocialUser[]>('/social/blocked'),
       ]);
       if (followingData.status === 'fulfilled') setFollowing(followingData.value);
       if (followersData.status === 'fulfilled') setFollowers(followersData.value);
@@ -187,6 +195,7 @@ export function SocialProvider({ children }: { children: React.ReactNode }) {
       if (boardData.status === 'fulfilled') setLeaderboard(boardData.value);
       if (suggestData.status === 'fulfilled') setSuggestedUsers(suggestData.value);
       if (nudgesData.status === 'fulfilled') setNudgeHistory(nudgesData.value);
+      if (blockedData.status === 'fulfilled') setBlockedUsers(blockedData.value);
     } catch { /* ignore */ } finally {
       setIsLoading(false);
     }
@@ -289,6 +298,34 @@ export function SocialProvider({ children }: { children: React.ReactNode }) {
     return { alreadyNudged: false };
   }, []);
 
+  const blockUser = useCallback(async (userId: string) => {
+    await apiFetch(`/social/users/${userId}/block`, { method: 'POST' });
+    // Blocking severs the relationship and hides them everywhere.
+    setFollowing(prev => prev.filter(u => u.id !== userId));
+    setFollowers(prev => prev.filter(u => u.id !== userId));
+    setFeed(prev => prev.filter(a => a.userId !== userId));
+    setLeaderboard(prev => prev.filter(e => e.userId !== userId));
+    setSuggestedUsers(prev => prev.filter(u => u.id !== userId));
+    await loadSocialData();
+  }, []);
+
+  const unblockUser = useCallback(async (userId: string) => {
+    await apiFetch(`/social/users/${userId}/block`, { method: 'DELETE' });
+    setBlockedUsers(prev => prev.filter(u => u.id !== userId));
+    await loadSocialData();
+  }, []);
+
+  const isBlocked = useCallback((userId: string) => {
+    return blockedUsers.some(u => u.id === userId);
+  }, [blockedUsers]);
+
+  const reportUser = useCallback(async (userId: string, reason?: string) => {
+    await apiFetch('/report', {
+      method: 'POST',
+      body: JSON.stringify({ contentType: 'user', contentId: userId, reportedUserId: userId, reason: reason ?? 'user_report' }),
+    });
+  }, []);
+
   const registerPushToken = useCallback(async (token: string) => {
     try {
       await apiFetch('/social/push-token', {
@@ -376,6 +413,11 @@ export function SocialProvider({ children }: { children: React.ReactNode }) {
       refreshFeed,
       isFollowing,
       sendNudge,
+      blockedUsers,
+      blockUser,
+      unblockUser,
+      isBlocked,
+      reportUser,
       registerPushToken,
       setNudgesEnabled,
       markNudgesRead,
