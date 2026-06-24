@@ -255,6 +255,9 @@ export default function LogScreen() {
         setTitle(params.prefillTitle);
         if (params.prefillAuthor) setAuthor(params.prefillAuthor);
       }
+      // Clear the trigger params so tapping the same entry point again re-opens
+      // the modal (otherwise the effect deps never change and nothing happens).
+      router.setParams({ addBook: undefined, prefillTitle: undefined, prefillAuthor: undefined } as any);
     }
   }, [params.addBook, params.prefillTitle, params.prefillAuthor]);
 

@@ -300,15 +300,20 @@ export default function BookDetailScreen() {
             ) : shared ? (
               <>
                 <Ionicons name="checkmark-circle" size={16} color={colors.accent} />
-                <Text style={[styles.shareBtnText, { color: colors.accent, fontFamily: 'Inter_600SemiBold' }]}>Shared with followers</Text>
+                <Text style={[styles.shareBtnText, { color: colors.accent, fontFamily: 'Inter_600SemiBold' }]}>Recommended ✓</Text>
               </>
             ) : (
               <>
                 <Ionicons name="star-outline" size={16} color={colors.foreground} />
-                <Text style={[styles.shareBtnText, { color: colors.foreground, fontFamily: 'Inter_500Medium' }]}>Share with followers</Text>
+                <Text style={[styles.shareBtnText, { color: colors.foreground, fontFamily: 'Inter_500Medium' }]}>Recommend this book</Text>
               </>
             )}
           </TouchableOpacity>
+        )}
+        {isRegistered && (
+          <Text style={[styles.shareHint, { color: colors.mutedForeground, fontFamily: 'Inter_400Regular' }]}>
+            {shared ? 'Your followers can see this in their feed.' : 'Posts this book to your followers’ activity feed.'}
+          </Text>
         )}
 
         {/* Reading Room */}
@@ -572,6 +577,7 @@ const styles = StyleSheet.create({
   finishedText: { fontSize: 15 },
   shareBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, borderRadius: 14, borderWidth: 1, paddingVertical: 13 },
   shareBtnText: { fontSize: 14 },
+  shareHint: { fontSize: 12, textAlign: 'center', marginTop: 6, lineHeight: 16 },
   modal: { flex: 1 },
   modalHandle: { width: 36, height: 4, borderRadius: 2, alignSelf: 'center', marginTop: 12, marginBottom: 8 },
   modalHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 20, paddingVertical: 16 },
