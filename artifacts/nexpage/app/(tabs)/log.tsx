@@ -65,6 +65,47 @@ async function detectBookMeta(
   }
 }
 
+// Keep only ISBN-valid characters; an ISBN-10 may end in 'X'.
+function normalizeIsbn(raw: string): string {
+  return raw.replace(/[^0-9Xx]/g, '').toUpperCase();
+}
+
+function isValidIsbnLength(isbn: string): boolean {
+  return isbn.length === 10 || isbn.length === 13;
+}
+
+interface IsbnResult {
+  title: string;
+  author: string;
+  pageCount: number | null;
+  coverUri: string | undefined;
+  genre: string | null;
+}
+
+// Look up the EXACT edition by ISBN so the page count matches the user's copy.
+async function lookupIsbn(isbn: string): Promise<IsbnResult | null> {
+  try {
+    const url = `https://openlibrary.org/api/books?bibkeys=ISBN:${isbn}&format=json&jscmd=data`;
+    const res = await fetch(url);
+    if (!res.ok) return null;
+    const data = await res.json();
+    const rec = data?.[`ISBN:${isbn}`];
+    if (!rec || !rec.title) return null;
+    const author =
+      Array.isArray(rec.authors) && rec.authors[0]?.name ? rec.authors[0].name : '';
+    const pageCount =
+      typeof rec.number_of_pages === 'number' && rec.number_of_pages > 0 ? rec.number_of_pages : null;
+    const coverUri: string | undefined = rec.cover?.medium ?? rec.cover?.large ?? rec.cover?.small ?? undefined;
+    const subjects: string[] = Array.isArray(rec.subjects)
+      ? rec.subjects.map((s: any) => s?.name).filter((n: any): n is string => typeof n === 'string').slice(0, 15)
+      : [];
+    const genre = subjects.length > 0 ? mapSubjectToGenre(subjects) : null;
+    return { title: rec.title as string, author, pageCount, coverUri, genre };
+  } catch {
+    return null;
+  }
+}
+
 function BookRow({ book, onPress }: { book: Book; onPress: () => void }) {
   const colors = useColors();
   const pct = Math.round((book.currentPage / book.totalPages) * 100);
@@ -227,14 +268,50 @@ export default function LogScreen() {
   const [genreAutoFilled, setGenreAutoFilled] = useState(false);
   const [coverImageUri, setCoverImageUri] = useState<string | undefined>(undefined);
 
+  const [isbn, setIsbn] = useState('');
+  const [isbnStatus, setIsbnStatus] = useState<'idle' | 'searching' | 'found' | 'notfound'>('idle');
+  // When an ISBN match fills the form, suppress the title-based auto-detect so it
+  // can't overwrite the exact edition's page count with a cross-edition median.
+  const [lockFromIsbn, setLockFromIsbn] = useState(false);
+
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const activeBooks = books.filter(b => !b.finishedAt);
 
+  // Look up the exact edition by ISBN and fill the form from it.
+  useEffect(() => {
+    const clean = normalizeIsbn(isbn);
+    if (!isValidIsbnLength(clean)) { setIsbnStatus('idle'); return; }
+    setIsbnStatus('searching');
+    let cancelled = false;
+    const handle = setTimeout(async () => {
+      const result = await lookupIsbn(clean);
+      if (cancelled) return;
+      if (!result) { setIsbnStatus('notfound'); return; }
+      setIsbnStatus('found');
+      setLockFromIsbn(true);
+      setTitle(result.title);
+      setAuthor(result.author);
+      if (result.pageCount) {
+        setPages(String(result.pageCount));
+        setPagesTouched(false);
+        setPagesAutoFilled(true);
+      }
+      if (result.coverUri) setCoverImageUri(result.coverUri);
+      if (result.genre) {
+        setGenre(result.genre);
+        setGenreTouched(false);
+        setGenreAutoFilled(true);
+      }
+      Haptics.selectionAsync();
+    }, 600);
+    return () => { cancelled = true; clearTimeout(handle); };
+  }, [isbn]);
+
   // Auto-fill genre, cover AND page count as the user types a title manually.
   // Each field is only filled if the user hasn't overridden it themselves.
   useEffect(() => {
-    if (selectedResult) return;
+    if (selectedResult || lockFromIsbn) return;
     const t = title.trim();
     if (t.length < 3) {
       setGenreAutoFilled(false);
@@ -245,7 +322,7 @@ export default function LogScreen() {
     }
     const handle = setTimeout(async () => {
       const meta = await detectBookMeta(t, author.trim());
-      if (selectedResult) return;
+      if (selectedResult || lockFromIsbn) return;
       if (meta.genre && !genreTouched) {
         setGenre(meta.genre);
         setGenreAutoFilled(true);
@@ -261,7 +338,7 @@ export default function LogScreen() {
       }
     }, 700);
     return () => clearTimeout(handle);
-  }, [title, author, selectedResult, genreTouched, pagesTouched]);
+  }, [title, author, selectedResult, genreTouched, pagesTouched, lockFromIsbn]);
 
   function startSession(book: Book) {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
@@ -291,6 +368,9 @@ export default function LogScreen() {
     setGenreTouched(false);
     setGenreAutoFilled(false);
     setCoverImageUri(undefined);
+    setIsbn('');
+    setIsbnStatus('idle');
+    setLockFromIsbn(false);
   }
 
   function handleSelectResult(result: OpenLibResult) {
@@ -304,6 +384,9 @@ export default function LogScreen() {
     setGenre(mapSubjectToGenre(result.subjects ?? []));
     setGenreTouched(false);
     setGenreAutoFilled(true);
+    setIsbn('');
+    setIsbnStatus('idle');
+    setLockFromIsbn(false);
     setSearchResults([]);
     setSearchQuery('');
     Haptics.selectionAsync();
@@ -315,6 +398,9 @@ export default function LogScreen() {
     setAuthor('');
     setPages('');
     setCoverImageUri(undefined);
+    setIsbn('');
+    setIsbnStatus('idle');
+    setLockFromIsbn(false);
   }
 
   useEffect(() => {
@@ -526,6 +612,32 @@ export default function LogScreen() {
                   </TouchableOpacity>
                 </View>
               )}
+
+              <View style={styles.field}>
+                <View style={styles.genreLabelRow}>
+                  <Text style={[styles.fieldLabel, { color: colors.mutedForeground, fontFamily: 'Inter_500Medium' }]}>ISBN</Text>
+                  {isbnStatus === 'searching' && (
+                    <Text style={[styles.genreAutoHint, { color: colors.mutedForeground, fontFamily: 'Inter_500Medium' }]}>Looking up…</Text>
+                  )}
+                  {isbnStatus === 'found' && (
+                    <Text style={[styles.genreAutoHint, { color: colors.accent, fontFamily: 'Inter_600SemiBold' }]}>✓ Found your edition</Text>
+                  )}
+                  {isbnStatus === 'notfound' && (
+                    <Text style={[styles.genreAutoHint, { color: colors.mutedForeground, fontFamily: 'Inter_500Medium' }]}>No match — enter details below</Text>
+                  )}
+                </View>
+                <TextInput
+                  style={[styles.input, { backgroundColor: colors.muted, color: colors.foreground, borderColor: colors.border, fontFamily: 'Inter_400Regular' }]}
+                  value={isbn}
+                  onChangeText={(v) => { setIsbn(v); setLockFromIsbn(false); }}
+                  placeholder="Enter ISBN for your exact edition (optional)"
+                  placeholderTextColor={colors.mutedForeground}
+                  keyboardType="default"
+                  autoCapitalize="none"
+                  autoCorrect={false}
+                  returnKeyType="done"
+                />
+              </View>
 
               {[
                 { label: 'Title', value: title, setter: setTitle, placeholder: 'Book title', kb: 'default' as const, hint: false },
