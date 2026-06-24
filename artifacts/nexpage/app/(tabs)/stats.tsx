@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { View, Text, ScrollView, TouchableOpacity, StyleSheet, Platform, ActivityIndicator, Modal, TextInput, Pressable } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -9,6 +9,10 @@ import { useSocial, LeaderboardEntry } from '@/context/SocialContext';
 import RegisterModal from '@/components/RegisterModal';
 import { BottomSheet } from '@/components/BottomSheet';
 import { BookCover } from '@/components/BookCover';
+
+function capitalizeFirst(s: string): string {
+  return s ? s.charAt(0).toUpperCase() + s.slice(1) : s;
+}
 
 function StreakDot({ checked, day }: { checked: boolean; day: string }) {
   const colors = useColors();
@@ -89,6 +93,27 @@ export default function StatsScreen() {
   } = useSocial();
   const [view, setView] = useState<'streaks' | 'discover'>('streaks');
   const [showRegister, setShowRegister] = useState(false);
+
+  // Pre-fill a recommendation's page count from OpenLibrary so "Add to Shelf"
+  // is ready immediately (the button needs a page count).
+  useEffect(() => {
+    if (!selectedRec) { setRecPagesStr(''); return; }
+    setRecPagesStr('');
+    let cancelled = false;
+    (async () => {
+      try {
+        const q = `title=${encodeURIComponent(selectedRec.title)}&author=${encodeURIComponent(selectedRec.author)}`;
+        const res = await fetch(`https://openlibrary.org/search.json?${q}&limit=1&fields=number_of_pages_median`);
+        if (!res.ok) return;
+        const data = await res.json();
+        const pages = data?.docs?.[0]?.number_of_pages_median;
+        if (!cancelled && typeof pages === 'number' && pages > 0) {
+          setRecPagesStr(String(pages));
+        }
+      } catch { /* user can still type it manually */ }
+    })();
+    return () => { cancelled = true; };
+  }, [selectedRec]);
   const [followingId, setFollowingId] = useState<string | null>(null);
   const topPad = insets.top + (Platform.OS === 'web' ? 67 : 0);
 
@@ -256,12 +281,7 @@ export default function StatsScreen() {
                   <View style={styles.recBody}>
                     <Text style={[styles.recTitle, { color: colors.foreground, fontFamily: 'Inter_600SemiBold' }]} numberOfLines={2}>{book.title}</Text>
                     <Text style={[styles.recAuthor, { color: colors.mutedForeground, fontFamily: 'Inter_400Regular' }]} numberOfLines={1}>{book.author}</Text>
-                    <Text style={[styles.recReason, { color: colors.accent, fontFamily: 'Inter_400Regular' }]} numberOfLines={1}>{book.reason}</Text>
-                    {book.friendsCount > 0 && (
-                      <Text style={[styles.recFriends, { color: colors.mutedForeground, fontFamily: 'Inter_400Regular' }]}>
-                        {book.friendsCount} friend{book.friendsCount !== 1 ? 's' : ''} reading
-                      </Text>
-                    )}
+                    <Text style={[styles.recReason, { color: colors.accent, fontFamily: 'Inter_400Regular' }]} numberOfLines={1}>{capitalizeFirst(book.reason)}</Text>
                   </View>
                 </TouchableOpacity>
               ))}
@@ -354,7 +374,7 @@ export default function StatsScreen() {
               <View style={{ flex: 1, gap: 4, justifyContent: 'center' }}>
                 <Text style={{ color: colors.foreground, fontFamily: 'Inter_700Bold', fontSize: 16, lineHeight: 22 }} numberOfLines={3}>{selectedRec.title}</Text>
                 <Text style={{ color: colors.mutedForeground, fontFamily: 'Inter_400Regular', fontSize: 14 }}>{selectedRec.author}</Text>
-                <Text style={{ color: colors.accent, fontFamily: 'Inter_400Regular', fontSize: 13 }}>{selectedRec.reason}</Text>
+                <Text style={{ color: colors.accent, fontFamily: 'Inter_400Regular', fontSize: 13 }}>{capitalizeFirst(selectedRec.reason)}</Text>
               </View>
             </View>
             <View style={{ gap: 8 }}>
@@ -425,7 +445,6 @@ const styles = StyleSheet.create({
   recTitle: { fontSize: 13, lineHeight: 18 },
   recAuthor: { fontSize: 12 },
   recReason: { fontSize: 11 },
-  recFriends: { fontSize: 11 },
   leaderRow: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 14, gap: 12, borderBottomWidth: StyleSheet.hairlineWidth },
   rank: { fontSize: 14, minWidth: 20, textAlign: 'center' },
   leaderName: { fontSize: 15, letterSpacing: -0.2 },

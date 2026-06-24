@@ -19,6 +19,10 @@ function formatDate(): string {
   return `${days[d.getDay()]}, ${months[d.getMonth()]} ${d.getDate()}`;
 }
 
+function capitalizeFirst(s: string): string {
+  return s ? s.charAt(0).toUpperCase() + s.slice(1) : s;
+}
+
 function ProgressBar({
   progress,
   height = 4,
@@ -87,6 +91,27 @@ export default function ShelfScreen() {
       },
     })
   ).current;
+
+  // When a recommendation opens, pre-fill its page count from OpenLibrary so
+  // "Add to my shelf" is ready immediately (the button needs a page count).
+  useEffect(() => {
+    if (!selectedRec) { setRecPagesStr(''); return; }
+    setRecPagesStr('');
+    let cancelled = false;
+    (async () => {
+      try {
+        const q = `title=${encodeURIComponent(selectedRec.title)}&author=${encodeURIComponent(selectedRec.author)}`;
+        const res = await fetch(`https://openlibrary.org/search.json?${q}&limit=1&fields=number_of_pages_median`);
+        if (!res.ok) return;
+        const data = await res.json();
+        const pages = data?.docs?.[0]?.number_of_pages_median;
+        if (!cancelled && typeof pages === 'number' && pages > 0) {
+          setRecPagesStr(String(pages));
+        }
+      } catch { /* user can still type it manually */ }
+    })();
+    return () => { cancelled = true; };
+  }, [selectedRec]);
 
   useEffect(() => {
     if (!pendingFreezeEarned) return;
@@ -411,13 +436,8 @@ export default function ShelfScreen() {
                       {selectedRec.author}
                     </Text>
                     <Text style={[styles.recModalReason, { color: colors.accent, fontFamily: 'Inter_400Regular' }]}>
-                      {selectedRec.reason}
+                      {capitalizeFirst(selectedRec.reason)}
                     </Text>
-                    {selectedRec.friendsCount > 0 && (
-                      <Text style={[styles.recModalFriends, { color: colors.mutedForeground, fontFamily: 'Inter_400Regular' }]}>
-                        {selectedRec.friendsCount} friend{selectedRec.friendsCount !== 1 ? 's' : ''} reading this
-                      </Text>
-                    )}
                   </View>
                 </View>
                 <View style={[styles.recModalPageRow, { borderColor: colors.border }]}>
@@ -605,7 +625,6 @@ const styles = StyleSheet.create({
   recModalTitle: { fontSize: 17, lineHeight: 22, letterSpacing: -0.3 },
   recModalAuthor: { fontSize: 14 },
   recModalReason: { fontSize: 13, fontStyle: 'italic' },
-  recModalFriends: { fontSize: 12 },
   recModalPageRow: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
     borderTopWidth: 1, paddingTop: 16,
