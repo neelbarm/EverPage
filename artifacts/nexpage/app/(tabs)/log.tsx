@@ -38,28 +38,30 @@ function mapSubjectToGenre(subjects: string[]): string {
   return 'Non-Fiction';
 }
 
-// Look up a book's genre AND cover from OpenLibrary by title (+ optional author),
-// in a single request so manual entry gets a cover for free.
+// Look up a book's genre, cover AND page count from OpenLibrary by title
+// (+ optional author), in a single request so manual entry is pre-filled.
 async function detectBookMeta(
   title: string,
   author: string,
-): Promise<{ genre: string | null; coverUri: string | null }> {
+): Promise<{ genre: string | null; coverUri: string | null; pageCount: number | null }> {
   try {
     const q = author
       ? `title=${encodeURIComponent(title)}&author=${encodeURIComponent(author)}`
       : `title=${encodeURIComponent(title)}`;
-    const url = `https://openlibrary.org/search.json?${q}&limit=1&fields=subject_facet,cover_i`;
+    const url = `https://openlibrary.org/search.json?${q}&limit=1&fields=subject_facet,cover_i,number_of_pages_median`;
     const res = await fetch(url);
-    if (!res.ok) return { genre: null, coverUri: null };
+    if (!res.ok) return { genre: null, coverUri: null, pageCount: null };
     const data = await res.json();
     const doc = data?.docs?.[0];
     const subjects: string[] = Array.isArray(doc?.subject_facet) ? doc.subject_facet.slice(0, 15) : [];
     const genre = subjects.length > 0 ? mapSubjectToGenre(subjects) : null;
     const coverUri =
       typeof doc?.cover_i === 'number' ? `https://covers.openlibrary.org/b/id/${doc.cover_i}-M.jpg` : null;
-    return { genre, coverUri };
+    const pages = doc?.number_of_pages_median;
+    const pageCount = typeof pages === 'number' && pages > 0 ? pages : null;
+    return { genre, coverUri, pageCount };
   } catch {
-    return { genre: null, coverUri: null };
+    return { genre: null, coverUri: null, pageCount: null };
   }
 }
 
@@ -218,6 +220,8 @@ export default function LogScreen() {
   const [title, setTitle] = useState('');
   const [author, setAuthor] = useState('');
   const [pages, setPages] = useState('');
+  const [pagesTouched, setPagesTouched] = useState(false);
+  const [pagesAutoFilled, setPagesAutoFilled] = useState(false);
   const [genre, setGenre] = useState('Literary Fiction');
   const [genreTouched, setGenreTouched] = useState(false);
   const [genreAutoFilled, setGenreAutoFilled] = useState(false);
@@ -227,24 +231,37 @@ export default function LogScreen() {
 
   const activeBooks = books.filter(b => !b.finishedAt);
 
-  // Auto-detect genre as the user types a title manually (skips if they picked
-  // a search result or chose a genre themselves).
+  // Auto-fill genre, cover AND page count as the user types a title manually.
+  // Each field is only filled if the user hasn't overridden it themselves.
   useEffect(() => {
-    if (selectedResult || genreTouched) return;
+    if (selectedResult) return;
     const t = title.trim();
-    if (t.length < 3) { setGenreAutoFilled(false); setCoverImageUri(undefined); return; }
+    if (t.length < 3) {
+      setGenreAutoFilled(false);
+      setPagesAutoFilled(false);
+      if (!pagesTouched) setPages('');
+      setCoverImageUri(undefined);
+      return;
+    }
     const handle = setTimeout(async () => {
       const meta = await detectBookMeta(t, author.trim());
-      if (genreTouched || selectedResult) return;
-      if (meta.genre) {
+      if (selectedResult) return;
+      if (meta.genre && !genreTouched) {
         setGenre(meta.genre);
         setGenreAutoFilled(true);
       }
       // Auto-fill a cover for manual entries when one is found.
       if (meta.coverUri) setCoverImageUri(meta.coverUri);
+      // Pre-load the page count so the user doesn't have to type it. When the
+      // user hasn't typed pages themselves, always reflect the current book so a
+      // previous book's count never lingers.
+      if (!pagesTouched) {
+        setPages(meta.pageCount ? String(meta.pageCount) : '');
+        setPagesAutoFilled(!!meta.pageCount);
+      }
     }, 700);
     return () => clearTimeout(handle);
-  }, [title, author, selectedResult, genreTouched]);
+  }, [title, author, selectedResult, genreTouched, pagesTouched]);
 
   function startSession(book: Book) {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
@@ -268,6 +285,8 @@ export default function LogScreen() {
     setTitle('');
     setAuthor('');
     setPages('');
+    setPagesTouched(false);
+    setPagesAutoFilled(false);
     setGenre('Literary Fiction');
     setGenreTouched(false);
     setGenreAutoFilled(false);
@@ -279,6 +298,8 @@ export default function LogScreen() {
     setTitle(result.title);
     setAuthor(result.author);
     setPages(result.pages ? String(result.pages) : '');
+    setPagesTouched(false);
+    setPagesAutoFilled(!!result.pages);
     setCoverImageUri(result.coverUri);
     setGenre(mapSubjectToGenre(result.subjects ?? []));
     setGenreTouched(false);
@@ -507,12 +528,24 @@ export default function LogScreen() {
               )}
 
               {[
-                { label: 'Title', value: title, setter: setTitle, placeholder: 'Book title', kb: 'default' as const },
-                { label: 'Author', value: author, setter: setAuthor, placeholder: 'Author name', kb: 'default' as const },
-                { label: 'Total pages', value: pages, setter: setPages, placeholder: '300', kb: 'number-pad' as const },
-              ].map(({ label, value, setter, placeholder, kb }) => (
+                { label: 'Title', value: title, setter: setTitle, placeholder: 'Book title', kb: 'default' as const, hint: false },
+                { label: 'Author', value: author, setter: setAuthor, placeholder: 'Author name', kb: 'default' as const, hint: false },
+                {
+                  label: 'Total pages',
+                  value: pages,
+                  setter: (v: string) => { setPages(v); setPagesTouched(true); },
+                  placeholder: '300',
+                  kb: 'number-pad' as const,
+                  hint: pagesAutoFilled && !pagesTouched,
+                },
+              ].map(({ label, value, setter, placeholder, kb, hint }) => (
                 <View key={label} style={styles.field}>
-                  <Text style={[styles.fieldLabel, { color: colors.mutedForeground, fontFamily: 'Inter_500Medium' }]}>{label}</Text>
+                  <View style={styles.genreLabelRow}>
+                    <Text style={[styles.fieldLabel, { color: colors.mutedForeground, fontFamily: 'Inter_500Medium' }]}>{label}</Text>
+                    {hint && (
+                      <Text style={[styles.genreAutoHint, { color: colors.accent, fontFamily: 'Inter_600SemiBold' }]}>✨ Auto-filled</Text>
+                    )}
+                  </View>
                   <TextInput
                     style={[styles.input, { backgroundColor: colors.muted, color: colors.foreground, borderColor: colors.border, fontFamily: 'Inter_400Regular' }]}
                     value={value}
