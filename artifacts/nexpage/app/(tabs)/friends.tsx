@@ -633,7 +633,7 @@ export default function FriendsScreen() {
         <View style={[styles.nudgePanelContainer, { backgroundColor: colors.card, borderColor: colors.border }]}>
           <View style={[styles.nudgePanelHeader, { borderBottomColor: colors.border }]}>
             <Text style={[styles.nudgePanelTitle, { color: colors.foreground, fontFamily: 'Inter_700Bold' }]}>
-              Followers · {followers.length}
+              Friends · {followers.length}
             </Text>
             <TouchableOpacity onPress={() => setShowFollowers(false)} activeOpacity={0.7}>
               <Ionicons name="close" size={20} color={colors.mutedForeground} />
@@ -642,7 +642,7 @@ export default function FriendsScreen() {
           {followers.length === 0 ? (
             <View style={styles.nudgePanelEmpty}>
               <Text style={[styles.nudgePanelEmptyText, { color: colors.mutedForeground, fontFamily: 'Inter_400Regular' }]}>
-                Nobody is following you yet — share your profile to get started.
+                No friends yet — share your profile to get started.
               </Text>
             </View>
           ) : (

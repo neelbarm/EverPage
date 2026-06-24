@@ -19,7 +19,7 @@ import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Feather, Ionicons } from '@expo/vector-icons';
 import { useColors } from '@/hooks/useColors';
-import { useStore } from '@/context/StoreContext';
+import { useStore, MAX_FREEZES } from '@/context/StoreContext';
 import { useSocial } from '@/context/SocialContext';
 import { BookCover } from '@/components/BookCover';
 import { scheduleDailyReminder, cancelDailyReminder, requestNotificationPermissions, getExpoPushToken } from '@/lib/notifications';
@@ -182,8 +182,17 @@ export default function YouScreen() {
   const colors = useColors();
   const insets = useSafeAreaInsets();
   const router = useRouter();
-  const { profile, streak, reminder, setReminder, setDailyGoal, books, pendingGoalMet, clearPendingGoalMet } = useStore();
+  const { profile, streak, reminder, setReminder, setDailyGoal, books, pendingGoalMet, clearPendingGoalMet, useStreakFreeze, updateProfile, sessions } = useStore();
   const { socialProfile, setNudgesEnabled, isRegistered, followers, uploadAvatar, registerPushToken } = useSocial();
+
+  // Autofill the profile name from the account's display name (set at sign-up)
+  // so the profile never shows the generic default.
+  useEffect(() => {
+    const dn = socialProfile?.displayName?.trim();
+    if (dn && profile.name === 'Reader') {
+      updateProfile(dn, profile.color);
+    }
+  }, [socialProfile?.displayName, profile.name, profile.color]);
   const topPad = insets.top + (Platform.OS === 'web' ? 67 : 0);
   const [showReminderModal, setShowReminderModal] = useState(false);
   const [showGoalModal, setShowGoalModal] = useState(false);
@@ -304,6 +313,33 @@ export default function YouScreen() {
     }
   }
 
+  function handleStreakFreezes() {
+    const todayKey = new Date().toISOString().split('T')[0];
+    const hasReadToday = streak.lastReadDate === todayKey || sessions.some(s => s.date === todayKey);
+    if (streak.freezesLeft <= 0) {
+      Alert.alert(
+        'Streak freezes',
+        'You have 0 right now. Earn 1 for every 3 days you read in a row (up to 3 saved). A freeze protects your streak on a day you can’t read.',
+      );
+      return;
+    }
+    if (hasReadToday) {
+      Alert.alert(
+        'Streak freezes',
+        `You have ${streak.freezesLeft} saved. They protect your streak on days you can’t read — you’ll be offered one on the Read tab when you haven’t read yet. Earn 1 every 3 days you read in a row.`,
+      );
+      return;
+    }
+    Alert.alert(
+      'Use a streak freeze?',
+      `You have ${streak.freezesLeft}. Use one now to protect today’s streak?`,
+      [
+        { text: 'Not now', style: 'cancel' },
+        { text: 'Use freeze', onPress: () => useStreakFreeze() },
+      ],
+    );
+  }
+
   const settingsRows = [
     {
       icon: 'target' as const,
@@ -320,8 +356,8 @@ export default function YouScreen() {
     {
       icon: 'shield' as const,
       label: 'Streak freezes',
-      value: `${streak.freezesLeft} left`,
-      onPress: undefined as (() => void) | undefined,
+      value: `${streak.freezesLeft} of ${MAX_FREEZES}`,
+      onPress: handleStreakFreezes,
     },
   ];
 
@@ -467,16 +503,15 @@ export default function YouScreen() {
                 styles.settingsRow,
                 i < settingsRows.length - 1 && { borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: colors.border },
               ]}
-              activeOpacity={row.onPress ? 0.7 : 1}
+              activeOpacity={0.7}
               onPress={row.onPress}
-              disabled={!row.onPress}
             >
               <View style={[styles.settingsIcon, { backgroundColor: colors.muted }]}>
                 <Feather name={row.icon} size={15} color={colors.mutedForeground} />
               </View>
               <Text style={[styles.settingsLabel, { color: colors.foreground, fontFamily: 'Inter_400Regular' }]}>{row.label}</Text>
               <Text style={[styles.settingsValue, { color: colors.mutedForeground, fontFamily: 'Inter_400Regular' }]}>{row.value}</Text>
-              {row.onPress && <Feather name="chevron-right" size={16} color={colors.mutedForeground} />}
+              <Feather name="chevron-right" size={16} color={colors.mutedForeground} />
             </TouchableOpacity>
           ))}
         </View>

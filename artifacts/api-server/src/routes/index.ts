@@ -9,6 +9,7 @@ import wrappedRouter from "./wrapped";
 import notesRouter from "./notes";
 import roomsRouter from "./rooms";
 import reportRouter from "./report";
+import legalRouter from "./legal";
 
 const router: IRouter = Router();
 
@@ -22,5 +23,6 @@ router.use(wrappedRouter);
 router.use(notesRouter);
 router.use(roomsRouter);
 router.use(reportRouter);
+router.use(legalRouter);
 
 export default router;

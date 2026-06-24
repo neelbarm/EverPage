@@ -312,7 +312,7 @@ export default function BookDetailScreen() {
         )}
         {isRegistered && (
           <Text style={[styles.shareHint, { color: colors.mutedForeground, fontFamily: 'Inter_400Regular' }]}>
-            {shared ? 'Your followers can see this in their feed.' : 'Posts this book to your followers’ activity feed.'}
+            {shared ? 'Your friends can see this in their feed.' : 'Posts this book to your friends’ activity feed.'}
           </Text>
         )}
 

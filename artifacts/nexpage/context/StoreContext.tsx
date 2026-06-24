@@ -97,7 +97,7 @@ export interface SuggestedFriend {
   genre: string;
 }
 
-const MAX_FREEZES = 3;
+export const MAX_FREEZES = 3;
 
 interface StoreContextType {
   books: Book[];
@@ -542,7 +542,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
       newStreak.lastReadDate = todayStr();
       if (
         newStreak.currentStreak > previousStreak &&
-        newStreak.currentStreak % 7 === 0 &&
+        newStreak.currentStreak % 3 === 0 &&
         newStreak.freezesLeft < MAX_FREEZES
       ) {
         newStreak.freezesLeft = Math.min(newStreak.freezesLeft + 1, MAX_FREEZES);
