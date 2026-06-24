@@ -39,19 +39,20 @@ function isToday(iso: string): boolean {
     && d.getDate() === now.getDate();
 }
 
-function NudgeButton({ userId, displayName }: { userId: string; displayName: string }) {
+function NudgeButton({ userId }: { userId: string; displayName?: string }) {
   const colors = useColors();
-  const { sendNudge } = useSocial();
+  const { sendNudge, hasNudged } = useSocial();
   const [sending, setSending] = useState(false);
-  const [sent, setSent] = useState(false);
+  // Persisted in context (server-backed cooldown), so the "Nudged" state
+  // survives navigating away and back within the 24h cooldown window.
+  const nudged = hasNudged(userId);
 
   async function handleNudge() {
-    if (sent || sending) return;
+    if (nudged || sending) return;
     setSending(true);
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     try {
       const result = await sendNudge(userId);
-      setSent(true);
       if (!result.alreadyNudged) {
         Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       }
@@ -62,23 +63,24 @@ function NudgeButton({ userId, displayName }: { userId: string; displayName: str
     }
   }
 
+  if (nudged && !sending) {
+    return (
+      <View style={[styles.nudgeBtn, { backgroundColor: colors.muted, borderColor: colors.border }]}>
+        <Text style={[styles.nudgeBtnText, { color: colors.mutedForeground, fontFamily: 'Inter_600SemiBold' }]}>👋 Nudged today</Text>
+      </View>
+    );
+  }
+
   return (
     <TouchableOpacity
-      style={[
-        styles.nudgeBtn,
-        sent
-          ? { backgroundColor: colors.muted, borderColor: colors.border }
-          : { backgroundColor: colors.primary, borderColor: colors.primary },
-      ]}
+      style={[styles.nudgeBtn, { backgroundColor: colors.primary, borderColor: colors.primary }]}
       onPress={handleNudge}
-      disabled={sending || sent}
+      disabled={sending}
       activeOpacity={0.8}
     >
       {sending
         ? <ActivityIndicator size="small" color="#fff" />
-        : sent
-          ? <Text style={[styles.nudgeBtnText, { color: colors.mutedForeground, fontFamily: 'Inter_600SemiBold' }]}>Nudged ✓</Text>
-          : <Text style={[styles.nudgeBtnText, { color: '#fff', fontFamily: 'Inter_600SemiBold' }]}>👋 Nudge</Text>
+        : <Text style={[styles.nudgeBtnText, { color: '#fff', fontFamily: 'Inter_600SemiBold' }]}>👋 Nudge</Text>
       }
     </TouchableOpacity>
   );
@@ -91,6 +93,14 @@ function ActivityCard({ item, readToday }: { item: ActivityItem; readToday: bool
 
   function goToProfile() {
     router.push(`/profile/${item.userId}` as any);
+  }
+
+  function addRecommendedBook() {
+    Haptics.selectionAsync();
+    router.push({
+      pathname: '/(tabs)/log',
+      params: { addBook: 'true', prefillTitle: item.bookTitle, prefillAuthor: item.bookAuthor ?? '' },
+    } as any);
   }
 
   return (
@@ -110,17 +120,27 @@ function ActivityCard({ item, readToday }: { item: ActivityItem; readToday: bool
           </Text>
         </View>
         {isRecommendation ? (
-          <View style={[styles.recommendBadge, { backgroundColor: colors.muted }]}>
-            <Ionicons name="star" size={11} color={colors.accent} />
-            <Text style={[styles.recommendLabel, { color: colors.accent, fontFamily: 'Inter_600SemiBold' }]}>
-              recommends
+          <TouchableOpacity onPress={addRecommendedBook} activeOpacity={0.7} style={styles.recTappable}>
+            <View style={[styles.recommendBadge, { backgroundColor: colors.muted }]}>
+              <Ionicons name="star" size={11} color={colors.accent} />
+              <Text style={[styles.recommendLabel, { color: colors.accent, fontFamily: 'Inter_600SemiBold' }]}>
+                recommends
+              </Text>
+            </View>
+            <Text style={[styles.bookTitle, { color: colors.foreground, fontFamily: 'Inter_500Medium' }]} numberOfLines={2}>
+              {item.bookTitle}
+              {item.bookAuthor ? ` · ${item.bookAuthor}` : ''}
             </Text>
-          </View>
-        ) : null}
-        <Text style={[styles.bookTitle, { color: colors.mutedForeground, fontFamily: 'Inter_400Regular' }]} numberOfLines={1}>
-          {item.bookTitle}
-          {item.bookAuthor ? ` · ${item.bookAuthor}` : ''}
-        </Text>
+            <Text style={[styles.recAddHint, { color: colors.accent, fontFamily: 'Inter_600SemiBold' }]}>
+              + Add to your shelf
+            </Text>
+          </TouchableOpacity>
+        ) : (
+          <Text style={[styles.bookTitle, { color: colors.mutedForeground, fontFamily: 'Inter_400Regular' }]} numberOfLines={1}>
+            {item.bookTitle}
+            {item.bookAuthor ? ` · ${item.bookAuthor}` : ''}
+          </Text>
+        )}
         <View style={styles.cardBottom}>
           <View style={styles.statsRow}>
             {!isRecommendation && (item.streakDays ?? 0) > 0 && (
@@ -859,6 +879,8 @@ const styles = StyleSheet.create({
   nudgeBtnText: { fontSize: 12 },
   recommendBadge: { flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 7, paddingVertical: 3, borderRadius: 8, alignSelf: 'flex-start' },
   recommendLabel: { fontSize: 11 },
+  recTappable: { gap: 4, paddingVertical: 2 },
+  recAddHint: { fontSize: 12, marginTop: 1 },
   loadingContainer: { flex: 1, alignItems: 'center', justifyContent: 'center' },
   empty: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 40, gap: 12, paddingVertical: 60 },
   emptyTitle: { fontSize: 18 },

@@ -636,6 +636,22 @@ router.get("/social/nudges", async (req, res) => {
   res.json(rows);
 });
 
+// Recipients the current user has nudged within the cooldown window, so the UI
+// can keep the nudge button in its "already nudged" state across navigation.
+router.get("/social/nudges/sent", async (req, res) => {
+  const userId = requireAuth(req, res);
+  if (!userId) return;
+
+  const since = new Date(Date.now() - NUDGE_COOLDOWN_DAYS * 24 * 60 * 60 * 1000);
+  const rows = await db
+    .select({ recipientId: npNudges.recipientId, createdAt: npNudges.createdAt })
+    .from(npNudges)
+    .where(and(eq(npNudges.senderId, userId), gte(npNudges.createdAt, since)))
+    .orderBy(desc(npNudges.createdAt));
+
+  res.json(rows.map((r) => r.recipientId));
+});
+
 router.patch("/social/me/avatar", async (req, res) => {
   const userId = requireAuth(req, res);
   if (!userId) return;

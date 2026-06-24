@@ -80,6 +80,7 @@ interface SocialContextType {
   refreshFeed: () => Promise<void>;
   isFollowing: (userId: string) => boolean;
   sendNudge: (userId: string) => Promise<{ alreadyNudged: boolean }>;
+  hasNudged: (userId: string) => boolean;
   blockedUsers: SocialUser[];
   blockUser: (userId: string) => Promise<void>;
   unblockUser: (userId: string) => Promise<void>;
@@ -136,6 +137,7 @@ export function SocialProvider({ children }: { children: React.ReactNode }) {
   const [leaderboard, setLeaderboard] = useState<LeaderboardEntry[]>([]);
   const [suggestedUsers, setSuggestedUsers] = useState<SocialUser[]>([]);
   const [nudgeHistory, setNudgeHistory] = useState<NudgeHistoryItem[]>([]);
+  const [nudgedUserIds, setNudgedUserIds] = useState<string[]>([]);
   const [blockedUsers, setBlockedUsers] = useState<SocialUser[]>([]);
   const [lastReadNudgeTime, setLastReadNudgeTime] = useState<number>(() => Date.now());
   const [isLoading, setIsLoading] = useState(false);
@@ -158,6 +160,7 @@ export function SocialProvider({ children }: { children: React.ReactNode }) {
       setSuggestedUsers([]);
       setNudgeHistory([]);
       setBlockedUsers([]);
+      setNudgedUserIds([]);
       initialized.current = false;
       return;
     }
@@ -180,7 +183,7 @@ export function SocialProvider({ children }: { children: React.ReactNode }) {
   async function loadSocialData() {
     setIsLoading(true);
     try {
-      const [followingData, followersData, feedData, boardData, suggestData, nudgesData, blockedData] = await Promise.allSettled([
+      const [followingData, followersData, feedData, boardData, suggestData, nudgesData, blockedData, sentNudgesData] = await Promise.allSettled([
         apiFetch<SocialUser[]>('/social/following'),
         apiFetch<SocialUser[]>('/social/followers'),
         apiFetch<ActivityItem[]>('/social/feed'),
@@ -188,6 +191,7 @@ export function SocialProvider({ children }: { children: React.ReactNode }) {
         apiFetch<SocialUser[]>('/social/suggested'),
         apiFetch<NudgeHistoryItem[]>('/social/nudges'),
         apiFetch<SocialUser[]>('/social/blocked'),
+        apiFetch<string[]>('/social/nudges/sent'),
       ]);
       if (followingData.status === 'fulfilled') setFollowing(followingData.value);
       if (followersData.status === 'fulfilled') setFollowers(followersData.value);
@@ -196,6 +200,7 @@ export function SocialProvider({ children }: { children: React.ReactNode }) {
       if (suggestData.status === 'fulfilled') setSuggestedUsers(suggestData.value);
       if (nudgesData.status === 'fulfilled') setNudgeHistory(nudgesData.value);
       if (blockedData.status === 'fulfilled') setBlockedUsers(blockedData.value);
+      if (sentNudgesData.status === 'fulfilled' && Array.isArray(sentNudgesData.value)) setNudgedUserIds(sentNudgesData.value);
     } catch { /* ignore */ } finally {
       setIsLoading(false);
     }
@@ -288,6 +293,9 @@ export function SocialProvider({ children }: { children: React.ReactNode }) {
       headers,
       credentials: 'include',
     });
+    // Either way (sent now, or already nudged within cooldown), mark as nudged
+    // so the button stays in its "Nudged" state across navigation.
+    setNudgedUserIds(prev => (prev.includes(userId) ? prev : [...prev, userId]));
     if (res.status === 429) {
       return { alreadyNudged: true };
     }
@@ -297,6 +305,10 @@ export function SocialProvider({ children }: { children: React.ReactNode }) {
     }
     return { alreadyNudged: false };
   }, []);
+
+  const hasNudged = useCallback((userId: string) => {
+    return nudgedUserIds.includes(userId);
+  }, [nudgedUserIds]);
 
   const blockUser = useCallback(async (userId: string) => {
     await apiFetch(`/social/users/${userId}/block`, { method: 'POST' });
@@ -413,6 +425,7 @@ export function SocialProvider({ children }: { children: React.ReactNode }) {
       refreshFeed,
       isFollowing,
       sendNudge,
+      hasNudged,
       blockedUsers,
       blockUser,
       unblockUser,

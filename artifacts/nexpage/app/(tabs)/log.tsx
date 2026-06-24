@@ -245,12 +245,18 @@ export default function LogScreen() {
 
   const [showModal, setShowModal] = useState(false);
 
-  const params = useLocalSearchParams<{ addBook?: string }>();
+  const params = useLocalSearchParams<{ addBook?: string; prefillTitle?: string; prefillAuthor?: string }>();
   useEffect(() => {
     if (params.addBook === 'true') {
       setShowModal(true);
+      // Pre-fill from a tapped recommendation; the title effect then auto-fills
+      // pages/genre/cover from OpenLibrary.
+      if (params.prefillTitle) {
+        setTitle(params.prefillTitle);
+        if (params.prefillAuthor) setAuthor(params.prefillAuthor);
+      }
     }
-  }, [params.addBook]);
+  }, [params.addBook, params.prefillTitle, params.prefillAuthor]);
 
   const [searchQuery, setSearchQuery] = useState('');
   const [searchResults, setSearchResults] = useState<OpenLibResult[]>([]);
