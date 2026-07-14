@@ -1,4 +1,5 @@
 import React, { createContext, useContext, useState, useEffect, useCallback, type ReactNode } from "react";
+import { Platform } from "react-native";
 import { setItem, getItem, deleteItem } from "@/lib/storage";
 
 const AUTH_TOKEN_KEY = "auth_session_token";
@@ -34,6 +35,12 @@ const AuthContext = createContext<AuthContextValue>({
 });
 
 function getApiBaseUrl(): string {
+  // A production native build must always reach the deployed API. Any build-time
+  // EXPO_PUBLIC_DOMAIN is the Replit dev tunnel (serves HTML, not the API), which
+  // caused "JSON Parse error: Unexpected character: <" on device — ignore it here.
+  if (!__DEV__ && Platform.OS !== "web") {
+    return "https://nex-page.replit.app";
+  }
   // Explicit override for local development (e.g. http://localhost:3001)
   if (process.env.EXPO_PUBLIC_API_URL) {
     return process.env.EXPO_PUBLIC_API_URL.replace(/\/$/, "");

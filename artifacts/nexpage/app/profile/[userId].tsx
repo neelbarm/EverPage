@@ -14,6 +14,9 @@ import { getItem as getStoredItem } from '@/lib/storage';
 const AUTH_TOKEN_KEY = 'auth_session_token';
 
 function getApiBase(): string {
+  // A production native build must always reach the deployed API (see the note in
+  // SocialContext) — ignore the Replit dev tunnel on device.
+  if (!__DEV__ && Platform.OS !== 'web') return 'https://nex-page.replit.app/api';
   const override = (process.env.EXPO_PUBLIC_API_URL ?? '').trim();
   if (override) return `${override.replace(/\/$/, '')}/api`;
   const domain = (process.env.EXPO_PUBLIC_DOMAIN ?? '').trim();

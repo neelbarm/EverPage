@@ -6,6 +6,7 @@ import React, {
   useCallback,
   useRef,
 } from 'react';
+import { Platform } from 'react-native';
 import { getItem as getStoredItem, setItem as setStoredItem } from '@/lib/storage';
 import { useAuth } from '@/lib/auth';
 
@@ -95,6 +96,10 @@ interface SocialContextType {
 const SocialContext = createContext<SocialContextType | null>(null);
 
 function getApiBase(): string {
+  // A production native build must always reach the deployed API. Any build-time
+  // EXPO_PUBLIC_DOMAIN is the Replit dev tunnel (serves HTML, not the API), so it
+  // must be ignored on device — otherwise requests return HTML and JSON parsing fails.
+  if (!__DEV__ && Platform.OS !== 'web') return 'https://nex-page.replit.app/api';
   const override = (process.env.EXPO_PUBLIC_API_URL ?? '').trim();
   if (override) return `${override.replace(/\/$/, '')}/api`;
   const domain = (process.env.EXPO_PUBLIC_DOMAIN ?? '').trim();

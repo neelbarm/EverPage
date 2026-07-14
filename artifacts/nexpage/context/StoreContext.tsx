@@ -1,4 +1,5 @@
 import React, { createContext, useContext, useEffect, useRef, useState } from 'react';
+import { Platform } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { getItem as getStoredItem } from '@/lib/storage';
 import { useAuth } from '@/lib/auth';
@@ -277,6 +278,10 @@ const DEFAULT_REMINDER: ReminderSettings = {
 };
 
 function getApiBase(): string {
+  // A production native build must always reach the deployed API. Any build-time
+  // EXPO_PUBLIC_DOMAIN is the Replit dev tunnel (serves HTML, not the API), so it
+  // must be ignored on device — otherwise requests return HTML and JSON parsing fails.
+  if (!__DEV__ && Platform.OS !== 'web') return 'https://nex-page.replit.app/api';
   const override = (process.env.EXPO_PUBLIC_API_URL ?? '').trim();
   if (override) return `${override.replace(/\/$/, '')}/api`;
   const domain = (process.env.EXPO_PUBLIC_DOMAIN ?? '').trim();
