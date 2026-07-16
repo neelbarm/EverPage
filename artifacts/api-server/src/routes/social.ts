@@ -683,6 +683,27 @@ const CURATED_RECS = [
 const normKey = (t: string, a: string) =>
   `${(t ?? "").trim().toLowerCase()}|${(a ?? "").trim().toLowerCase()}`;
 
+// Author values that mean "no real author" — books with these must never be recommended.
+const BAD_AUTHORS = new Set([
+  "", "not available", "n/a", "na", "none", "unknown", "unknown author",
+  "author", "various", "-", "—",
+]);
+const cleanText = (s: string | null | undefined) => (s ?? "").replace(/\s+/g, " ").trim();
+
+// A recommendation card must render cleanly: real cover image, real author, sane title.
+// Anything that would show up blank or malformed (the "Not Available" / no-cover cards
+// testers reported) is filtered out, and the curated fallback fills the gap.
+function isQualityRec(a: { title: string; author: string; coverImageUri: string | null }): boolean {
+  const title = cleanText(a.title);
+  const author = cleanText(a.author);
+  const cover = cleanText(a.coverImageUri);
+  if (title.length < 2 || title.length > 90) return false;
+  if (/\.\.\.|…|[\r\n]/.test(title)) return false; // truncated / concatenated junk
+  if (!author || BAD_AUTHORS.has(author.toLowerCase())) return false;
+  if (!/^https?:\/\//i.test(cover)) return false; // must have a loadable cover
+  return true;
+}
+
 // Data-driven recommendations: books friends are reading, then your top genre, then trending.
 router.get("/social/recommendations", async (req, res) => {
   const userId = requireAuth(req, res);
@@ -748,6 +769,7 @@ router.get("/social/recommendations", async (req, res) => {
   const picked: any[] = [];
   const used = new Set<string>();
   const push = (a: Agg, reason: string) => {
+    if (!isQualityRec(a)) return;
     const key = normKey(a.title, a.author);
     if (used.has(key)) return;
     used.add(key);
