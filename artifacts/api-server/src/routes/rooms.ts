@@ -1,6 +1,6 @@
 import { Router } from "express";
 import { db, npRooms, npRoomMembers, npRoomMessages, npUsers } from "@workspace/db";
-import { and, eq, desc } from "drizzle-orm";
+import { and, eq, desc, sql, inArray } from "drizzle-orm";
 import { randomUUID } from "crypto";
 
 const router = Router();
@@ -12,6 +12,9 @@ function requireAuth(req: any, res: any): string | null {
   }
   return req.user.id as string;
 }
+
+const norm = (s: string | null | undefined) =>
+  (s ?? "").trim().toLowerCase().replace(/\s+/g, " ");
 
 function generateCode(): string {
   const chars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
@@ -29,17 +32,132 @@ router.post("/rooms", async (req, res) => {
     return;
   }
 
+  const title = String(bookTitle).trim();
+  const author = String(bookAuthor ?? "").trim();
+
+  // Reuse an existing room instead of minting a new code every time. Tapping
+  // "Create room" repeatedly used to orphan the previous room and its chat, so
+  // the conversation looked deleted. If this user is already in a room for the
+  // same book, return that room. Prefer the one with the most recent message so
+  // real chat history is never stranded.
+  const mine = await db
+    .select({
+      id: npRooms.id,
+      bookTitle: npRooms.bookTitle,
+      bookAuthor: npRooms.bookAuthor,
+      createdAt: npRooms.createdAt,
+    })
+    .from(npRoomMembers)
+    .innerJoin(npRooms, eq(npRooms.id, npRoomMembers.roomId))
+    .where(eq(npRoomMembers.userId, userId));
+
+  const candidates = mine.filter(
+    (r) =>
+      norm(r.bookTitle) === norm(title) &&
+      (!norm(r.bookAuthor) || !norm(author) || norm(r.bookAuthor) === norm(author)),
+  );
+
+  if (candidates.length > 0) {
+    let chosen = candidates[0];
+    if (candidates.length > 1) {
+      const lastRows = await db
+        .select({
+          roomId: npRoomMessages.roomId,
+          last: sql<string>`max(${npRoomMessages.createdAt})`,
+        })
+        .from(npRoomMessages)
+        .where(inArray(npRoomMessages.roomId, candidates.map((c) => c.id)))
+        .groupBy(npRoomMessages.roomId);
+      const lastBy = new Map(lastRows.map((r) => [r.roomId, r.last]));
+      candidates.sort((a, b) => {
+        const la = lastBy.get(a.id);
+        const lb = lastBy.get(b.id);
+        if (la && lb) return la < lb ? 1 : la > lb ? -1 : 0;
+        if (la) return -1;
+        if (lb) return 1;
+        return new Date(b.createdAt as any).getTime() - new Date(a.createdAt as any).getTime();
+      });
+      chosen = candidates[0];
+    }
+    res.status(200).json({ code: chosen.id, reused: true });
+    return;
+  }
+
   const code = generateCode();
   await db.insert(npRooms).values({
     id: code,
-    bookTitle: String(bookTitle).trim(),
-    bookAuthor: String(bookAuthor ?? "").trim(),
+    bookTitle: title,
+    bookAuthor: author,
     createdBy: userId,
     weeklyTargetPages: Math.max(1, parseInt(weeklyTargetPages ?? "50", 10)),
   });
   await db.insert(npRoomMembers).values({ roomId: code, userId, currentPage: 0 });
 
   res.status(201).json({ code });
+});
+
+// GET /api/rooms — rooms I'm a member of, newest activity first. Lets the app
+// show "Open room" for a book instead of offering to create a duplicate.
+router.get("/rooms", async (req, res) => {
+  const userId = requireAuth(req, res);
+  if (!userId) return;
+
+  const mine = await db
+    .select({
+      code: npRooms.id,
+      bookTitle: npRooms.bookTitle,
+      bookAuthor: npRooms.bookAuthor,
+      createdBy: npRooms.createdBy,
+      createdAt: npRooms.createdAt,
+    })
+    .from(npRoomMembers)
+    .innerJoin(npRooms, eq(npRooms.id, npRoomMembers.roomId))
+    .where(eq(npRoomMembers.userId, userId));
+
+  if (mine.length === 0) {
+    res.json([]);
+    return;
+  }
+
+  const codes = mine.map((r) => r.code);
+  const [memberRows, lastRows] = await Promise.all([
+    db
+      .select({ roomId: npRoomMembers.roomId, n: sql<number>`count(*)::int` })
+      .from(npRoomMembers)
+      .where(inArray(npRoomMembers.roomId, codes))
+      .groupBy(npRoomMembers.roomId),
+    db
+      .select({
+        roomId: npRoomMessages.roomId,
+        last: sql<string>`max(${npRoomMessages.createdAt})`,
+        n: sql<number>`count(*)::int`,
+      })
+      .from(npRoomMessages)
+      .where(inArray(npRoomMessages.roomId, codes))
+      .groupBy(npRoomMessages.roomId),
+  ]);
+
+  const memberBy = new Map(memberRows.map((r) => [r.roomId, r.n]));
+  const lastBy = new Map(lastRows.map((r) => [r.roomId, r]));
+
+  const out = mine
+    .map((r) => ({
+      ...r,
+      memberCount: memberBy.get(r.code) ?? 1,
+      messageCount: lastBy.get(r.code)?.n ?? 0,
+      lastMessageAt: lastBy.get(r.code)?.last ?? null,
+      isOwner: r.createdBy === userId,
+    }))
+    .sort((a, b) => {
+      const la = a.lastMessageAt;
+      const lb = b.lastMessageAt;
+      if (la && lb) return la < lb ? 1 : la > lb ? -1 : 0;
+      if (la) return -1;
+      if (lb) return 1;
+      return new Date(b.createdAt as any).getTime() - new Date(a.createdAt as any).getTime();
+    });
+
+  res.json(out);
 });
 
 // GET /api/rooms/:code — room details + members
