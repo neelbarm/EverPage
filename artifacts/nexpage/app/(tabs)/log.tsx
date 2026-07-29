@@ -270,6 +270,7 @@ export default function LogScreen() {
   const [title, setTitle] = useState('');
   const [author, setAuthor] = useState('');
   const [pages, setPages] = useState('');
+  const [startingPage, setStartingPage] = useState('0');
   const [pagesTouched, setPagesTouched] = useState(false);
   const [pagesAutoFilled, setPagesAutoFilled] = useState(false);
   const [genre, setGenre] = useState('Literary Fiction');
@@ -356,8 +357,16 @@ export default function LogScreen() {
 
   function handleAddBook() {
     const pageCount = parseInt(pages, 10);
-    if (!title.trim() || !author.trim() || !pageCount) return;
-    addBook(title.trim(), author.trim(), pageCount, genre, coverImageUri);
+    const parsedStartingPage = startingPage.trim() === '' ? 0 : Number(startingPage);
+    if (
+      !title.trim() ||
+      !author.trim() ||
+      !pageCount ||
+      !Number.isInteger(parsedStartingPage) ||
+      parsedStartingPage < 0 ||
+      parsedStartingPage > pageCount
+    ) return;
+    addBook(title.trim(), author.trim(), pageCount, genre, coverImageUri, parsedStartingPage);
     Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     resetModal();
     setShowModal(false);
@@ -371,6 +380,7 @@ export default function LogScreen() {
     setTitle('');
     setAuthor('');
     setPages('');
+    setStartingPage('0');
     setPagesTouched(false);
     setPagesAutoFilled(false);
     setGenre('Literary Fiction');
@@ -455,7 +465,18 @@ export default function LogScreen() {
     };
   }, [searchQuery]);
 
-  const canSubmit = !!title.trim() && !!author.trim() && !!pages.trim();
+  const pageCount = Number(pages);
+  const parsedStartingPage = startingPage.trim() === '' ? 0 : Number(startingPage);
+  const hasValidStartingPage =
+    Number.isInteger(parsedStartingPage) &&
+    parsedStartingPage >= 0 &&
+    parsedStartingPage <= pageCount;
+  const canSubmit =
+    !!title.trim() &&
+    !!author.trim() &&
+    Number.isInteger(pageCount) &&
+    pageCount > 0 &&
+    hasValidStartingPage;
   const showResults = searchResults.length > 0 && !selectedResult;
 
   return (
@@ -679,6 +700,24 @@ export default function LogScreen() {
               ))}
 
               <View style={styles.field}>
+                <Text style={[styles.fieldLabel, { color: colors.mutedForeground, fontFamily: 'Inter_500Medium' }]}>Current page</Text>
+                <TextInput
+                  style={[styles.input, { backgroundColor: colors.muted, color: colors.foreground, borderColor: colors.border, fontFamily: 'Inter_400Regular' }]}
+                  value={startingPage}
+                  onChangeText={setStartingPage}
+                  placeholder="0"
+                  placeholderTextColor={colors.mutedForeground}
+                  keyboardType="number-pad"
+                  maxLength={6}
+                />
+                <Text style={[styles.startingPageHint, { color: hasValidStartingPage ? colors.mutedForeground : colors.destructive, fontFamily: 'Inter_400Regular' }]}>
+                  {hasValidStartingPage
+                    ? 'Already started? Set the page you are on. EverPage will begin counting pages from your first session.'
+                    : `Enter a whole number from 0 to ${pageCount || 'the book’s total pages'}.`}
+                </Text>
+              </View>
+
+              <View style={styles.field}>
                 <View style={styles.genreLabelRow}>
                   <Text style={[styles.fieldLabel, { color: colors.mutedForeground, fontFamily: 'Inter_500Medium' }]}>Genre</Text>
                   {genreAutoFilled && !genreTouched && (
@@ -749,6 +788,7 @@ const styles = StyleSheet.create({
   fields: { paddingHorizontal: 20, gap: 20 },
   field: { gap: 8 },
   fieldLabel: { fontSize: 13 },
+  startingPageHint: { fontSize: 12, lineHeight: 17 },
   searchRow: { flexDirection: 'row', alignItems: 'center', borderRadius: 10, borderWidth: 1, gap: 8 },
   searchInput: { flex: 1, paddingVertical: 13, paddingRight: 8, fontSize: 15 },
   searchError: { fontSize: 13, marginTop: 4 },

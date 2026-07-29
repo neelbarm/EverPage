@@ -117,7 +117,7 @@ interface StoreContextType {
   logSession: (bookId: string, durationMinutes: number, startPage: number, endPage: number) => Promise<void>;
   finishBook: (bookId: string, favoriteQuote?: string) => void;
   useStreakFreeze: () => void;
-  addBook: (title: string, author: string, totalPages: number, genre: string, coverImageUri?: string) => void;
+  addBook: (title: string, author: string, totalPages: number, genre: string, coverImageUri?: string, startingPage?: number) => void;
   updateBook: (id: string, updates: Partial<Pick<Book, 'title' | 'author' | 'totalPages' | 'genre' | 'coverImageUri'>>) => void;
   getBook: (id: string) => Book | undefined;
   setReminder: (settings: ReminderSettings) => Promise<void>;
@@ -617,14 +617,17 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
     syncStreakToCloud(newStreak);
   }
 
-  function addBook(title: string, author: string, totalPages: number, genre: string, coverImageUri?: string) {
+  function addBook(title: string, author: string, totalPages: number, genre: string, coverImageUri?: string, startingPage = 0) {
     const colors = ['#5C849E', '#B54935', '#3A6645', '#8B5E9E', '#B08A3C', '#4A7A52'];
+    const currentPage = Math.min(Math.max(0, Math.floor(startingPage)), totalPages);
     const newBook: Book = {
       id: generateId(),
       title,
       author,
       totalPages,
-      currentPage: 0,
+      // This is a reader's existing position, not a session. Reading analytics
+      // only change when logSession records the pages read after this point.
+      currentPage,
       coverColor: colors[Math.floor(Math.random() * colors.length)],
       coverImageUri,
       genre,
