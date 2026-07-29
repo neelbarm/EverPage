@@ -26,10 +26,29 @@ function checkPassword(plain: string, hash: string): boolean {
   return bcrypt.compareSync(plain, hash);
 }
 
+function parseBirthday(value: unknown): string | null {
+  if (typeof value !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(value)) return null;
+  const [year, month, day] = value.split("-").map(Number);
+  const birthday = new Date(Date.UTC(year, month - 1, day));
+  if (
+    birthday.getUTCFullYear() !== year ||
+    birthday.getUTCMonth() !== month - 1 ||
+    birthday.getUTCDate() !== day
+  ) return null;
+
+  const today = new Date();
+  let age = today.getUTCFullYear() - year;
+  const beforeBirthday =
+    today.getUTCMonth() < month - 1 ||
+    (today.getUTCMonth() === month - 1 && today.getUTCDate() < day);
+  if (beforeBirthday) age -= 1;
+  return age >= 13 ? value : null;
+}
+
 // --- routes ---
 
 router.post("/local-auth/register", async (req: Request, res: Response) => {
-  const { email, password, username, displayName } = req.body ?? {};
+  const { email, password, username, displayName, birthday } = req.body ?? {};
 
   if (!email || !password || !username || !displayName) {
     res.status(400).json({ error: "email, password, username, and displayName are required" });
@@ -47,6 +66,11 @@ router.post("/local-auth/register", async (req: Request, res: Response) => {
   }
   if (usernameNorm.length < 2) {
     res.status(400).json({ error: "Username must be at least 2 characters" });
+    return;
+  }
+  const birthdayIso = parseBirthday(birthday);
+  if (!birthdayIso) {
+    res.status(400).json({ error: "Enter a valid birthday. You must be at least 13 to sign up." });
     return;
   }
 
@@ -77,7 +101,7 @@ router.post("/local-auth/register", async (req: Request, res: Response) => {
 
   const [user] = await db
     .insert(npUsers)
-    .values({ id, email: emailNorm, passwordHash, username: usernameNorm, displayName: displayNameTrim, color: "#1C3A5A", initial })
+    .values({ id, email: emailNorm, passwordHash, username: usernameNorm, displayName: displayNameTrim, color: "#1C3A5A", initial, birthday: birthdayIso })
     .returning();
 
   const sessionData = {

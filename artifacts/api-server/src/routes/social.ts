@@ -78,6 +78,17 @@ router.post("/social/users", async (req, res) => {
     res.status(400).json({ error: "username and displayName required" });
     return;
   }
+  const usernameNorm = String(username).toLowerCase().trim().replace(/[^a-z0-9_]/g, "").slice(0, 20);
+  const displayNameTrim = String(displayName).trim().slice(0, 40);
+  if (usernameNorm.length < 2) {
+    res.status(400).json({ error: "Username must be at least 2 characters" });
+    return;
+  }
+  if (!displayNameTrim) {
+    res.status(400).json({ error: "displayName required" });
+    return;
+  }
+  const resolvedInitial = String(initial ?? displayNameTrim[0]).trim().charAt(0).toUpperCase() || displayNameTrim[0].toUpperCase();
 
   const existing = await getSocialProfile(userId);
 
@@ -85,7 +96,7 @@ router.post("/social/users", async (req, res) => {
     const usernameConflict = await db
       .select({ id: npUsers.id })
       .from(npUsers)
-      .where(and(eq(npUsers.username, username), ne(npUsers.id, userId)))
+      .where(and(eq(npUsers.username, usernameNorm), ne(npUsers.id, userId)))
       .limit(1);
     if (usernameConflict.length > 0) {
       res.status(409).json({ error: "Username already taken" });
@@ -93,7 +104,7 @@ router.post("/social/users", async (req, res) => {
     }
     const updated = await db
       .update(npUsers)
-      .set({ username, displayName, color: color ?? existing.color, initial: initial ?? existing.initial, updatedAt: new Date() })
+      .set({ username: usernameNorm, displayName: displayNameTrim, color: color ?? existing.color, initial: resolvedInitial, updatedAt: new Date() })
       .where(eq(npUsers.id, userId))
       .returning();
     res.json(formatMe(updated[0]));
@@ -103,7 +114,7 @@ router.post("/social/users", async (req, res) => {
   const usernameConflict = await db
     .select({ id: npUsers.id })
     .from(npUsers)
-    .where(eq(npUsers.username, username))
+    .where(eq(npUsers.username, usernameNorm))
     .limit(1);
   if (usernameConflict.length > 0) {
     res.status(409).json({ error: "Username already taken" });
@@ -112,7 +123,7 @@ router.post("/social/users", async (req, res) => {
 
   const rows = await db
     .insert(npUsers)
-    .values({ id: userId, username, displayName, color: color ?? "#1C3A5A", initial: initial ?? displayName[0].toUpperCase() })
+    .values({ id: userId, username: usernameNorm, displayName: displayNameTrim, color: color ?? "#1C3A5A", initial: resolvedInitial })
     .returning();
   res.status(201).json(formatMe(rows[0]));
 });
@@ -584,12 +595,12 @@ router.post("/social/nudge/:userId", async (req, res) => {
   db.delete(npNudges).where(sql`${npNudges.createdAt} < ${retentionCutoff.toISOString()}`).catch(() => {});
 
   if (!target.nudgesEnabled) {
-    res.json({ ok: true, skipped: "nudges_disabled" });
+    res.json({ ok: true, delivery: "in_app", skipped: "nudges_disabled" });
     return;
   }
 
   if (!target.pushToken) {
-    res.json({ ok: true, skipped: "no_push_token" });
+    res.json({ ok: true, delivery: "in_app", skipped: "no_push_token" });
     return;
   }
 
@@ -605,8 +616,19 @@ router.post("/social/nudge/:userId", async (req, res) => {
         sound: "default",
       }),
     });
-    const result = await pushRes.json();
-    res.json({ ok: true, result });
+    const result = await pushRes.json() as { data?: Array<{ status?: string; details?: { error?: string } }> };
+    const ticket = result.data?.[0];
+    if (!pushRes.ok || ticket?.status === "error") {
+      // Expo tells us when an app was uninstalled or its token expired. Clear it
+      // so a future app launch can register a fresh token instead of silently
+      // failing every nudge.
+      if (ticket?.details?.error === "DeviceNotRegistered") {
+        await db.update(npUsers).set({ pushToken: null, updatedAt: new Date() }).where(eq(npUsers.id, targetUserId));
+      }
+      res.status(202).json({ ok: true, delivery: "in_app", skipped: "push_unavailable" });
+      return;
+    }
+    res.json({ ok: true, delivery: "push" });
   } catch (err: any) {
     res.status(500).json({ error: "Failed to send push notification", detail: err?.message });
   }

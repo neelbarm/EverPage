@@ -17,7 +17,7 @@ interface AuthContextValue {
   isLoading: boolean;
   isAuthenticated: boolean;
   login: (email: string, password: string) => Promise<void>;
-  register: (email: string, password: string, username: string, displayName: string) => Promise<void>;
+  register: (email: string, password: string, username: string, displayName: string, birthday: string) => Promise<void>;
   logout: () => Promise<void>;
   changePassword: (currentPassword: string, newPassword: string) => Promise<void>;
   deleteAccount: (password: string) => Promise<void>;
@@ -108,14 +108,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   }, []);
 
-  const register = useCallback(async (email: string, password: string, username: string, displayName: string) => {
+  const register = useCallback(async (email: string, password: string, username: string, displayName: string, birthday: string) => {
     const apiBase = getApiBaseUrl();
     if (!apiBase) throw new Error("API base URL not configured");
 
     const res = await fetch(`${apiBase}/api/local-auth/register`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ email, password, username, displayName }),
+      body: JSON.stringify({ email, password, username, displayName, birthday }),
     });
 
     const data = await res.json();

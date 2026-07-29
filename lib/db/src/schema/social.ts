@@ -1,4 +1,4 @@
-import { pgTable, text, integer, timestamp, primaryKey, boolean } from "drizzle-orm/pg-core";
+import { pgTable, text, integer, timestamp, primaryKey, boolean, date } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod/v4";
 
@@ -13,6 +13,9 @@ export const npUsers = pgTable("np_users", {
   avatarUrl: text("avatar_url"),
   pushToken: text("push_token"),
   nudgesEnabled: boolean("nudges_enabled").notNull().default(true),
+  // Existing accounts predate age collection, so this stays nullable. New local
+  // registrations are required to provide it by the API route.
+  birthday: date("birthday"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 });

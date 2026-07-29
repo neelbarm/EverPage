@@ -14,6 +14,28 @@ const AVATAR_COLORS = [
   '#8B5E9E', '#B08A3C', '#4A7A52', '#5E7A9E',
 ];
 
+function formatBirthday(value: string): string {
+  const digits = value.replace(/\D/g, '').slice(0, 8);
+  if (digits.length <= 2) return digits;
+  if (digits.length <= 4) return `${digits.slice(0, 2)} / ${digits.slice(2)}`;
+  return `${digits.slice(0, 2)} / ${digits.slice(2, 4)} / ${digits.slice(4)}`;
+}
+
+function normalizeBirthday(value: string): string | null {
+  const match = value.match(/^(\d{2})\s*\/\s*(\d{2})\s*\/\s*(\d{4})$/);
+  if (!match) return null;
+  const month = Number(match[1]);
+  const day = Number(match[2]);
+  const year = Number(match[3]);
+  const date = new Date(year, month - 1, day);
+  if (date.getFullYear() !== year || date.getMonth() !== month - 1 || date.getDate() !== day) return null;
+
+  const today = new Date();
+  let age = today.getFullYear() - year;
+  if (today.getMonth() < month - 1 || (today.getMonth() === month - 1 && today.getDate() < day)) age -= 1;
+  return age >= 13 ? `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}` : null;
+}
+
 export default function RegisterModal({
   visible,
   onClose,
@@ -32,6 +54,7 @@ export default function RegisterModal({
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
+  const [birthday, setBirthday] = useState('');
   const [authError, setAuthError] = useState('');
   const [authLoading, setAuthLoading] = useState(false);
 
@@ -52,6 +75,7 @@ export default function RegisterModal({
       setEmail('');
       setPassword('');
       setConfirmPassword('');
+      setBirthday('');
       setAuthError('');
       setAuthLoading(false);
       setDisplayName('');
@@ -87,6 +111,10 @@ export default function RegisterModal({
     if (mode === 'register' && p.length < 6) {
       setAuthError('Password must be at least 6 characters.'); return;
     }
+    const birthdayIso = normalizeBirthday(birthday);
+    if (mode === 'register' && !birthdayIso) {
+      setAuthError('Enter a valid birthday. You must be at least 13 to sign up.'); return;
+    }
 
     setAuthError('');
     setAuthLoading(true);
@@ -95,7 +123,7 @@ export default function RegisterModal({
         // Derive username from email for the auth account
         const derived = e.split('@')[0].replace(/[^a-z0-9]/g, '').slice(0, 20);
         const name = e.split('@')[0].replace(/[^a-z0-9]/g, '').slice(0, 20);
-        await register(e, p, derived || 'user', name || 'User');
+        await register(e, p, derived || 'user', name || 'User', birthdayIso!);
       } else {
         await login(e, p);
       }
@@ -281,6 +309,20 @@ export default function RegisterModal({
                 returnKeyType="done"
                 onSubmitEditing={handleAuth}
               />
+              <Text style={[styles.label, { color: colors.mutedForeground, fontFamily: 'Inter_600SemiBold' }]}>BIRTHDAY</Text>
+              <TextInput
+                style={[styles.input, { backgroundColor: colors.muted, color: colors.foreground, borderColor: colors.border, fontFamily: 'Inter_400Regular' }]}
+                placeholder="MM / DD / YYYY"
+                placeholderTextColor={colors.mutedForeground}
+                value={birthday}
+                onChangeText={text => setBirthday(formatBirthday(text))}
+                keyboardType="number-pad"
+                autoCorrect={false}
+                maxLength={10}
+                returnKeyType="done"
+                onSubmitEditing={handleAuth}
+              />
+              <Text style={[styles.birthdayHint, { color: colors.mutedForeground, fontFamily: 'Inter_400Regular' }]}>You must be 13 or older to create an account.</Text>
             </>
           )}
 
@@ -331,6 +373,7 @@ const styles = StyleSheet.create({
   saveBtnText: { fontSize: 16 },
   switchBtn: { alignItems: 'center', marginTop: 12 },
   switchText: { fontSize: 14 },
+  birthdayHint: { fontSize: 12, lineHeight: 17 },
   body: { paddingHorizontal: 24, paddingTop: 24, paddingBottom: 40, gap: 10 },
   avatarPreview: { alignItems: 'center', marginBottom: 16 },
   avatarCircle: { width: 72, height: 72, borderRadius: 36, alignItems: 'center', justifyContent: 'center' },

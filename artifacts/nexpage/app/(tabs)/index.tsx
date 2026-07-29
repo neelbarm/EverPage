@@ -52,6 +52,10 @@ export default function ShelfScreen() {
   const topPad = insets.top + (Platform.OS === 'web' ? 67 : 0);
 
   const activeBooks = useMemo(() => books.filter(b => !b.finishedAt), [books]);
+  const completedBooks = useMemo(
+    () => books.filter(b => !!b.finishedAt).sort((a, b) => (b.finishedAt ?? 0) - (a.finishedAt ?? 0)),
+    [books],
+  );
   const heroBook = activeBooks[0];
   const alsoReading = activeBooks.slice(1);
   const heroProgress = heroBook ? heroBook.currentPage / heroBook.totalPages : 0;
@@ -245,9 +249,9 @@ export default function ShelfScreen() {
         {activeBooks.length === 0 ? (
           <View style={styles.emptyState}>
             <Ionicons name="book-outline" size={48} color={colors.mutedForeground} />
-            <Text style={[styles.emptyTitle, { color: colors.foreground, fontFamily: 'Inter_600SemiBold' }]}>No books yet</Text>
+            <Text style={[styles.emptyTitle, { color: colors.foreground, fontFamily: 'Inter_600SemiBold' }]}>No current books</Text>
             <Text style={[styles.emptySub, { color: colors.mutedForeground, fontFamily: 'Inter_400Regular' }]}>
-              Tap the + tab to add your first book
+              {completedBooks.length > 0 ? 'Add a book when you are ready for your next read.' : 'Tap the + tab to add your first book'}
             </Text>
           </View>
         ) : (
@@ -348,6 +352,31 @@ export default function ShelfScreen() {
               </View>
             )}
           </>
+        )}
+
+        {completedBooks.length > 0 && (
+          <View style={styles.completedSection}>
+            <View style={styles.alsoHeader}>
+              <Text style={[styles.alsoLabel, { color: colors.mutedForeground, fontFamily: 'Inter_600SemiBold' }]}>COMPLETED</Text>
+              <Text style={[styles.alsoCount, { color: colors.mutedForeground, fontFamily: 'Inter_400Regular' }]}>
+                {completedBooks.length}
+              </Text>
+            </View>
+            <Text style={[styles.completedHint, { color: colors.mutedForeground, fontFamily: 'Inter_400Regular' }]}>Only books you finish in EverPage appear here.</Text>
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.completedRow}>
+              {completedBooks.slice(0, 8).map(book => (
+                <TouchableOpacity
+                  key={book.id}
+                  style={styles.completedBook}
+                  onPress={() => router.push(`/book/${book.id}`)}
+                  activeOpacity={0.8}
+                >
+                  <BookCover bookId={book.id} coverColor={book.coverColor} coverImageUri={book.coverImageUri} title={book.title} width={58} height={82} borderRadius={6} />
+                  <Text style={[styles.completedTitle, { color: colors.foreground, fontFamily: 'Inter_500Medium' }]} numberOfLines={2}>{book.title}</Text>
+                </TouchableOpacity>
+              ))}
+            </ScrollView>
+          </View>
         )}
       </ScrollView>
 
@@ -514,6 +543,11 @@ const styles = StyleSheet.create({
   goalStripPct: { fontSize: 13 },
   goalStripTrack: { height: 4, borderRadius: 2, overflow: 'hidden' },
   goalStripFill: { height: 4, borderRadius: 2 },
+  completedSection: { marginTop: 18, paddingHorizontal: 16, gap: 5 },
+  completedHint: { fontSize: 12, lineHeight: 17 },
+  completedRow: { gap: 12, paddingTop: 7, paddingBottom: 2 },
+  completedBook: { width: 68, gap: 5 },
+  completedTitle: { fontSize: 11, lineHeight: 14 },
   heroCard: {
     marginHorizontal: 16, marginBottom: 8, borderRadius: 18, borderWidth: 1,
     padding: 16, shadowColor: '#000', shadowOffset: { width: 0, height: 2 },

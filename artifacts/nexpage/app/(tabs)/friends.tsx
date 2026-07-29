@@ -55,6 +55,9 @@ function NudgeButton({ userId }: { userId: string; displayName?: string }) {
       const result = await sendNudge(userId);
       if (!result.alreadyNudged) {
         Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+        if (result.delivery === 'in_app') {
+          Alert.alert('Nudge saved', 'They can see it in EverPage. To receive a phone notification, they need to open the app and allow nudges.');
+        }
       }
     } catch {
       Alert.alert('Could not send nudge', 'Please try again later.');

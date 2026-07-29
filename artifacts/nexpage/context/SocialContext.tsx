@@ -80,7 +80,7 @@ interface SocialContextType {
   postRecommendation: (bookTitle: string, bookAuthor: string) => Promise<void>;
   refreshFeed: () => Promise<void>;
   isFollowing: (userId: string) => boolean;
-  sendNudge: (userId: string) => Promise<{ alreadyNudged: boolean }>;
+  sendNudge: (userId: string) => Promise<{ alreadyNudged: boolean; delivery: 'push' | 'in_app' }>;
   hasNudged: (userId: string) => boolean;
   blockedUsers: SocialUser[];
   blockUser: (userId: string) => Promise<void>;
@@ -287,7 +287,7 @@ export function SocialProvider({ children }: { children: React.ReactNode }) {
     return following.some(u => u.id === userId);
   }, [following]);
 
-  const sendNudge = useCallback(async (userId: string): Promise<{ alreadyNudged: boolean }> => {
+  const sendNudge = useCallback(async (userId: string): Promise<{ alreadyNudged: boolean; delivery: 'push' | 'in_app' }> => {
     const token = await getAuthToken();
     const headers: Record<string, string> = {
       'Content-Type': 'application/json',
@@ -298,17 +298,17 @@ export function SocialProvider({ children }: { children: React.ReactNode }) {
       headers,
       credentials: 'include',
     });
-    // Either way (sent now, or already nudged within cooldown), mark as nudged
-    // so the button stays in its "Nudged" state across navigation.
-    setNudgedUserIds(prev => (prev.includes(userId) ? prev : [...prev, userId]));
     if (res.status === 429) {
-      return { alreadyNudged: true };
+      setNudgedUserIds(prev => (prev.includes(userId) ? prev : [...prev, userId]));
+      return { alreadyNudged: true, delivery: 'in_app' };
     }
     if (!res.ok) {
       const err = await res.text().catch(() => res.statusText);
       throw new Error(`API error ${res.status}: ${err}`);
     }
-    return { alreadyNudged: false };
+    const data = await res.json() as { delivery?: 'push' | 'in_app' };
+    setNudgedUserIds(prev => (prev.includes(userId) ? prev : [...prev, userId]));
+    return { alreadyNudged: false, delivery: data.delivery === 'push' ? 'push' : 'in_app' };
   }, []);
 
   const hasNudged = useCallback((userId: string) => {

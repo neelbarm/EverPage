@@ -13,7 +13,7 @@ import { useTheme, type ThemeMode } from '@/context/ThemeContext';
 import { useStore } from '@/context/StoreContext';
 import { useSocial } from '@/context/SocialContext';
 import { useAuth } from '@/lib/auth';
-import { scheduleDailyReminder, cancelDailyReminder, requestNotificationPermissions } from '@/lib/notifications';
+import { scheduleDailyReminder, cancelDailyReminder, requestNotificationPermissions, getExpoPushToken } from '@/lib/notifications';
 import RegisterModal from '@/components/RegisterModal';
 import { BottomSheet } from '@/components/BottomSheet';
 
@@ -434,14 +434,16 @@ export default function SettingsScreen() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
   const { profile, streak, reminder, setReminder, setDailyGoal, updateProfile } = useStore();
-  const { socialProfile, isRegistered, setNudgesEnabled, blockedUsers, unblockUser } = useSocial();
+  const { socialProfile, isRegistered, setNudgesEnabled, blockedUsers, unblockUser, registerUser, registerPushToken } = useSocial();
   const { user, isAuthenticated, logout, changePassword, deleteAccount } = useAuth();
 
   const { themeMode, setThemeMode } = useTheme();
 
   const [name, setName] = useState(profile.name);
+  const [username, setUsername] = useState(socialProfile?.username ?? '');
   const [selectedColor, setSelectedColor] = useState(profile.color);
   const [saving, setSaving] = useState(false);
+  const [profileError, setProfileError] = useState('');
   const [nudgesEnabled, setNudgesLocal] = useState(socialProfile?.nudgesEnabled ?? true);
   const [togglingNudges, setTogglingNudges] = useState(false);
   const [showGoalModal, setShowGoalModal] = useState(false);
@@ -458,15 +460,41 @@ export default function SettingsScreen() {
   const [deletingAccount, setDeletingAccount] = useState(false);
 
   const topPad = insets.top + (Platform.OS === 'web' ? 67 : 0);
-  const hasProfileChanges = name !== profile.name || selectedColor !== profile.color;
+  useEffect(() => {
+    if (socialProfile?.username) setUsername(socialProfile.username);
+  }, [socialProfile?.username]);
+
+  const normalizedUsername = username.toLowerCase().replace(/[^a-z0-9_]/g, '').slice(0, 20);
+  const hasProfileChanges =
+    name !== profile.name ||
+    selectedColor !== profile.color ||
+    normalizedUsername !== (socialProfile?.username ?? '');
 
   async function handleSaveProfile() {
     if (!hasProfileChanges || saving) return;
+    const displayName = name.trim();
+    if (!displayName) {
+      setProfileError('Enter a name.');
+      return;
+    }
+    if (socialProfile && normalizedUsername.length < 2) {
+      setProfileError('Username must be at least 2 characters.');
+      return;
+    }
     setSaving(true);
+    setProfileError('');
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     try {
-      await updateProfile(name, selectedColor);
+      await updateProfile(displayName, selectedColor);
+      if (socialProfile) {
+        await registerUser(normalizedUsername, displayName, selectedColor);
+      }
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+    } catch (e: unknown) {
+      const message = e instanceof Error ? e.message : '';
+      setProfileError(message.includes('409') || message.toLowerCase().includes('taken')
+        ? 'That username is already taken.'
+        : 'Could not save your profile. Please try again.');
     } finally {
       setSaving(false);
     }
@@ -491,12 +519,21 @@ export default function SettingsScreen() {
 
   async function handleToggleNudges(value: boolean) {
     if (togglingNudges) return;
-    setNudgesLocal(value);
     setTogglingNudges(true);
     try {
+      if (value && Platform.OS !== 'web') {
+        const granted = await requestNotificationPermissions();
+        if (!granted) {
+          setNudgesLocal(false);
+          return;
+        }
+        const token = await getExpoPushToken();
+        if (token) await registerPushToken(token);
+      }
       await setNudgesEnabled(value);
+      setNudgesLocal(value);
     } catch {
-      setNudgesLocal(!value);
+      setNudgesLocal(socialProfile?.nudgesEnabled ?? !value);
     } finally {
       setTogglingNudges(false);
     }
@@ -595,7 +632,7 @@ export default function SettingsScreen() {
             <TextInput
               style={[styles.nameInput, { color: colors.foreground, fontFamily: 'Inter_400Regular' }]}
               value={name}
-              onChangeText={setName}
+              onChangeText={text => { setName(text); setProfileError(''); }}
               placeholder="Your name"
               placeholderTextColor={colors.mutedForeground}
               autoCapitalize="words"
@@ -605,10 +642,23 @@ export default function SettingsScreen() {
             />
           </View>
           {socialProfile?.username ? (
-            <Text style={[styles.usernameHint, { color: colors.mutedForeground, fontFamily: 'Inter_400Regular' }]}>
-              @{socialProfile.username}
-            </Text>
+            <View style={[styles.usernameInputWrap, { borderColor: hasProfileChanges ? colors.primary : colors.border, backgroundColor: colors.background }]}>
+              <Text style={[styles.usernamePrefix, { color: colors.mutedForeground, fontFamily: 'Inter_400Regular' }]}>@</Text>
+              <TextInput
+                style={[styles.usernameInput, { color: colors.foreground, fontFamily: 'Inter_400Regular' }]}
+                value={username}
+                onChangeText={text => { setUsername(text.toLowerCase().replace(/[^a-z0-9_]/g, '').slice(0, 20)); setProfileError(''); }}
+                placeholder="username"
+                placeholderTextColor={colors.mutedForeground}
+                autoCapitalize="none"
+                autoCorrect={false}
+                maxLength={20}
+                returnKeyType="done"
+                onSubmitEditing={handleSaveProfile}
+              />
+            </View>
           ) : null}
+          {profileError ? <Text style={[styles.profileError, { color: colors.destructive, fontFamily: 'Inter_400Regular' }]}>{profileError}</Text> : null}
         </View>
 
         {/* Reading */}
@@ -934,7 +984,10 @@ const styles = StyleSheet.create({
     paddingHorizontal: 14, paddingVertical: Platform.OS === 'ios' ? 13 : 10,
   },
   nameInput: { fontSize: 16, textAlign: 'center' },
-  usernameHint: { fontSize: 13, marginTop: -8 },
+  usernameInputWrap: { flexDirection: 'row', alignItems: 'center', borderWidth: 1, borderRadius: 10, paddingHorizontal: 12, marginTop: -2, minWidth: 160 },
+  usernamePrefix: { fontSize: 15, marginRight: 1 },
+  usernameInput: { fontSize: 15, paddingVertical: 9, minWidth: 120, textAlign: 'center' },
+  profileError: { fontSize: 13, textAlign: 'center', marginTop: -4 },
   sectionLabel: { fontSize: 11, letterSpacing: 1.5, marginLeft: 4 },
   group: {
     borderRadius: 16, borderWidth: 1, overflow: 'hidden',

@@ -581,8 +581,10 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
   }
 
   function finishBook(bookId: string, favoriteQuote?: string) {
+    const book = books.find(b => b.id === bookId);
+    if (!book || book.finishedAt) return;
     const newBooks = books.map(b =>
-      b.id === bookId ? { ...b, finishedAt: Date.now(), favoriteQuote: favoriteQuote ?? b.favoriteQuote } : b
+      b.id === bookId ? { ...b, currentPage: b.totalPages, finishedAt: Date.now(), favoriteQuote: favoriteQuote ?? b.favoriteQuote } : b
     );
     const newProfile = { ...profile, booksFinished: profile.booksFinished + 1 };
     const newStreak: StreakData =
