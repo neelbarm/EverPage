@@ -616,9 +616,11 @@ router.post("/social/nudge/:userId", async (req, res) => {
         sound: "default",
       }),
     });
-    const result = await pushRes.json() as { data?: Array<{ status?: string; details?: { error?: string } }> };
+    const result = await pushRes.json() as { data?: Array<{ id?: string; status?: string; details?: { error?: string } }> };
     const ticket = result.data?.[0];
-    if (!pushRes.ok || ticket?.status === "error") {
+    // A 200 response alone is not a push ticket. Require Expo to explicitly
+    // accept the notification before reporting that a phone notification was queued.
+    if (!pushRes.ok || ticket?.status !== "ok" || !ticket.id) {
       // Expo tells us when an app was uninstalled or its token expired. Clear it
       // so a future app launch can register a fresh token instead of silently
       // failing every nudge.
@@ -628,7 +630,7 @@ router.post("/social/nudge/:userId", async (req, res) => {
       res.status(202).json({ ok: true, delivery: "in_app", skipped: "push_unavailable" });
       return;
     }
-    res.json({ ok: true, delivery: "push" });
+    res.json({ ok: true, delivery: "push", pushTicketId: ticket.id });
   } catch (err: any) {
     res.status(500).json({ error: "Failed to send push notification", detail: err?.message });
   }

@@ -12,7 +12,7 @@ import React, { useEffect } from "react";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { KeyboardProvider } from "react-native-keyboard-controller";
 import { SafeAreaProvider } from "react-native-safe-area-context";
-import { Platform } from "react-native";
+import { AppState, Platform } from "react-native";
 
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { ThemeProvider } from "@/context/ThemeContext";
@@ -37,19 +37,34 @@ function PushTokenRegistrar() {
     if (Platform.OS === "web") return;
     if (!isAuthenticated || !isRegistered) return;
 
-    async function register() {
+    let cancelled = false;
+
+    async function register(askForPermission: boolean) {
       try {
-        const granted = await requestNotificationPermissions();
-        if (!granted) return;
+        if (askForPermission) {
+          const granted = await requestNotificationPermissions();
+          if (!granted) return;
+        }
         const token = await getExpoPushToken();
-        if (token) await registerPushToken(token);
+        if (token && !cancelled) await registerPushToken(token);
       } catch {
         // non-blocking
       }
     }
 
-    register();
-  }, [isAuthenticated, isRegistered]);
+    // Register at launch, then register again whenever the device returns to
+    // the foreground. Expo tokens can rotate, and this repairs a token that
+    // could not be saved while the user was temporarily offline.
+    void register(true);
+    const subscription = AppState.addEventListener("change", (nextState) => {
+      if (nextState === "active") void register(false);
+    });
+
+    return () => {
+      cancelled = true;
+      subscription.remove();
+    };
+  }, [isAuthenticated, isRegistered, registerPushToken]);
 
   return null;
 }
