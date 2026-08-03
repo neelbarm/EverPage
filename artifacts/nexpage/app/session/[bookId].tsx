@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { View, Text, TouchableOpacity, StyleSheet, Platform } from 'react-native';
+import { AppState, View, Text, TouchableOpacity, StyleSheet, Platform } from 'react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -7,6 +8,29 @@ import * as Haptics from 'expo-haptics';
 import { useColors } from '@/hooks/useColors';
 import { useStore } from '@/context/StoreContext';
 import { BookCover } from '@/components/BookCover';
+
+const ACTIVE_SESSION_KEY = 'everpage_active_reading_session';
+
+type ActiveReadingSession = {
+  bookId: string;
+  elapsedSeconds: number;
+  // A timestamp, rather than a ticking counter, lets the session catch up
+  // after iOS suspends or terminates the app.
+  startedAt: number | null;
+};
+
+function elapsedSecondsFor(session: ActiveReadingSession, now = Date.now()) {
+  if (session.startedAt === null) return session.elapsedSeconds;
+  return session.elapsedSeconds + Math.max(0, Math.floor((now - session.startedAt) / 1000));
+}
+
+function isActiveReadingSession(value: unknown): value is ActiveReadingSession {
+  if (!value || typeof value !== 'object') return false;
+  const session = value as Record<string, unknown>;
+  return typeof session.bookId === 'string'
+    && typeof session.elapsedSeconds === 'number'
+    && (typeof session.startedAt === 'number' || session.startedAt === null);
+}
 
 export default function SessionScreen() {
   const colors = useColors();
@@ -18,30 +42,90 @@ export default function SessionScreen() {
 
   const [seconds, setSeconds] = useState(0);
   const [isRunning, setIsRunning] = useState(true);
+  const [isReady, setIsReady] = useState(false);
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const sessionRef = useRef<ActiveReadingSession | null>(null);
+
+  function saveSession(session: ActiveReadingSession) {
+    return AsyncStorage.setItem(ACTIVE_SESSION_KEY, JSON.stringify(session));
+  }
 
   useEffect(() => {
-    if (isRunning) {
-      intervalRef.current = setInterval(() => {
-        setSeconds(s => s + 1);
-      }, 1000);
-    } else {
-      if (intervalRef.current) clearInterval(intervalRef.current);
+    let cancelled = false;
+
+    async function restoreSession() {
+      let session: ActiveReadingSession = {
+        bookId: bookId ?? '',
+        elapsedSeconds: 0,
+        startedAt: Date.now(),
+      };
+
+      try {
+        const saved = await AsyncStorage.getItem(ACTIVE_SESSION_KEY);
+        if (saved) {
+          const parsed: unknown = JSON.parse(saved);
+          if (isActiveReadingSession(parsed) && parsed.bookId === session.bookId) {
+            session = parsed;
+          }
+        }
+        // Store the timestamp immediately. If the user force-quits before
+        // pressing Stop, the next launch can still restore this session.
+        await saveSession(session);
+      } catch {
+        // The timer still works for this open session if local persistence is unavailable.
+      }
+
+      if (cancelled) return;
+      sessionRef.current = session;
+      setSeconds(elapsedSecondsFor(session));
+      setIsRunning(session.startedAt !== null);
+      setIsReady(true);
     }
+
+    restoreSession();
+    return () => { cancelled = true; };
+  }, [bookId]);
+
+  useEffect(() => {
+    if (!isReady || !isRunning) return;
+
+    const updateElapsedTime = () => {
+      if (sessionRef.current) setSeconds(elapsedSecondsFor(sessionRef.current));
+    };
+
+    updateElapsedTime();
+    intervalRef.current = setInterval(updateElapsedTime, 1000);
     return () => {
       if (intervalRef.current) clearInterval(intervalRef.current);
     };
-  }, [isRunning]);
+  }, [isReady, isRunning]);
+
+  useEffect(() => {
+    const subscription = AppState.addEventListener('change', (nextState) => {
+      // Timers do not run while the app is backgrounded. On return, render
+      // the elapsed wall-clock time immediately instead of waiting for an interval tick.
+      const activeSession = sessionRef.current;
+      if (nextState === 'active' && activeSession !== null && activeSession.startedAt !== null) {
+        setSeconds(elapsedSecondsFor(activeSession));
+      }
+    });
+    return () => subscription.remove();
+  }, []);
 
   const mins = Math.floor(seconds / 60);
   const secs = seconds % 60;
   const display = `${String(mins).padStart(2, '0')}:${String(secs).padStart(2, '0')}`;
 
   function handleStop() {
+    if (!sessionRef.current) return;
     if (intervalRef.current) clearInterval(intervalRef.current);
+    const totalSeconds = elapsedSecondsFor(sessionRef.current);
+    sessionRef.current = { ...sessionRef.current, elapsedSeconds: totalSeconds, startedAt: null };
+    setSeconds(totalSeconds);
     setIsRunning(false);
+    void AsyncStorage.removeItem(ACTIVE_SESSION_KEY);
     Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-    const elapsed = Math.max(1, mins);
+    const elapsed = Math.max(1, Math.floor(totalSeconds / 60));
     router.replace({
       pathname: '/session-log/[bookId]',
       params: { bookId: bookId ?? '', minutes: String(elapsed), startPage: String(book?.currentPage ?? 0) },
@@ -49,8 +133,26 @@ export default function SessionScreen() {
   }
 
   function handleTogglePause() {
-    setIsRunning(r => !r);
+    if (!sessionRef.current || !isReady) return;
+    const now = Date.now();
+    const wasRunning = sessionRef.current.startedAt !== null;
+    const updatedSession: ActiveReadingSession = wasRunning
+      ? { ...sessionRef.current, elapsedSeconds: elapsedSecondsFor(sessionRef.current, now), startedAt: null }
+      : { ...sessionRef.current, startedAt: now };
+
+    sessionRef.current = updatedSession;
+    setSeconds(elapsedSecondsFor(updatedSession, now));
+    setIsRunning(!wasRunning);
+    void saveSession(updatedSession);
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+  }
+
+  function handleClose() {
+    // Closing is an intentional discard. Backgrounding or force-quitting does
+    // not call this, so those cases continue when the reader returns.
+    sessionRef.current = null;
+    void AsyncStorage.removeItem(ACTIVE_SESSION_KEY);
+    router.back();
   }
 
   if (!book) {
@@ -67,7 +169,7 @@ export default function SessionScreen() {
     <View style={[styles.root, { backgroundColor: '#180e09' }]}>
       <TouchableOpacity
         style={[styles.closeBtn, { top: closeBtnTop }]}
-        onPress={() => router.back()}
+        onPress={handleClose}
         activeOpacity={0.7}
       >
         <Ionicons name="close" size={24} color="rgba(242,233,219,0.55)" />
@@ -97,7 +199,7 @@ export default function SessionScreen() {
       </View>
 
       <View style={[styles.controls, { paddingBottom: insets.bottom + (Platform.OS === 'web' ? 34 : 20) }]}>
-        <TouchableOpacity style={styles.pauseBtn} onPress={handleTogglePause} activeOpacity={0.75}>
+        <TouchableOpacity style={styles.pauseBtn} onPress={handleTogglePause} activeOpacity={0.75} disabled={!isReady}>
           <Ionicons name={isRunning ? 'pause' : 'play'} size={24} color="rgba(242,233,219,0.6)" />
         </TouchableOpacity>
         <TouchableOpacity style={styles.stopBtn} onPress={handleStop} activeOpacity={0.88}>
