@@ -17,7 +17,7 @@ import { scheduleDailyReminder, cancelDailyReminder, requestNotificationPermissi
 import RegisterModal from '@/components/RegisterModal';
 import { BottomSheet } from '@/components/BottomSheet';
 
-const APP_VERSION = '1.0.1';
+const APP_VERSION = '1.0.2';
 
 function ChangePasswordModal({
   visible, onClose, onSuccess,
