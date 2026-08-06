@@ -318,7 +318,10 @@ export default function RegisterModal({
                 onChangeText={text => setBirthday(formatBirthday(text))}
                 keyboardType="number-pad"
                 autoCorrect={false}
-                maxLength={10}
+                // The formatter displays `MM / DD / YYYY`, which is 14
+                // characters including spaces and slashes. A limit of 10
+                // trapped iOS users after the first year digit.
+                maxLength={14}
                 returnKeyType="done"
                 onSubmitEditing={handleAuth}
               />
