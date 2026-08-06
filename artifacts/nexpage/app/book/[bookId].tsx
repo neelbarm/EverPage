@@ -1,9 +1,9 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   View, Text, ScrollView, TouchableOpacity, StyleSheet, Platform,
   Modal, KeyboardAvoidingView, TextInput, Alert, ActivityIndicator,
 } from 'react-native';
-import { useLocalSearchParams, useRouter } from 'expo-router';
+import { useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
@@ -15,6 +15,24 @@ import { useAuth } from '@/lib/auth';
 import { apiFetch } from '@/lib/api';
 
 const GENRES = ['Literary Fiction', 'Historical Fiction', 'Non-Fiction', 'Science Fiction', 'Mystery', 'Biography', 'Other'];
+
+type MyRoom = {
+  code: string;
+  bookTitle: string;
+  bookAuthor: string;
+};
+
+const normaliseBookValue = (value: string | null | undefined) =>
+  (value ?? '').trim().toLowerCase().replace(/\s+/g, ' ');
+
+function isRoomForBook(room: MyRoom, title: string, author: string) {
+  const roomAuthor = normaliseBookValue(room.bookAuthor);
+  const bookAuthor = normaliseBookValue(author);
+  return (
+    normaliseBookValue(room.bookTitle) === normaliseBookValue(title) &&
+    (!roomAuthor || !bookAuthor || roomAuthor === bookAuthor)
+  );
+}
 
 function ProgressBar({ progress, height = 6 }: { progress: number; height?: number }) {
   const colors = useColors();
@@ -48,6 +66,10 @@ export default function BookDetailScreen() {
   const [joinCode, setJoinCode] = useState('');
   const [joiningRoom, setJoiningRoom] = useState(false);
   const [creatingRoom, setCreatingRoom] = useState(false);
+  const [existingRoomCode, setExistingRoomCode] = useState<string | null>(null);
+  // Start in a loading state so returning members never briefly see a
+  // misleading “Create room” button before their saved membership loads.
+  const [loadingRoom, setLoadingRoom] = useState(true);
 
   async function handleShare() {
     if (!book || sharing || shared) return;
@@ -96,6 +118,34 @@ export default function BookDetailScreen() {
     ).then(data => setNotes(data)).catch(() => {});
   }, [book?.title, book?.currentPage, isAuthenticated]);
 
+  // Room membership lives on the server, not in the screen state. Re-check it
+  // every time this book screen becomes active so reopening the app doesn't
+  // make an existing member look like they need to create a room again.
+  const loadExistingRoom = useCallback(async () => {
+    if (!book || !isAuthenticated) {
+      setExistingRoomCode(null);
+      return;
+    }
+
+    setLoadingRoom(true);
+    try {
+      const rooms = await apiFetch<MyRoom[]>('/rooms');
+      setExistingRoomCode(rooms.find(room => isRoomForBook(room, book.title, book.author))?.code ?? null);
+    } catch {
+      // The create endpoint also protects against duplicates. Keep the normal
+      // controls available if membership cannot be loaded (for example, offline).
+      setExistingRoomCode(null);
+    } finally {
+      setLoadingRoom(false);
+    }
+  }, [book?.id, book?.title, book?.author, isAuthenticated]);
+
+  useFocusEffect(
+    useCallback(() => {
+      loadExistingRoom();
+    }, [loadExistingRoom]),
+  );
+
   async function handleCreateRoom() {
     if (!book || creatingRoom) return;
     setCreatingRoom(true);
@@ -104,6 +154,7 @@ export default function BookDetailScreen() {
         method: 'POST',
         body: JSON.stringify({ bookTitle: book.title, bookAuthor: book.author }),
       });
+      setExistingRoomCode(code);
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       router.push({ pathname: '/room/[roomId]', params: { roomId: code } });
     } catch {
@@ -119,6 +170,7 @@ export default function BookDetailScreen() {
     setJoiningRoom(true);
     try {
       await apiFetch(`/rooms/${code}/join`, { method: 'POST' });
+      setExistingRoomCode(code);
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       setShowJoinModal(false);
       router.push({ pathname: '/room/[roomId]', params: { roomId: code } });
@@ -326,26 +378,40 @@ export default function BookDetailScreen() {
             <Text style={[styles.roomDesc, { color: colors.mutedForeground, fontFamily: 'Inter_400Regular' }]}>
               Read together. Share progress. Spoiler-safe discussion.
             </Text>
-            <View style={styles.roomBtns}>
+            {loadingRoom ? (
+              <View style={styles.roomLoading}>
+                <ActivityIndicator size="small" color={colors.mutedForeground} />
+              </View>
+            ) : existingRoomCode ? (
               <TouchableOpacity
                 style={[styles.roomBtn, { backgroundColor: colors.primary }]}
-                onPress={handleCreateRoom}
-                disabled={creatingRoom}
+                onPress={() => router.push({ pathname: '/room/[roomId]', params: { roomId: existingRoomCode } })}
                 activeOpacity={0.85}
               >
-                {creatingRoom
-                  ? <ActivityIndicator size="small" color="#fff" />
-                  : <Text style={[styles.roomBtnText, { color: '#fff', fontFamily: 'Inter_600SemiBold' }]}>Create room</Text>
-                }
+                <Text style={[styles.roomBtnText, { color: '#fff', fontFamily: 'Inter_600SemiBold' }]}>Go to room</Text>
               </TouchableOpacity>
-              <TouchableOpacity
-                style={[styles.roomBtnOutline, { borderColor: colors.border }]}
-                onPress={() => setShowJoinModal(true)}
-                activeOpacity={0.8}
-              >
-                <Text style={[styles.roomBtnText, { color: colors.foreground, fontFamily: 'Inter_500Medium' }]}>Join with code</Text>
-              </TouchableOpacity>
-            </View>
+            ) : (
+              <View style={styles.roomBtns}>
+                <TouchableOpacity
+                  style={[styles.roomBtn, { backgroundColor: colors.primary }]}
+                  onPress={handleCreateRoom}
+                  disabled={creatingRoom}
+                  activeOpacity={0.85}
+                >
+                  {creatingRoom
+                    ? <ActivityIndicator size="small" color="#fff" />
+                    : <Text style={[styles.roomBtnText, { color: '#fff', fontFamily: 'Inter_600SemiBold' }]}>Create room</Text>
+                  }
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[styles.roomBtnOutline, { borderColor: colors.border }]}
+                  onPress={() => setShowJoinModal(true)}
+                  activeOpacity={0.8}
+                >
+                  <Text style={[styles.roomBtnText, { color: colors.foreground, fontFamily: 'Inter_500Medium' }]}>Join with code</Text>
+                </TouchableOpacity>
+              </View>
+            )}
           </View>
         )}
 
@@ -594,6 +660,7 @@ const styles = StyleSheet.create({
   roomHeader: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   roomTitle: { fontSize: 16 },
   roomDesc: { fontSize: 13, lineHeight: 18 },
+  roomLoading: { minHeight: 42, justifyContent: 'center', alignItems: 'center' },
   roomBtns: { flexDirection: 'row', gap: 10 },
   roomBtn: { flex: 1, paddingVertical: 11, borderRadius: 10, alignItems: 'center' },
   roomBtnOutline: { flex: 1, paddingVertical: 11, borderRadius: 10, alignItems: 'center', borderWidth: 1 },
