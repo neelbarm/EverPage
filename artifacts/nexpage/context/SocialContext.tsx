@@ -344,12 +344,10 @@ export function SocialProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const registerPushToken = useCallback(async (token: string) => {
-    try {
-      await apiFetch('/social/push-token', {
-        method: 'POST',
-        body: JSON.stringify({ token }),
-      });
-    } catch { /* non-blocking */ }
+    await apiFetch('/social/push-token', {
+      method: 'POST',
+      body: JSON.stringify({ token }),
+    });
   }, []);
 
   const setNudgesEnabled = useCallback(async (enabled: boolean) => {

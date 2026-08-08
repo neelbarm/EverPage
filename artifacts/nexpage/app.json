@@ -16,6 +16,9 @@
     "ios": {
       "supportsTablet": false,
       "bundleIdentifier": "app.everpage.mobile",
+      "entitlements": {
+        "aps-environment": "production"
+      },
       "infoPlist": {
         "NSPhotoLibraryUsageDescription": "EverPage uses your photo library so you can set a profile picture.",
         "NSPhotoLibraryAddUsageDescription": "EverPage saves images to your photo library.",
@@ -27,6 +30,7 @@
       "permissions": [
         "android.permission.RECEIVE_BOOT_COMPLETED",
         "android.permission.VIBRATE",
+        "android.permission.POST_NOTIFICATIONS",
         "android.permission.READ_MEDIA_IMAGES"
       ]
     },

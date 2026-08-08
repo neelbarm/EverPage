@@ -41,6 +41,10 @@ function generateId(): string {
   return Date.now().toString(36) + Math.random().toString(36).substring(2, 9);
 }
 
+function isExpoPushToken(token: string): boolean {
+  return /^(?:Exponent|Expo)PushToken\[[^\]]+\]$/.test(token);
+}
+
 function requireAuth(req: any, res: any): string | null {
   if (!req.isAuthenticated()) {
     res.status(401).json({ error: "Authentication required" });
@@ -507,8 +511,8 @@ router.post("/social/push-token", async (req, res) => {
   const userId = requireAuth(req, res);
   if (!userId) return;
   const { token } = req.body ?? {};
-  if (!token || typeof token !== "string") {
-    res.status(400).json({ error: "token required" });
+  if (!token || typeof token !== "string" || !isExpoPushToken(token)) {
+    res.status(400).json({ error: "A valid Expo push token is required" });
     return;
   }
   await db
@@ -614,6 +618,8 @@ router.post("/social/nudge/:userId", async (req, res) => {
         body: "Don't let your reading streak slip! Open the app and log a session.",
         data: { navigateTo: "log" },
         sound: "default",
+        priority: "high",
+        channelId: "default",
       }),
     });
     const result = await pushRes.json() as { data?: Array<{ id?: string; status?: string; details?: { error?: string } }> };

@@ -271,12 +271,15 @@ export default function YouScreen() {
       const granted = await requestNotificationPermissions();
       if (!granted) return;
       const pushToken = await getExpoPushToken();
-      if (pushToken) {
-        try {
-          await registerPushToken(pushToken);
-        } catch {
-          // token will be re-registered on next app open via PushTokenRegistrar
-        }
+      if (!pushToken) {
+        Alert.alert('Notifications unavailable', 'Allow notifications for EverPage in your phone Settings, then reopen the app and try again.');
+        return;
+      }
+      try {
+        await registerPushToken(pushToken);
+      } catch {
+        Alert.alert('Could not enable nudges', 'Please check your connection and try again.');
+        return;
       }
     }
     setTogglingNudges(true);

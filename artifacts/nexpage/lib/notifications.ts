@@ -1,5 +1,6 @@
 import * as Notifications from 'expo-notifications';
 import Constants from 'expo-constants';
+import * as Device from 'expo-device';
 import { Platform } from 'react-native';
 import { router } from 'expo-router';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -21,8 +22,22 @@ Notifications.setNotificationHandler({
   }),
 });
 
+async function configureAndroidNotifications(): Promise<void> {
+  if (Platform.OS !== 'android') return;
+  // Android requires a channel before it will present high-priority remote
+  // notifications reliably. Creating it is safe to repeat on every launch.
+  await Notifications.setNotificationChannelAsync('default', {
+    name: 'EverPage nudges',
+    importance: Notifications.AndroidImportance.MAX,
+    vibrationPattern: [0, 250, 250, 250],
+    sound: 'default',
+    lockscreenVisibility: Notifications.AndroidNotificationVisibility.PUBLIC,
+  });
+}
+
 export async function requestNotificationPermissions(): Promise<boolean> {
   if (Platform.OS === 'web') return false;
+  await configureAndroidNotifications();
   const { status: existing } = await Notifications.getPermissionsAsync();
   if (existing === 'granted') return true;
   const { status } = await Notifications.requestPermissionsAsync();
@@ -32,14 +47,18 @@ export async function requestNotificationPermissions(): Promise<boolean> {
 export async function getExpoPushToken(): Promise<string | null> {
   if (Platform.OS === 'web') return null;
   try {
+    if (!Device.isDevice) return null;
+    await configureAndroidNotifications();
     const { status } = await Notifications.getPermissionsAsync();
     if (status !== 'granted') return null;
     const projectId: string | undefined =
       (Constants.easConfig as any)?.projectId ??
       (Constants.expoConfig?.extra as any)?.eas?.projectId;
-    const token = await Notifications.getExpoPushTokenAsync(
-      projectId ? { projectId } : {},
-    );
+    // A release build must be attached to an EAS project. Without this ID Expo
+    // cannot create a routable Expo push token, so fail closed instead of
+    // pretending the nudge setting is active.
+    if (!projectId) return null;
+    const token = await Notifications.getExpoPushTokenAsync({ projectId });
     return token.data;
   } catch {
     return null;

@@ -2,7 +2,7 @@ import React, { useState, useCallback, useEffect, useRef } from 'react';
 import {
   Animated, View, Text, ScrollView, TouchableOpacity, StyleSheet,
   Platform, TextInput, Switch, ActivityIndicator,
-  Modal, KeyboardAvoidingView, PanResponder,
+  Modal, KeyboardAvoidingView, PanResponder, Alert,
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -528,7 +528,12 @@ export default function SettingsScreen() {
           return;
         }
         const token = await getExpoPushToken();
-        if (token) await registerPushToken(token);
+        if (!token) {
+          Alert.alert('Notifications unavailable', 'Allow notifications for EverPage in your phone Settings, then reopen the app and try again.');
+          setNudgesLocal(false);
+          return;
+        }
+        await registerPushToken(token);
       }
       await setNudgesEnabled(value);
       setNudgesLocal(value);
