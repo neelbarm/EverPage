@@ -314,7 +314,8 @@ export default function YouScreen() {
   }
 
   function handleStreakFreezes() {
-    const todayKey = new Date().toISOString().split('T')[0];
+    const today = new Date();
+    const todayKey = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
     const hasReadToday = streak.lastReadDate === todayKey || sessions.some(s => s.date === todayKey);
     if (streak.freezesLeft <= 0) {
       Alert.alert(

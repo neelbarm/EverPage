@@ -47,7 +47,7 @@ export default function ShelfScreen() {
   const colors = useColors();
   const insets = useSafeAreaInsets();
   const router = useRouter();
-  const { books, streak, recommendedBooks, addBook, setDailyGoal, pendingFreezeEarned, clearPendingFreezeEarned, pendingGoalMet, clearPendingGoalMet } = useStore();
+  const { books, streak, recommendedBooks, refreshRecommendations, addBook, setDailyGoal, pendingFreezeEarned, clearPendingFreezeEarned, pendingGoalMet, clearPendingGoalMet } = useStore();
   const [showGoalModal, setShowGoalModal] = useState(false);
   const topPad = insets.top + (Platform.OS === 'web' ? 67 : 0);
 
@@ -78,6 +78,7 @@ export default function ShelfScreen() {
 
   const [selectedRec, setSelectedRec] = useState<typeof recommendedBooks[0] | null>(null);
   const [recPagesStr, setRecPagesStr] = useState('');
+  const [recommendationsExpanded, setRecommendationsExpanded] = useState(false);
   const sheetTranslateY = useRef(new Animated.Value(0)).current;
   const panResponder = useRef(
     PanResponder.create({
@@ -328,7 +329,7 @@ export default function ShelfScreen() {
               <View style={styles.recSection}>
                 <Text style={[styles.recLabel, { color: 'rgba(255,255,255,0.65)', fontFamily: 'Inter_600SemiBold' }]}>YOUR NEXT RECOMMENDED READS</Text>
                 <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 10, paddingVertical: 2 }}>
-                  {recommendedBooks.map(book => (
+                  {(recommendationsExpanded ? recommendedBooks : recommendedBooks.slice(0, 3)).map(book => (
                     <TouchableOpacity
                       key={book.id}
                       style={styles.recCard}
@@ -346,9 +347,24 @@ export default function ShelfScreen() {
                     </TouchableOpacity>
                   ))}
                 </ScrollView>
-                <View style={{ alignItems: 'center', marginTop: 4 }}>
-                  <Ionicons name="arrow-down-circle" size={26} color="rgba(255,255,255,0.5)" />
-                </View>
+                {recommendedBooks.length > 3 && (
+                  <TouchableOpacity
+                    style={styles.recMoreButton}
+                    onPress={() => {
+                      const expanding = !recommendationsExpanded;
+                      setRecommendationsExpanded(expanding);
+                      if (expanding) void refreshRecommendations();
+                    }}
+                    accessibilityRole="button"
+                    accessibilityLabel={recommendationsExpanded ? 'Show fewer recommendations' : 'Show more recommendations'}
+                    activeOpacity={0.75}
+                  >
+                    <Text style={[styles.recMoreText, { fontFamily: 'Inter_600SemiBold' }]}>
+                      {recommendationsExpanded ? 'Show fewer recommendations' : 'Show more recommendations'}
+                    </Text>
+                    <Ionicons name={recommendationsExpanded ? 'chevron-up-circle' : 'arrow-down-circle'} size={24} color="rgba(255,255,255,0.72)" />
+                  </TouchableOpacity>
+                )}
               </View>
             )}
           </>
@@ -490,7 +506,7 @@ export default function ShelfScreen() {
                     onPress={() => {
                       const pages = parseInt(recPagesStr, 10);
                       if (!pages || pages <= 0) return;
-                      addBook(selectedRec.title, selectedRec.author, pages, 'Literary Fiction', selectedRec.coverImageUri);
+                      addBook(selectedRec.title, selectedRec.author, pages, selectedRec.genre ?? 'Literary Fiction', selectedRec.coverImageUri);
                       setSelectedRec(null);
                     }}
                     activeOpacity={0.85}
@@ -594,6 +610,11 @@ const styles = StyleSheet.create({
   recTitle: { fontSize: 14, lineHeight: 18, letterSpacing: -0.2 },
   recAuthor: { fontSize: 12 },
   recReason: { fontSize: 11, marginTop: 2 },
+  recMoreButton: {
+    minHeight: 32, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 7,
+    marginTop: 2,
+  },
+  recMoreText: { color: 'rgba(255,255,255,0.82)', fontSize: 13 },
   goalToast: {
     position: 'absolute',
     top: 100,

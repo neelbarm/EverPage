@@ -124,7 +124,7 @@ export default function StatsScreen() {
     const d = new Date();
     const dow = d.getDay() === 0 ? 6 : d.getDay() - 1;
     d.setDate(d.getDate() - dow + i);
-    return d.toISOString().split('T')[0];
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
   });
 
   const goalProgress = Math.min(streak.todayMinutes / streak.dailyGoalMinutes, 1);

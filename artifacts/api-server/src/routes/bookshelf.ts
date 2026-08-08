@@ -16,6 +16,9 @@ function requireAuth(req: any, res: any): string | null {
 router.get("/bookshelf", async (req, res) => {
   const userId = requireAuth(req, res);
   if (!userId) return;
+  const requestedToday = typeof req.query.today === "string" && /^\d{4}-\d{2}-\d{2}$/.test(req.query.today)
+    ? req.query.today
+    : null;
 
   const [books, sessions, streakRows] = await Promise.all([
     db.select().from(npBooks).where(eq(npBooks.userId, userId)),
@@ -23,13 +26,19 @@ router.get("/bookshelf", async (req, res) => {
     db.select().from(npStreak).where(eq(npStreak.userId, userId)).limit(1),
   ]);
 
+  // A daily total is derived from durable session records, never trusted from
+  // the cached np_streak column. The client supplies its local calendar day so
+  // readers near midnight are not forced into the server's timezone.
+  const todayMinutes = requestedToday
+    ? sessions.reduce((total, session) => session.date === requestedToday ? total + Math.max(0, session.durationMinutes) : total, 0)
+    : (streakRows[0]?.todayMinutes ?? 0);
   const streak = streakRows[0]
     ? {
         currentStreak: streakRows[0].currentStreak,
         lastReadDate: streakRows[0].lastReadDate,
         checkedDays: JSON.parse(streakRows[0].checkedDays) as string[],
         dailyGoalMinutes: streakRows[0].dailyGoalMinutes,
-        todayMinutes: streakRows[0].todayMinutes,
+        todayMinutes,
         freezesLeft: streakRows[0].freezesLeft,
       }
     : null;
@@ -131,7 +140,16 @@ router.put("/bookshelf/streak", async (req, res) => {
   const userId = requireAuth(req, res);
   if (!userId) return;
 
-  const { currentStreak, lastReadDate, checkedDays, dailyGoalMinutes, todayMinutes, freezesLeft } = req.body ?? {};
+  const { currentStreak, lastReadDate, checkedDays, dailyGoalMinutes, todayDate, todayMinutes: legacyTodayMinutes, freezesLeft } = req.body ?? {};
+  const requestedToday = typeof todayDate === "string" && /^\d{4}-\d{2}-\d{2}$/.test(todayDate)
+    ? todayDate
+    : null;
+  const todaySessions = requestedToday
+    ? await db.select({ durationMinutes: npSessions.durationMinutes }).from(npSessions).where(and(eq(npSessions.userId, userId), eq(npSessions.date, requestedToday)))
+    : [];
+  const todayMinutes = requestedToday
+    ? todaySessions.reduce((total, session) => total + Math.max(0, session.durationMinutes), 0)
+    : (typeof legacyTodayMinutes === "number" ? legacyTodayMinutes : 0);
 
   const values = {
     userId,
@@ -139,7 +157,7 @@ router.put("/bookshelf/streak", async (req, res) => {
     lastReadDate: lastReadDate ?? "",
     checkedDays: JSON.stringify(checkedDays ?? []),
     dailyGoalMinutes: dailyGoalMinutes ?? 30,
-    todayMinutes: todayMinutes ?? 0,
+    todayMinutes,
     freezesLeft: freezesLeft ?? 2,
   };
 

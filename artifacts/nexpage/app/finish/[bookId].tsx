@@ -49,7 +49,8 @@ export default function FinishScreen() {
   const [quote, setQuote] = useState(book?.favoriteQuote ?? '');
   const isAlreadyFinished = !!book?.finishedAt;
 
-  const today = new Date().toISOString().split('T')[0];
+  const todayDate = new Date();
+  const today = `${todayDate.getFullYear()}-${String(todayDate.getMonth() + 1).padStart(2, '0')}-${String(todayDate.getDate()).padStart(2, '0')}`;
   const needsFreeze = streak.freezesLeft > 0 && !streak.checkedDays.includes(today);
 
   const nextBook = books.find(b => !b.finishedAt && b.id !== bookId);

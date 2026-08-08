@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useEffect, useRef, useState } from 'react';
-import { Platform } from 'react-native';
+import { AppState, Platform } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { getItem as getStoredItem } from '@/lib/storage';
 import { useAuth } from '@/lib/auth';
@@ -87,6 +87,7 @@ export interface RecommendedBook {
   coverImageUri?: string;
   reason: string;
   friendsCount: number;
+  genre?: string;
 }
 
 export interface SuggestedFriend {
@@ -108,6 +109,7 @@ interface StoreContextType {
   profile: UserProfile;
   reminder: ReminderSettings;
   recommendedBooks: RecommendedBook[];
+  refreshRecommendations: () => Promise<void>;
   suggestedFriends: SuggestedFriend[];
   isLoaded: boolean;
   pendingFreezeEarned: boolean;
@@ -130,7 +132,27 @@ const StoreContext = createContext<StoreContextType | null>(null);
 const AUTH_TOKEN_KEY = 'auth_session_token';
 
 function todayStr(): string {
-  return new Date().toISOString().split('T')[0];
+  // Reading days are based on the reader's local calendar, not UTC. Using an
+  // ISO timestamp here made a late-evening session count toward tomorrow for
+  // some readers (and left yesterday's total on the new day's goal).
+  const date = new Date();
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+}
+
+function minutesForDate(readingSessions: ReadingSession[], date: string): number {
+  return readingSessions.reduce((total, session) => {
+    if (session.date !== date) return total;
+    const minutes = Number(session.durationMinutes);
+    return total + (Number.isFinite(minutes) && minutes > 0 ? minutes : 0);
+  }, 0);
+}
+
+function withDerivedTodayMinutes(streakData: StreakData, readingSessions: ReadingSession[]): StreakData {
+  const todayMinutes = minutesForDate(readingSessions, todayStr());
+  return streakData.todayMinutes === todayMinutes ? streakData : { ...streakData, todayMinutes };
 }
 
 function generateId(): string {
@@ -257,10 +279,10 @@ const INITIAL_PROFILE: UserProfile = {
 };
 
 const RECOMMENDED: RecommendedBook[] = [
-  { id: 'rec1', title: 'Demon Copperhead', author: 'Barbara Kingsolver', coverColor: '#B85C38', coverImageUri: 'https://covers.openlibrary.org/b/isbn/9780063251922-M.jpg', reason: 'Highly rated literary fiction', friendsCount: 0 },
-  { id: 'rec2', title: 'Normal People', author: 'Sally Rooney', coverColor: '#4A7A9E', coverImageUri: 'https://covers.openlibrary.org/b/isbn/9780571334650-M.jpg', reason: 'Popular with readers like you', friendsCount: 0 },
-  { id: 'rec3', title: 'Educated', author: 'Tara Westover', coverColor: '#C09B3A', coverImageUri: 'https://covers.openlibrary.org/b/isbn/9780399590504-M.jpg', reason: 'Award-winning memoir', friendsCount: 0 },
-  { id: 'rec4', title: 'Lincoln in the Bardo', author: 'George Saunders', coverColor: '#5E4A7A', coverImageUri: 'https://covers.openlibrary.org/b/isbn/9780812985405-M.jpg', reason: 'Matches your taste', friendsCount: 0 },
+  { id: 'rec1', title: 'Demon Copperhead', author: 'Barbara Kingsolver', coverColor: '#B85C38', coverImageUri: 'https://covers.openlibrary.org/b/isbn/9780063251922-M.jpg', reason: 'Highly rated literary fiction', friendsCount: 0, genre: 'Literary Fiction' },
+  { id: 'rec2', title: 'Normal People', author: 'Sally Rooney', coverColor: '#4A7A9E', coverImageUri: 'https://covers.openlibrary.org/b/isbn/9780571334650-M.jpg', reason: 'Popular with readers like you', friendsCount: 0, genre: 'Contemporary Fiction' },
+  { id: 'rec3', title: 'Educated', author: 'Tara Westover', coverColor: '#C09B3A', coverImageUri: 'https://covers.openlibrary.org/b/isbn/9780399590504-M.jpg', reason: 'Award-winning memoir', friendsCount: 0, genre: 'Memoir' },
+  { id: 'rec4', title: 'Lincoln in the Bardo', author: 'George Saunders', coverColor: '#5E4A7A', coverImageUri: 'https://covers.openlibrary.org/b/isbn/9780812985405-M.jpg', reason: 'Matches your taste', friendsCount: 0, genre: 'Literary Fiction' },
 ];
 
 const SUGGESTED: SuggestedFriend[] = [
@@ -369,9 +391,10 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
         const raw = await AsyncStorage.getItem(STORAGE_KEY);
         if (raw) {
           const s = JSON.parse(raw);
+          const storedSessions = Array.isArray(s.sessions) ? s.sessions : [];
           if (s.books) setBooks(s.books);
-          if (s.sessions) setSessions(s.sessions);
-          if (s.streak) setStreak(s.streak);
+          setSessions(storedSessions);
+          if (s.streak) setStreak(withDerivedTodayMinutes(s.streak, storedSessions));
           if (s.profile) setProfile(s.profile);
           if (s.reminder) setReminderState(s.reminder);
         }
@@ -403,6 +426,30 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
     }
   }
 
+  // Reconcile whenever the app becomes active and on the local day boundary.
+  // This keeps a reader who leaves the app open overnight from seeing
+  // yesterday's total on today's goal.
+  useEffect(() => {
+    if (!isLoaded) return;
+    const reconcileToday = () => {
+      setStreak(current => {
+        const reconciled = withDerivedTodayMinutes(current, sessions);
+        if (reconciled === current) return current;
+        void persist(books, sessions, reconciled, profile, reminder);
+        return reconciled;
+      });
+    };
+    reconcileToday();
+    const appStateSubscription = AppState.addEventListener('change', state => {
+      if (state === 'active') reconcileToday();
+    });
+    const interval = setInterval(reconcileToday, 60_000);
+    return () => {
+      appStateSubscription.remove();
+      clearInterval(interval);
+    };
+  }, [books, isLoaded, profile, reminder, sessions]);
+
   useEffect(() => {
     if (!isLoaded) return;
     const today = todayStr();
@@ -422,23 +469,26 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
 
   async function hydrateFromCloud() {
     try {
-      const data = await apiFetch<{ books: any[]; sessions: any[]; streak: any | null }>('/bookshelf');
+      const data = await apiFetch<{ books: any[]; sessions: any[]; streak: any | null }>(`/bookshelf?today=${encodeURIComponent(todayStr())}`);
 
       const cloudHasData = data.books.length > 0 || data.sessions.length > 0 || data.streak !== null;
 
       if (cloudHasData) {
         const cloudBooks = data.books.map(rowToBook);
         const cloudSessions = data.sessions.map(rowToSession);
-        const cloudStreak = data.streak ?? undefined;
+        const cloudStreak = data.streak ? withDerivedTodayMinutes(data.streak, cloudSessions) : undefined;
 
-        if (cloudBooks.length > 0) setBooks(cloudBooks);
-        if (cloudSessions.length > 0) setSessions(cloudSessions);
+        // The cloud copy is canonical for a signed-in reader. In particular,
+        // do not leave old on-device sessions in place when their account has
+        // no matching cloud sessions.
+        setBooks(cloudBooks);
+        setSessions(cloudSessions);
         if (cloudStreak) setStreak(cloudStreak);
 
         await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify({
-          books: cloudBooks.length > 0 ? cloudBooks : books,
-          sessions: cloudSessions.length > 0 ? cloudSessions : sessions,
-          streak: cloudStreak ?? streak,
+          books: cloudBooks,
+          sessions: cloudSessions,
+          streak: cloudStreak ?? withDerivedTodayMinutes(streak, cloudSessions),
           profile,
           reminder,
         }));
@@ -491,7 +541,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
     try {
       await apiFetch('/bookshelf/streak', {
         method: 'PUT',
-        body: JSON.stringify(st),
+        body: JSON.stringify({ ...st, todayDate: todayStr() }),
       });
     } catch { /* non-blocking */ }
   }
@@ -502,7 +552,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
   }
 
   async function setDailyGoal(minutes: number) {
-    const newStreak = { ...streak, dailyGoalMinutes: minutes };
+    const newStreak = { ...withDerivedTodayMinutes(streak, sessions), dailyGoalMinutes: minutes };
     setStreak(newStreak);
     await persist(books, sessions, newStreak, profile, reminder);
     syncStreakToCloud(newStreak);
@@ -529,14 +579,21 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
     const newBooks = books.map(b =>
       b.id === bookId ? { ...b, currentPage: Math.min(endPage, b.totalPages) } : b
     );
-    const wasUnderGoal = streak.dailyGoalMinutes > 0 && streak.todayMinutes < streak.dailyGoalMinutes;
-    const newStreak = { ...streak, todayMinutes: streak.todayMinutes + durationMinutes };
+    const currentTodayMinutes = minutesForDate(sessions, todayStr());
+    const wasUnderGoal = streak.dailyGoalMinutes > 0 && currentTodayMinutes < streak.dailyGoalMinutes;
+    // Sessions, rather than a separately accumulated counter, are the source
+    // of truth for the daily goal. This avoids duplicate/missing minutes after
+    // a restart or cloud hydration.
+    const newStreak = { ...streak, todayMinutes: minutesForDate(newSessions, todayStr()) };
     const goalJustMet = wasUnderGoal && newStreak.todayMinutes >= streak.dailyGoalMinutes;
     let earnedFreeze = false;
     if (!newStreak.checkedDays.includes(todayStr())) {
       const yesterday = new Date();
       yesterday.setDate(yesterday.getDate() - 1);
-      const yStr = yesterday.toISOString().split('T')[0];
+      const yYear = yesterday.getFullYear();
+      const yMonth = String(yesterday.getMonth() + 1).padStart(2, '0');
+      const yDay = String(yesterday.getDate()).padStart(2, '0');
+      const yStr = `${yYear}-${yMonth}-${yDay}`;
       const previousStreak = newStreak.currentStreak;
       if (newStreak.lastReadDate === yStr || newStreak.lastReadDate === todayStr()) {
         if (newStreak.lastReadDate !== todayStr()) newStreak.currentStreak += 1;
@@ -573,9 +630,10 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
     if (goalJustMet) setPendingGoalMet(true);
     await persist(newBooks, newSessions, newStreak, newProfile, reminder);
     const updatedBook = newBooks.find(b => b.id === bookId);
-    if (updatedBook) syncBooksToCloud([updatedBook]);
-    syncSessionToCloud(session);
-    syncStreakToCloud(newStreak);
+    if (updatedBook) await syncBooksToCloud([updatedBook]);
+    await syncSessionToCloud(session);
+    await syncStreakToCloud(newStreak);
+    void fetchRecommendations();
     await cancelStreakRescueNotification();
     rescheduleStreakRescueForTomorrow();
   }
@@ -598,7 +656,9 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
     if (earnedFreeze) setPendingFreezeEarned(true);
     persist(newBooks, sessions, newStreak, newProfile, reminder);
     const finishedBook = newBooks.find(b => b.id === bookId);
-    if (finishedBook) syncBooksToCloud([finishedBook]);
+    if (finishedBook) {
+      void syncBooksToCloud([finishedBook]).then(() => fetchRecommendations());
+    }
     if (earnedFreeze) syncStreakToCloud(newStreak);
   }
 
@@ -637,7 +697,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
     const newBooks = [...books, newBook];
     setBooks(newBooks);
     persist(newBooks, sessions, streak, profile, reminder);
-    syncBooksToCloud([newBook]);
+    void syncBooksToCloud([newBook]).then(() => fetchRecommendations());
   }
 
   function updateBook(id: string, updates: Partial<Pick<Book, 'title' | 'author' | 'totalPages' | 'genre' | 'coverImageUri'>>) {
@@ -645,7 +705,9 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
     setBooks(newBooks);
     persist(newBooks, sessions, streak, profile, reminder);
     const updatedBook = newBooks.find(b => b.id === id);
-    if (updatedBook) syncBooksToCloud([updatedBook]);
+    if (updatedBook) {
+      void syncBooksToCloud([updatedBook]).then(() => fetchRecommendations());
+    }
   }
 
   function getBook(id: string) {
@@ -656,6 +718,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
     <StoreContext.Provider value={{
       books, sessions, friends, streak, profile, reminder,
       recommendedBooks,
+      refreshRecommendations: fetchRecommendations,
       suggestedFriends: SUGGESTED,
       isLoaded,
       pendingFreezeEarned,

@@ -1,6 +1,6 @@
 import { Router, type IRouter } from "express";
 import { db } from "@workspace/db";
-import { npUsers, npFollows, npActivity, npNudges, npBooks, npBlocks } from "@workspace/db/schema";
+import { npUsers, npFollows, npActivity, npNudges, npBooks, npBlocks, npSessions } from "@workspace/db/schema";
 import { eq, ilike, or, and, ne, sql, desc, not, inArray, gte } from "drizzle-orm";
 
 const router: IRouter = Router();
@@ -698,14 +698,19 @@ router.patch("/social/me/avatar", async (req, res) => {
 
 // Curated fallbacks so a fresh app (no friends, empty catalog) is never empty.
 const CURATED_RECS = [
-  { id: "rec_demon", title: "Demon Copperhead", author: "Barbara Kingsolver", coverColor: "#B85C38", coverImageUri: "https://covers.openlibrary.org/b/isbn/9780063251922-M.jpg", reason: "it's a modern classic", friendsCount: 0 },
-  { id: "rec_normal", title: "Normal People", author: "Sally Rooney", coverColor: "#4A7A9E", coverImageUri: "https://covers.openlibrary.org/b/isbn/9780571334650-M.jpg", reason: "new readers love it", friendsCount: 0 },
-  { id: "rec_educated", title: "Educated", author: "Tara Westover", coverColor: "#C09B3A", coverImageUri: "https://covers.openlibrary.org/b/isbn/9780399590504-M.jpg", reason: "it's an award-winning memoir", friendsCount: 0 },
-  { id: "rec_lincoln", title: "Lincoln in the Bardo", author: "George Saunders", coverColor: "#5E4A7A", coverImageUri: "https://covers.openlibrary.org/b/isbn/9780812985405-M.jpg", reason: "it's bold and inventive", friendsCount: 0 },
+  { id: "rec_demon", title: "Demon Copperhead", author: "Barbara Kingsolver", genre: "Literary Fiction", coverColor: "#B85C38", coverImageUri: "https://covers.openlibrary.org/b/isbn/9780063251922-M.jpg", reason: "it matches your literary fiction reading", friendsCount: 0 },
+  { id: "rec_lincoln", title: "Lincoln in the Bardo", author: "George Saunders", genre: "Literary Fiction", coverColor: "#5E4A7A", coverImageUri: "https://covers.openlibrary.org/b/isbn/9780812985405-M.jpg", reason: "it matches your literary fiction reading", friendsCount: 0 },
+  { id: "rec_normal", title: "Normal People", author: "Sally Rooney", genre: "Contemporary Fiction", coverColor: "#4A7A9E", coverImageUri: "https://covers.openlibrary.org/b/isbn/9780571334650-M.jpg", reason: "it matches your contemporary fiction reading", friendsCount: 0 },
+  { id: "rec_pachinko", title: "Pachinko", author: "Min Jin Lee", genre: "Historical Fiction", coverColor: "#B54935", coverImageUri: "https://covers.openlibrary.org/b/isbn/9781455563937-M.jpg", reason: "it matches your historical fiction reading", friendsCount: 0 },
+  { id: "rec_educated", title: "Educated", author: "Tara Westover", genre: "Memoir", coverColor: "#C09B3A", coverImageUri: "https://covers.openlibrary.org/b/isbn/9780399590504-M.jpg", reason: "it matches your memoir reading", friendsCount: 0 },
+  { id: "rec_project_hail_mary", title: "Project Hail Mary", author: "Andy Weir", genre: "Science Fiction", coverColor: "#315C83", coverImageUri: "https://covers.openlibrary.org/b/isbn/9780593135204-M.jpg", reason: "it matches your science fiction reading", friendsCount: 0 },
+  { id: "rec_tomorrow", title: "Tomorrow, and Tomorrow, and Tomorrow", author: "Gabrielle Zevin", genre: "Contemporary Fiction", coverColor: "#D58462", coverImageUri: "https://covers.openlibrary.org/b/isbn/9780593321201-M.jpg", reason: "readers with similar tastes love it", friendsCount: 0 },
+  { id: "rec_circe", title: "Circe", author: "Madeline Miller", genre: "Fantasy", coverColor: "#80613E", coverImageUri: "https://covers.openlibrary.org/b/isbn/9780316556347-M.jpg", reason: "readers with similar tastes love it", friendsCount: 0 },
 ];
 
 const normKey = (t: string, a: string) =>
   `${(t ?? "").trim().toLowerCase()}|${(a ?? "").trim().toLowerCase()}`;
+const normGenre = (genre: string | null | undefined) => (genre ?? "").trim().toLowerCase().replace(/\s+/g, " ");
 
 // Author values that mean "no real author" — books with these must never be recommended.
 const BAD_AUTHORS = new Set([
@@ -728,20 +733,41 @@ function isQualityRec(a: { title: string; author: string; coverImageUri: string 
   return true;
 }
 
-// Data-driven recommendations: books friends are reading, then your top genre, then trending.
+// Data-driven recommendations: the genres a reader has actually spent time
+// reading rank first. Friends and broader popularity break ties, never replace
+// that personal signal.
 router.get("/social/recommendations", async (req, res) => {
   const userId = requireAuth(req, res);
   if (!userId) return;
 
-  // Books already on my shelf (to exclude) + my top genre
+  // Books already on my shelf (to exclude), plus session-weighted genre taste.
   const myBooks = await db
-    .select({ title: npBooks.title, author: npBooks.author, genre: npBooks.genre })
+    .select({ id: npBooks.id, title: npBooks.title, author: npBooks.author, genre: npBooks.genre })
     .from(npBooks)
     .where(eq(npBooks.userId, userId));
   const myKeys = new Set(myBooks.map((b) => normKey(b.title, b.author)));
-  const genreCount: Record<string, number> = {};
-  for (const b of myBooks) if (b.genre) genreCount[b.genre] = (genreCount[b.genre] ?? 0) + 1;
-  const myTopGenre = Object.entries(genreCount).sort((a, b) => b[1] - a[1])[0]?.[0] ?? null;
+  const sessions = await db
+    .select({ bookId: npSessions.bookId, durationMinutes: npSessions.durationMinutes })
+    .from(npSessions)
+    .where(eq(npSessions.userId, userId));
+  const booksById = new Map(myBooks.map((book) => [book.id, book]));
+  const genreScores = new Map<string, number>();
+  const genreLabels = new Map<string, string>();
+  // A saved book is a small fallback signal. Minutes logged against it are a
+  // much stronger signal, so recommendations adapt as the reader actually reads.
+  for (const book of myBooks) {
+    const genre = normGenre(book.genre);
+    if (!genre) continue;
+    genreLabels.set(genre, book.genre.trim());
+    genreScores.set(genre, (genreScores.get(genre) ?? 0) + 1);
+  }
+  for (const session of sessions) {
+    const book = booksById.get(session.bookId);
+    const genre = normGenre(book?.genre);
+    if (!genre) continue;
+    genreLabels.set(genre, book!.genre.trim());
+    genreScores.set(genre, (genreScores.get(genre) ?? 0) + Math.max(1, session.durationMinutes ?? 0));
+  }
 
   // Who I follow
   const followRows = await db
@@ -805,27 +831,39 @@ router.get("/social/recommendations", async (req, res) => {
       coverImageUri: a.coverImageUri ?? undefined,
       reason,
       friendsCount: a.friends.size,
+      genre: a.genre || undefined,
     });
   };
 
-  // Tier 1 — friends are reading it
-  aggs.filter((a) => a.friends.size > 0)
-    .sort((x, y) => y.friends.size - x.friends.size)
-    .forEach((a) => push(a, a.friends.size === 1 ? "a friend is reading it" : `${a.friends.size} friends are reading it`));
+  const genreScoreFor = (a: Agg) => genreScores.get(normGenre(a.genre)) ?? 0;
+  const rankedCandidates = [...aggs].sort((a, b) => {
+    const genreDifference = genreScoreFor(b) - genreScoreFor(a);
+    if (genreDifference !== 0) return genreDifference;
+    const friendsDifference = b.friends.size - a.friends.size;
+    if (friendsDifference !== 0) return friendsDifference;
+    return b.owners.size - a.owners.size;
+  });
 
-  // Tier 2 — your top genre
-  if (myTopGenre) {
-    aggs.filter((a) => a.genre === myTopGenre)
-      .sort((x, y) => y.owners.size - x.owners.size)
-      .forEach((a) => push(a, `you read ${myTopGenre.toLowerCase()}`));
+  for (const candidate of rankedCandidates) {
+    const genre = normGenre(candidate.genre);
+    const genreScore = genreScoreFor(candidate);
+    const genreLabel = genreLabels.get(genre) ?? candidate.genre;
+    if (genreScore > 0) {
+      push(candidate, `it matches your ${genreLabel.toLowerCase()} reading`);
+    } else if (candidate.friends.size > 0) {
+      push(candidate, candidate.friends.size === 1 ? "a friend is reading it" : `${candidate.friends.size} friends are reading it`);
+    } else {
+      push(candidate, "it's popular right now");
+    }
   }
 
-  // Tier 3 — trending overall
-  aggs.sort((x, y) => y.owners.size - x.owners.size)
-    .forEach((a) => push(a, "it's popular right now"));
-
-  // Fallback — curated, so the section is never empty
-  for (const c of CURATED_RECS) {
+  // Fallback — start with curated books in the same genres, then use a varied
+  // catalog only if there are not enough matches to fill the shelf.
+  const curated = [...CURATED_RECS].sort((a, b) => {
+    const scoreDifference = (genreScores.get(normGenre(b.genre)) ?? 0) - (genreScores.get(normGenre(a.genre)) ?? 0);
+    return scoreDifference;
+  });
+  for (const c of curated) {
     if (picked.length >= 6) break;
     const key = normKey(c.title, c.author);
     if (myKeys.has(key) || used.has(key)) continue;

@@ -514,7 +514,11 @@ export default function FriendsScreen() {
   const friendsAtRisk = following.filter(u => !usersReadToday.has(u.id));
 
   // Compare tab — my week totals vs each friend's (head-to-head)
-  const weekCutoff = (() => { const d = new Date(); d.setDate(d.getDate() - 6); return d.toISOString().split('T')[0]; })();
+  const weekCutoff = (() => {
+    const d = new Date();
+    d.setDate(d.getDate() - 6);
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+  })();
   const myWeekSessions = sessions.filter(s => s.date >= weekCutoff);
   const myWeekMinutes = myWeekSessions.reduce((a, s) => a + s.durationMinutes, 0);
   const myWeekPages = myWeekSessions.reduce((a, s) => a + Math.max(0, s.endPage - s.startPage), 0);
