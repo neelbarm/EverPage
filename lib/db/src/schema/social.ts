@@ -1,4 +1,4 @@
-import { pgTable, text, integer, timestamp, primaryKey, boolean, date } from "drizzle-orm/pg-core";
+import { pgTable, text, integer, timestamp, primaryKey, boolean, date, index } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod/v4";
 
@@ -59,6 +59,23 @@ export const npNudges = pgTable("np_nudges", {
     .references(() => npUsers.id, { onDelete: "cascade" }),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
+
+// Password-reset secrets are stored only as hashes. The raw token is sent to
+// the account holder once and is never retained in the database.
+export const npPasswordResetTokens = pgTable(
+  "np_password_reset_tokens",
+  {
+    id: text("id").primaryKey(),
+    userId: text("user_id")
+      .notNull()
+      .references(() => npUsers.id, { onDelete: "cascade" }),
+    tokenHash: text("token_hash").notNull().unique(),
+    expiresAt: timestamp("expires_at").notNull(),
+    usedAt: timestamp("used_at"),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+  },
+  (table) => [index("IDX_np_password_reset_tokens_user").on(table.userId)],
+);
 
 // User blocking — required by App Store Guideline 1.2 (UGC apps must let users
 // block abusive accounts). Blocking is one-directional from blocker -> blocked.

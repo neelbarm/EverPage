@@ -110,6 +110,10 @@ function RootLayoutNav() {
         name="legal"
         options={{ headerShown: false }}
       />
+      <Stack.Screen
+        name="reset-password"
+        options={{ headerShown: false, presentation: "modal" }}
+      />
     </Stack>
   );
 }

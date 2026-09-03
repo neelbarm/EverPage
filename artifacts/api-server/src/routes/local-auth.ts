@@ -1,8 +1,8 @@
 import { Router, type IRouter, type Request, type Response } from "express";
 import bcrypt from "bcryptjs";
 import crypto from "crypto";
-import { db, npUsers, npBooks, npSessions, npStreak, npMarginNotes, npRoomMembers, npRoomMessages } from "@workspace/db";
-import { eq } from "drizzle-orm";
+import { db, npUsers, npBooks, npSessions, npStreak, npMarginNotes, npRoomMembers, npRoomMessages, npPasswordResetTokens, sessionsTable } from "@workspace/db";
+import { and, eq, gt, isNull, sql } from "drizzle-orm";
 import {
   createSession,
   deleteSession,
@@ -11,6 +11,9 @@ import {
 } from "../lib/auth";
 
 const router: IRouter = Router();
+const PASSWORD_RESET_TTL_MS = 60 * 60 * 1000;
+const PASSWORD_RESET_FROM = process.env.EMAIL_FROM;
+const RESEND_API_URL = "https://api.resend.com/emails";
 
 // --- helpers ---
 
@@ -24,6 +27,37 @@ function hashPassword(plain: string): string {
 
 function checkPassword(plain: string, hash: string): boolean {
   return bcrypt.compareSync(plain, hash);
+}
+
+function hashResetToken(token: string): string {
+  return crypto.createHash("sha256").update(token).digest("hex");
+}
+
+function getPasswordResetUrl(token: string): string {
+  return `everpage://reset-password?token=${encodeURIComponent(token)}`;
+}
+
+async function sendPasswordResetEmail(email: string, token: string): Promise<boolean> {
+  const apiKey = process.env.RESEND_API_KEY;
+  if (!apiKey || !PASSWORD_RESET_FROM) return false;
+
+  const resetUrl = getPasswordResetUrl(token);
+  const response = await fetch(RESEND_API_URL, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${apiKey}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      from: PASSWORD_RESET_FROM,
+      to: [email],
+      subject: "Reset your EverPage password",
+      html: `<p>We received a request to reset your EverPage password.</p><p><a href="${resetUrl}">Reset your password</a></p><p>This link expires in one hour. If you did not request a reset, you can ignore this email.</p>`,
+      text: `We received a request to reset your EverPage password. Open this link in the EverPage app to choose a new password: ${resetUrl}\n\nThis link expires in one hour. If you did not request a reset, you can ignore this email.`,
+    }),
+  });
+
+  return response.ok;
 }
 
 function parseBirthday(value: unknown): string | null {
@@ -184,6 +218,92 @@ router.post("/local-auth/login", async (req: Request, res: Response) => {
       profileImageUrl: null,
     },
   });
+});
+
+router.post("/local-auth/forgot-password", async (req: Request, res: Response) => {
+  const email = typeof req.body?.email === "string" ? req.body.email.toLowerCase().trim() : "";
+  const genericResponse = { success: true, message: "If an EverPage account exists for that email, we sent a reset link." };
+
+  if (!email) {
+    res.status(400).json({ error: "Email is required" });
+    return;
+  }
+
+  const [user] = await db
+    .select({ id: npUsers.id, email: npUsers.email })
+    .from(npUsers)
+    .where(eq(npUsers.email, email))
+    .limit(1);
+
+  // Never reveal whether an address has an account.
+  if (!user?.email) {
+    res.json(genericResponse);
+    return;
+  }
+
+  const token = crypto.randomBytes(32).toString("base64url");
+  const tokenHash = hashResetToken(token);
+  await db.delete(npPasswordResetTokens).where(eq(npPasswordResetTokens.userId, user.id));
+  await db.insert(npPasswordResetTokens).values({
+    id: generateId(),
+    userId: user.id,
+    tokenHash,
+    expiresAt: new Date(Date.now() + PASSWORD_RESET_TTL_MS),
+  });
+
+  try {
+    const delivered = await sendPasswordResetEmail(user.email, token);
+    if (!delivered) {
+      await db.delete(npPasswordResetTokens).where(eq(npPasswordResetTokens.tokenHash, tokenHash));
+      req.log?.error("Password reset email is not configured or could not be delivered");
+      res.status(503).json({ error: "Password reset is temporarily unavailable. Please try again later." });
+      return;
+    }
+  } catch (error) {
+    await db.delete(npPasswordResetTokens).where(eq(npPasswordResetTokens.tokenHash, tokenHash));
+    req.log?.error({ error }, "Failed to send password reset email");
+    res.status(503).json({ error: "Password reset is temporarily unavailable. Please try again later." });
+    return;
+  }
+
+  res.json(genericResponse);
+});
+
+router.post("/local-auth/reset-password", async (req: Request, res: Response) => {
+  const token = typeof req.body?.token === "string" ? req.body.token : "";
+  const newPassword = typeof req.body?.newPassword === "string" ? req.body.newPassword : "";
+  if (!token || newPassword.length < 6) {
+    res.status(400).json({ error: "A valid reset link and a password of at least 6 characters are required" });
+    return;
+  }
+
+  const tokenHash = hashResetToken(token);
+  const [reset] = await db
+    .select()
+    .from(npPasswordResetTokens)
+    .where(and(
+      eq(npPasswordResetTokens.tokenHash, tokenHash),
+      isNull(npPasswordResetTokens.usedAt),
+      gt(npPasswordResetTokens.expiresAt, new Date()),
+    ))
+    .limit(1);
+
+  if (!reset) {
+    res.status(400).json({ error: "This reset link is invalid or has expired. Request a new one." });
+    return;
+  }
+
+  await db.transaction(async (tx) => {
+    await tx.update(npUsers)
+      .set({ passwordHash: hashPassword(newPassword), updatedAt: new Date() })
+      .where(eq(npUsers.id, reset.userId));
+    await tx.update(npPasswordResetTokens)
+      .set({ usedAt: new Date() })
+      .where(eq(npPasswordResetTokens.id, reset.id));
+    await tx.delete(sessionsTable).where(sql`${sessionsTable.sess}->'user'->>'id' = ${reset.userId}`);
+  });
+
+  res.json({ success: true });
 });
 
 router.get("/local-auth/me", async (req: Request, res: Response) => {

@@ -7,7 +7,11 @@ import type { AuthUser } from "@workspace/api-zod";
 
 export const ISSUER_URL = process.env.ISSUER_URL ?? "https://replit.com/oidc";
 export const SESSION_COOKIE = "sid";
-export const SESSION_TTL = 7 * 24 * 60 * 60 * 1000;
+// Keep a user signed in for 30 days and refresh an active session before the
+// final week. The old fixed seven-day expiry logged out every active reader at
+// once, even when they were regularly using the app.
+export const SESSION_TTL = 30 * 24 * 60 * 60 * 1000;
+const SESSION_RENEWAL_WINDOW = 7 * 24 * 60 * 60 * 1000;
 
 export interface SessionData {
   user: AuthUser;
@@ -47,6 +51,13 @@ export async function getSession(sid: string): Promise<SessionData | null> {
   if (!row || row.expire < new Date()) {
     if (row) await deleteSession(sid);
     return null;
+  }
+
+  if (row.expire.getTime() - Date.now() < SESSION_RENEWAL_WINDOW) {
+    await db
+      .update(sessionsTable)
+      .set({ expire: new Date(Date.now() + SESSION_TTL) })
+      .where(eq(sessionsTable.sid, sid));
   }
 
   return row.sess as unknown as SessionData;

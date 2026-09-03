@@ -18,6 +18,8 @@ interface AuthContextValue {
   isAuthenticated: boolean;
   login: (email: string, password: string) => Promise<void>;
   register: (email: string, password: string, username: string, displayName: string, birthday: string) => Promise<void>;
+  requestPasswordReset: (email: string) => Promise<string>;
+  resetPassword: (token: string, newPassword: string) => Promise<void>;
   logout: () => Promise<void>;
   changePassword: (currentPassword: string, newPassword: string) => Promise<void>;
   deleteAccount: (password: string) => Promise<void>;
@@ -29,6 +31,8 @@ const AuthContext = createContext<AuthContextValue>({
   isAuthenticated: false,
   login: async () => {},
   register: async () => {},
+  requestPasswordReset: async () => "",
+  resetPassword: async () => {},
   logout: async () => {},
   changePassword: async () => {},
   deleteAccount: async () => {},
@@ -129,6 +133,33 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   }, []);
 
+  const requestPasswordReset = useCallback(async (email: string): Promise<string> => {
+    const apiBase = getApiBaseUrl();
+    if (!apiBase) throw new Error("API base URL not configured");
+
+    const res = await fetch(`${apiBase}/api/local-auth/forgot-password`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ email }),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(data.error || "Could not send a reset link. Please try again.");
+    return data.message || "If an EverPage account exists for that email, we sent a reset link.";
+  }, []);
+
+  const resetPassword = useCallback(async (token: string, newPassword: string): Promise<void> => {
+    const apiBase = getApiBaseUrl();
+    if (!apiBase) throw new Error("API base URL not configured");
+
+    const res = await fetch(`${apiBase}/api/local-auth/reset-password`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ token, newPassword }),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(data.error || "Could not reset password. Please request a new link.");
+  }, []);
+
   const changePassword = useCallback(async (currentPassword: string, newPassword: string) => {
     const apiBase = getApiBaseUrl();
     if (!apiBase) throw new Error("API base URL not configured");
@@ -200,6 +231,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         isAuthenticated: !!user,
         login,
         register,
+        requestPasswordReset,
+        resetPassword,
         logout,
         changePassword,
         deleteAccount,

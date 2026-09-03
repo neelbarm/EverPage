@@ -47,16 +47,17 @@ export default function RegisterModal({
 }) {
   const colors = useColors();
   const { registerUser, socialProfile } = useSocial();
-  const { isAuthenticated, login, register } = useAuth();
+  const { isAuthenticated, login, register, requestPasswordReset } = useAuth();
 
   // Auth state
-  const [mode, setMode] = useState<'login' | 'register'>(defaultMode);
+  const [mode, setMode] = useState<'login' | 'register' | 'forgot'>(defaultMode);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [birthday, setBirthday] = useState('');
   const [authError, setAuthError] = useState('');
   const [authLoading, setAuthLoading] = useState(false);
+  const [resetMessage, setResetMessage] = useState('');
 
   // Social profile state
   const [displayName, setDisplayName] = useState('');
@@ -78,6 +79,7 @@ export default function RegisterModal({
       setBirthday('');
       setAuthError('');
       setAuthLoading(false);
+      setResetMessage('');
       setDisplayName('');
       setUsername('');
       setSelectedColor(AVATAR_COLORS[0]);
@@ -129,6 +131,22 @@ export default function RegisterModal({
       }
     } catch (e: any) {
       setAuthError(e?.message || 'Something went wrong. Try again.');
+    } finally {
+      setAuthLoading(false);
+    }
+  }
+
+  async function handleForgotPassword() {
+    const e = email.trim().toLowerCase();
+    if (!e) { setAuthError('Enter your email.'); return; }
+    setAuthError('');
+    setResetMessage('');
+    setAuthLoading(true);
+    try {
+      const message = await requestPasswordReset(e);
+      setResetMessage(message);
+    } catch (e: any) {
+      setAuthError(e?.message || 'Could not send a reset link. Please try again.');
     } finally {
       setAuthLoading(false);
     }
@@ -250,7 +268,7 @@ export default function RegisterModal({
       >
         <View style={[styles.header, { borderBottomColor: colors.border }]}>
           <Text style={[styles.title, { color: colors.foreground, fontFamily: 'Inter_700Bold' }]}>
-            {mode === 'login' ? 'Sign in' : 'Create account'}
+            {mode === 'login' ? 'Sign in' : mode === 'register' ? 'Create account' : 'Reset password'}
           </Text>
           <TouchableOpacity onPress={onClose} activeOpacity={0.7}>
             <Ionicons name="close" size={24} color={colors.mutedForeground} />
@@ -284,17 +302,25 @@ export default function RegisterModal({
             returnKeyType="next"
           />
 
-          <Text style={[styles.label, { color: colors.mutedForeground, fontFamily: 'Inter_600SemiBold' }]}>PASSWORD</Text>
-          <TextInput
-            style={[styles.input, { backgroundColor: colors.muted, color: colors.foreground, borderColor: colors.border, fontFamily: 'Inter_400Regular' }]}
-            placeholder="••••••••"
-            placeholderTextColor={colors.mutedForeground}
-            value={password}
-            onChangeText={setPassword}
-            secureTextEntry
-            returnKeyType={mode === 'register' ? 'next' : 'done'}
-            onSubmitEditing={mode === 'login' ? handleAuth : undefined}
-          />
+          {mode === 'forgot' && (
+            <Text style={[styles.resetHint, { color: colors.mutedForeground, fontFamily: 'Inter_400Regular' }]}>We’ll email a one-hour reset link if this address has an EverPage account.</Text>
+          )}
+
+          {mode !== 'forgot' && (
+            <>
+              <Text style={[styles.label, { color: colors.mutedForeground, fontFamily: 'Inter_600SemiBold' }]}>PASSWORD</Text>
+              <TextInput
+                style={[styles.input, { backgroundColor: colors.muted, color: colors.foreground, borderColor: colors.border, fontFamily: 'Inter_400Regular' }]}
+                placeholder="••••••••"
+                placeholderTextColor={colors.mutedForeground}
+                value={password}
+                onChangeText={setPassword}
+                secureTextEntry
+                returnKeyType={mode === 'register' ? 'next' : 'done'}
+                onSubmitEditing={mode === 'login' ? handleAuth : undefined}
+              />
+            </>
+          )}
 
           {mode === 'register' && (
             <>
@@ -333,23 +359,33 @@ export default function RegisterModal({
             <Text style={[styles.errorText, { color: '#C0392B', fontFamily: 'Inter_400Regular' }]}>{authError}</Text>
           )}
 
+          {resetMessage !== '' && (
+            <Text style={[styles.resetMessage, { color: colors.mutedForeground, fontFamily: 'Inter_400Regular' }]}>{resetMessage}</Text>
+          )}
+
+          {mode === 'login' && (
+            <TouchableOpacity onPress={() => { setMode('forgot'); setAuthError(''); setResetMessage(''); }} activeOpacity={0.7} style={styles.forgotBtn}>
+              <Text style={[styles.switchText, { color: colors.primary, fontFamily: 'Inter_500Medium' }]}>Forgot password?</Text>
+            </TouchableOpacity>
+          )}
+
           <TouchableOpacity
             style={[styles.saveBtn, { backgroundColor: colors.primary }, authLoading && { opacity: 0.6 }]}
-            onPress={handleAuth}
+            onPress={mode === 'forgot' ? handleForgotPassword : handleAuth}
             disabled={authLoading}
             activeOpacity={0.85}
           >
             {authLoading
               ? <ActivityIndicator color="#fff" />
               : <Text style={[styles.saveBtnText, { color: colors.primaryForeground, fontFamily: 'Inter_600SemiBold' }]}>
-                  {mode === 'login' ? 'Sign in' : 'Create account'}
+                  {mode === 'login' ? 'Sign in' : mode === 'register' ? 'Create account' : 'Send reset link'}
                 </Text>
             }
           </TouchableOpacity>
 
-          <TouchableOpacity onPress={() => { setMode(mode === 'login' ? 'register' : 'login'); setAuthError(''); }} activeOpacity={0.7} style={styles.switchBtn}>
+          <TouchableOpacity onPress={() => { setMode(mode === 'login' ? 'register' : 'login'); setAuthError(''); setResetMessage(''); }} activeOpacity={0.7} style={styles.switchBtn}>
             <Text style={[styles.switchText, { color: colors.primary, fontFamily: 'Inter_500Medium' }]}>
-              {mode === 'login' ? "Don't have an account? Create one" : "Already have an account? Sign in"}
+              {mode === 'login' ? "Don't have an account? Create one" : mode === 'register' ? "Already have an account? Sign in" : 'Back to sign in'}
             </Text>
           </TouchableOpacity>
         </ScrollView>
@@ -372,8 +408,11 @@ const styles = StyleSheet.create({
   atSign: { fontSize: 16, paddingRight: 2 },
   inputInline: { flex: 1, paddingVertical: 12, fontSize: 15 },
   errorText: { fontSize: 14, marginTop: 4 },
+  resetMessage: { fontSize: 14, marginTop: 4, lineHeight: 20, textAlign: 'center' },
+  resetHint: { fontSize: 13, lineHeight: 19, marginTop: 4 },
   saveBtn: { marginTop: 20, paddingVertical: 15, borderRadius: 14, alignItems: 'center' },
   saveBtnText: { fontSize: 16 },
+  forgotBtn: { alignItems: 'flex-end', marginTop: 4 },
   switchBtn: { alignItems: 'center', marginTop: 12 },
   switchText: { fontSize: 14 },
   birthdayHint: { fontSize: 12, lineHeight: 17 },
