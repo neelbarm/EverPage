@@ -9,9 +9,15 @@ import React, {
 import { Platform } from 'react-native';
 import { getItem as getStoredItem, setItem as setStoredItem } from '@/lib/storage';
 import { useAuth } from '@/lib/auth';
+import { localDateKey } from '@/lib/reliabilityPolicies';
 
 const AUTH_TOKEN_KEY = 'auth_session_token';
 const NUDGE_READ_TIME_KEY = 'nudge_last_read_time';
+const GUEST_ACCOUNT_ID = 'guest';
+
+function nudgeReadKey(accountId: string): string {
+  return `${NUDGE_READ_TIME_KEY}:${encodeURIComponent(accountId)}`;
+}
 
 export interface SocialUser {
   id: string;
@@ -80,7 +86,7 @@ interface SocialContextType {
   postRecommendation: (bookTitle: string, bookAuthor: string) => Promise<void>;
   refreshFeed: () => Promise<void>;
   isFollowing: (userId: string) => boolean;
-  sendNudge: (userId: string) => Promise<{ alreadyNudged: boolean; delivery: 'push' | 'in_app' }>;
+  sendNudge: (userId: string) => Promise<{ alreadyNudged: boolean; delivery: 'queued' | 'in_app' | 'failed' }>;
   hasNudged: (userId: string) => boolean;
   blockedUsers: SocialUser[];
   blockUser: (userId: string) => Promise<void>;
@@ -107,7 +113,7 @@ function getApiBase(): string {
   return '/api';
 }
 
-async function getAuthToken(): Promise<string | null> {
+async function getStoredAuthToken(): Promise<string | null> {
   try {
     return await getStoredItem(AUTH_TOKEN_KEY);
   } catch {
@@ -115,11 +121,11 @@ async function getAuthToken(): Promise<string | null> {
   }
 }
 
-async function apiFetch<T>(
+async function apiFetchWithToken<T>(
   path: string,
+  token: string,
   options: RequestInit = {},
 ): Promise<T> {
-  const token = await getAuthToken();
   const headers: Record<string, string> = {
     'Content-Type': 'application/json',
     ...(token ? { 'Authorization': `Bearer ${token}` } : {}),
@@ -134,7 +140,7 @@ async function apiFetch<T>(
 }
 
 export function SocialProvider({ children }: { children: React.ReactNode }) {
-  const { isAuthenticated, isLoading: authLoading } = useAuth();
+  const { user, isAuthenticated, isLoading: authLoading } = useAuth();
   const [socialProfile, setSocialProfile] = useState<(SocialUser & { nudgesEnabled: boolean }) | null>(null);
   const [following, setFollowing] = useState<SocialUser[]>([]);
   const [followers, setFollowers] = useState<SocialUser[]>([]);
@@ -147,12 +153,53 @@ export function SocialProvider({ children }: { children: React.ReactNode }) {
   const [lastReadNudgeTime, setLastReadNudgeTime] = useState<number>(() => Date.now());
   const [isLoading, setIsLoading] = useState(false);
   const initialized = useRef(false);
+  const identityVersion = useRef(0);
+  const accountId = user?.id ?? GUEST_ACCOUNT_ID;
+  const mounted = useRef(true);
+  const verifiedToken = useRef<string | null>(null);
+
+  async function getAuthToken(): Promise<string> {
+    if (!mounted.current || accountId === GUEST_ACCOUNT_ID) throw new Error('Not authenticated');
+    if (verifiedToken.current) return verifiedToken.current;
+    const token = await getStoredAuthToken();
+    if (!token || !mounted.current) throw new Error('Not authenticated');
+    const identity = await apiFetchWithToken<{ user?: { id?: string } }>('/local-auth/me', token);
+    if (!mounted.current || identity.user?.id !== accountId) throw new Error('Account changed. Please retry.');
+    verifiedToken.current = token;
+    return token;
+  }
+
+  async function apiFetch<T>(path: string, options: RequestInit = {}): Promise<T> {
+    const token = await getAuthToken();
+    if (!mounted.current) throw new Error('Account changed. Please retry.');
+    return apiFetchWithToken<T>(path, token, options);
+  }
 
   useEffect(() => {
-    getStoredItem(NUDGE_READ_TIME_KEY).then(val => {
+    mounted.current = true;
+    const version = identityVersion.current + 1;
+    identityVersion.current = version;
+    initialized.current = false;
+    setSocialProfile(null);
+    setFollowing([]);
+    setFollowers([]);
+    setFeed([]);
+    setLeaderboard([]);
+    setSuggestedUsers([]);
+    setNudgeHistory([]);
+    setBlockedUsers([]);
+    setNudgedUserIds([]);
+    setLastReadNudgeTime(Date.now());
+    getStoredItem(nudgeReadKey(accountId)).then(val => {
+      if (version !== identityVersion.current) return;
       if (val) setLastReadNudgeTime(Number(val));
     }).catch(() => {});
-  }, []);
+    return () => {
+      mounted.current = false;
+      verifiedToken.current = null;
+      identityVersion.current += 1;
+    };
+  }, [accountId]);
 
   useEffect(() => {
     if (authLoading) return;
@@ -173,31 +220,34 @@ export function SocialProvider({ children }: { children: React.ReactNode }) {
       initialized.current = true;
       loadProfile();
     }
-  }, [isAuthenticated, authLoading]);
+  }, [isAuthenticated, authLoading, accountId]);
 
   async function loadProfile() {
+    const version = identityVersion.current;
     try {
       const profile = await apiFetch<(SocialUser & { nudgesEnabled: boolean }) | null>('/social/me');
+      if (version !== identityVersion.current) return;
       setSocialProfile(profile);
       if (profile) {
-        loadSocialData();
+        void loadSocialData(version);
       }
     } catch { /* offline */ }
   }
 
-  async function loadSocialData() {
+  async function loadSocialData(expectedVersion = identityVersion.current) {
     setIsLoading(true);
     try {
       const [followingData, followersData, feedData, boardData, suggestData, nudgesData, blockedData, sentNudgesData] = await Promise.allSettled([
         apiFetch<SocialUser[]>('/social/following'),
         apiFetch<SocialUser[]>('/social/followers'),
         apiFetch<ActivityItem[]>('/social/feed'),
-        apiFetch<LeaderboardEntry[]>('/social/leaderboard'),
+        apiFetch<LeaderboardEntry[]>(`/social/leaderboard?today=${localDateKey(new Date())}`),
         apiFetch<SocialUser[]>('/social/suggested'),
         apiFetch<NudgeHistoryItem[]>('/social/nudges'),
         apiFetch<SocialUser[]>('/social/blocked'),
         apiFetch<string[]>('/social/nudges/sent'),
       ]);
+      if (expectedVersion !== identityVersion.current) return;
       if (followingData.status === 'fulfilled') setFollowing(followingData.value);
       if (followersData.status === 'fulfilled') setFollowers(followersData.value);
       if (feedData.status === 'fulfilled') setFeed(feedData.value);
@@ -207,7 +257,7 @@ export function SocialProvider({ children }: { children: React.ReactNode }) {
       if (blockedData.status === 'fulfilled') setBlockedUsers(blockedData.value);
       if (sentNudgesData.status === 'fulfilled' && Array.isArray(sentNudgesData.value)) setNudgedUserIds(sentNudgesData.value);
     } catch { /* ignore */ } finally {
-      setIsLoading(false);
+      if (expectedVersion === identityVersion.current) setIsLoading(false);
     }
   }
 
@@ -287,7 +337,7 @@ export function SocialProvider({ children }: { children: React.ReactNode }) {
     return following.some(u => u.id === userId);
   }, [following]);
 
-  const sendNudge = useCallback(async (userId: string): Promise<{ alreadyNudged: boolean; delivery: 'push' | 'in_app' }> => {
+  const sendNudge = useCallback(async (userId: string): Promise<{ alreadyNudged: boolean; delivery: 'queued' | 'in_app' | 'failed' }> => {
     const token = await getAuthToken();
     const headers: Record<string, string> = {
       'Content-Type': 'application/json',
@@ -306,9 +356,14 @@ export function SocialProvider({ children }: { children: React.ReactNode }) {
       const err = await res.text().catch(() => res.statusText);
       throw new Error(`API error ${res.status}: ${err}`);
     }
-    const data = await res.json() as { delivery?: 'push' | 'in_app' };
-    setNudgedUserIds(prev => (prev.includes(userId) ? prev : [...prev, userId]));
-    return { alreadyNudged: false, delivery: data.delivery === 'push' ? 'push' : 'in_app' };
+    const data = await res.json() as { delivery?: 'queued' | 'in_app'; pushStatus?: 'queued' | 'failed' };
+    if (data.pushStatus !== 'failed') {
+      setNudgedUserIds(prev => (prev.includes(userId) ? prev : [...prev, userId]));
+    }
+    return {
+      alreadyNudged: false,
+      delivery: data.pushStatus === 'failed' ? 'failed' : data.delivery === 'queued' ? 'queued' : 'in_app',
+    };
   }, []);
 
   const hasNudged = useCallback((userId: string) => {
@@ -361,43 +416,66 @@ export function SocialProvider({ children }: { children: React.ReactNode }) {
   const markNudgesRead = useCallback(() => {
     const now = Date.now();
     setLastReadNudgeTime(now);
-    setStoredItem(NUDGE_READ_TIME_KEY, String(now)).catch(() => {});
+    setStoredItem(nudgeReadKey(accountId), String(now)).catch(() => {});
   }, []);
 
   const uploadAvatar = useCallback(async (localUri: string, mimeType: string) => {
-    const token = await getAuthToken();
-    const authHeaders: Record<string, string> = {
-      'Content-Type': 'application/json',
-      ...(token ? { 'Authorization': `Bearer ${token}` } : {}),
-    };
-
-    const urlRes = await fetch(`${getApiBase()}/storage/uploads/request-url`, {
-      method: 'POST',
-      headers: authHeaders,
-      credentials: 'include',
-      body: JSON.stringify({ name: 'avatar', size: 0, contentType: mimeType }),
-    });
-    if (!urlRes.ok) throw new Error('Failed to get upload URL');
-    const { uploadURL, objectPath } = await urlRes.json() as { uploadURL: string; objectPath: string };
-
+    // Fetch the local asset before requesting a URL. ImagePicker's MIME value
+    // is useful, but the blob size is the authoritative byte count that the
+    // server will verify after the direct-to-object-storage PUT.
     const imgRes = await fetch(localUri);
     const blob = await imgRes.blob();
-    const putRes = await fetch(uploadURL, {
+    if (!blob.size || !Number.isSafeInteger(blob.size)) {
+      throw new Error('Could not determine the image size');
+    }
+    const requestedMime = mimeType.trim().toLowerCase().split(';')[0];
+    const blobMime = (blob.type ?? '').trim().toLowerCase().split(';')[0];
+    // Some native fetch implementations report application/octet-stream (or
+    // no type) for a file URI. In that case ImagePicker's image MIME is the
+    // best available type; never send a different type to the PUT and API.
+    const contentType = blobMime && blobMime !== 'application/octet-stream'
+      ? blobMime
+      : requestedMime;
+    if (!contentType.startsWith('image/')) {
+      throw new Error('Unsupported avatar image type');
+    }
+
+    const upload = await apiFetch<{
+      uploadId: string;
+      uploadURL: string;
+      objectPath: string;
+    }>('/storage/uploads/request-url', {
+      method: 'POST',
+      body: JSON.stringify({
+        name: 'avatar',
+        size: blob.size,
+        contentType,
+      }),
+    });
+
+    const putRes = await fetch(upload.uploadURL, {
       method: 'PUT',
-      headers: { 'Content-Type': mimeType },
+      headers: { 'Content-Type': contentType },
       body: blob,
     });
     if (!putRes.ok) throw new Error('Failed to upload image');
 
-    const servingUrl = `${getApiBase()}/storage${objectPath}`;
-    const patchRes = await fetch(`${getApiBase()}/social/me/avatar`, {
+    const finalized = await apiFetch<{ uploadId: string; objectPath: string; status: 'finalized' }>(
+      '/storage/finalize',
+      {
+        method: 'POST',
+        body: JSON.stringify({ uploadId: upload.uploadId }),
+      },
+    );
+    if (finalized.uploadId !== upload.uploadId || finalized.status !== 'finalized') {
+      throw new Error('Upload was not finalized');
+    }
+
+    const servingUrl = `${getApiBase()}/storage${finalized.objectPath}`;
+    const updated = await apiFetch<SocialUser & { nudgesEnabled: boolean }>('/social/me/avatar', {
       method: 'PATCH',
-      headers: authHeaders,
-      credentials: 'include',
       body: JSON.stringify({ avatarUrl: servingUrl }),
     });
-    if (!patchRes.ok) throw new Error('Failed to save avatar URL');
-    const updated = await patchRes.json() as SocialUser & { nudgesEnabled: boolean };
     setSocialProfile(updated);
   }, []);
 

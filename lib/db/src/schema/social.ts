@@ -60,6 +60,28 @@ export const npNudges = pgTable("np_nudges", {
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 
+// Expo accepts a push before the device has actually received it. Keep the
+// accepted ticket and its eventual receipt durably so retries and process
+// restarts cannot turn a queued notification into a false delivery claim.
+export const npPushDeliveries = pgTable(
+  "np_push_deliveries",
+  {
+    ticketId: text("ticket_id").primaryKey(),
+    nudgeId: text("nudge_id")
+      .notNull()
+      .references(() => npNudges.id, { onDelete: "cascade" }),
+    recipientId: text("recipient_id")
+      .notNull()
+      .references(() => npUsers.id, { onDelete: "cascade" }),
+    token: text("token").notNull(),
+    status: text("status").notNull().default("queued"), // queued | accepted | failed
+    receiptError: text("receipt_error"),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+    updatedAt: timestamp("updated_at").defaultNow().notNull(),
+  },
+  (table) => [index("IDX_np_push_deliveries_recipient").on(table.recipientId)],
+);
+
 // Password-reset secrets are stored only as hashes. The raw token is sent to
 // the account holder once and is never retained in the database.
 export const npPasswordResetTokens = pgTable(
@@ -76,6 +98,15 @@ export const npPasswordResetTokens = pgTable(
   },
   (table) => [index("IDX_np_password_reset_tokens_user").on(table.userId)],
 );
+
+// Rate-limit counters live in Postgres rather than process memory so multiple
+// autoscaled API instances share the same authentication budget.
+export const npAuthRateLimits = pgTable("np_auth_rate_limits", {
+  key: text("key").primaryKey(),
+  attempts: integer("attempts").notNull().default(0),
+  windowStartedAt: timestamp("window_started_at").notNull().defaultNow(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
+});
 
 // User blocking — required by App Store Guideline 1.2 (UGC apps must let users
 // block abusive accounts). Blocking is one-directional from blocker -> blocked.

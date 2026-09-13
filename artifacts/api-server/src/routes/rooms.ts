@@ -1,7 +1,8 @@
 import { Router } from "express";
-import { db, npRooms, npRoomMembers, npRoomMessages, npUsers } from "@workspace/db";
-import { and, eq, desc, sql, inArray } from "drizzle-orm";
+import { db, npRooms, npRoomMembers, npRoomMessages, npUsers, npBlocks } from "@workspace/db";
+import { and, eq, desc, sql, inArray, not } from "drizzle-orm";
 import { randomUUID } from "crypto";
+import { canReadRoomMessages, findReusableRoom } from "../lib/reliabilityPolicies";
 
 const router = Router();
 
@@ -19,6 +20,26 @@ const norm = (s: string | null | undefined) =>
 function generateCode(): string {
   const chars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
   return Array.from({ length: 6 }, () => chars[Math.floor(Math.random() * chars.length)]).join("");
+}
+
+async function getBlockedUserIds(userId: string): Promise<string[]> {
+  const rows = await db
+    .select({ blockerId: npBlocks.blockerId, blockedId: npBlocks.blockedId })
+    .from(npBlocks)
+    .where(sql`${npBlocks.blockerId} = ${userId} OR ${npBlocks.blockedId} = ${userId}`);
+  return [...new Set(rows.map((row) => row.blockerId === userId ? row.blockedId : row.blockerId))];
+}
+
+async function hasBlockBetween(a: string, b: string): Promise<boolean> {
+  const rows = await db
+    .select({ blockerId: npBlocks.blockerId })
+    .from(npBlocks)
+    .where(
+      sql`(${npBlocks.blockerId} = ${a} AND ${npBlocks.blockedId} = ${b})
+        OR (${npBlocks.blockerId} = ${b} AND ${npBlocks.blockedId} = ${a})`,
+    )
+    .limit(1);
+  return rows.length > 0;
 }
 
 // POST /api/rooms — create room
@@ -51,11 +72,7 @@ router.post("/rooms", async (req, res) => {
     .innerJoin(npRooms, eq(npRooms.id, npRoomMembers.roomId))
     .where(eq(npRoomMembers.userId, userId));
 
-  const candidates = mine.filter(
-    (r) =>
-      norm(r.bookTitle) === norm(title) &&
-      (!norm(r.bookAuthor) || !norm(author) || norm(r.bookAuthor) === norm(author)),
-  );
+  const candidates = mine.filter((r) => findReusableRoom([r], title, author));
 
   if (candidates.length > 0) {
     let chosen = candidates[0];
@@ -83,15 +100,35 @@ router.post("/rooms", async (req, res) => {
     return;
   }
 
-  const code = generateCode();
-  await db.insert(npRooms).values({
-    id: code,
-    bookTitle: title,
-    bookAuthor: author,
-    createdBy: userId,
-    weeklyTargetPages: Math.max(1, parseInt(weeklyTargetPages ?? "50", 10)),
+  const parsedTarget = parseInt(String(weeklyTargetPages ?? "50"), 10);
+  const targetPages = Number.isFinite(parsedTarget) ? Math.max(1, Math.min(parsedTarget, 100000)) : 50;
+  // Serialize the check-and-create for this owner/book. The membership
+  // primary key prevents duplicate membership rows; the transaction and
+  // advisory lock also prevent concurrent taps from creating duplicate rooms.
+  const code = await db.transaction(async (tx) => {
+    // Empty-author legacy requests match authored rooms for the same title, so
+    // the lock must use that same broad equivalence class. Locking by owner and
+    // normalized title prevents empty/populated-author requests racing each
+    // other into duplicate rooms.
+    await tx.execute(sql`select pg_advisory_xact_lock(hashtext(${`${userId}:${norm(title)}`}))`);
+    const existing = await tx
+      .select({ id: npRooms.id, bookTitle: npRooms.bookTitle, bookAuthor: npRooms.bookAuthor })
+      .from(npRoomMembers)
+      .innerJoin(npRooms, eq(npRooms.id, npRoomMembers.roomId))
+      .where(eq(npRoomMembers.userId, userId));
+    const duplicate = findReusableRoom(existing, title, author);
+    if (duplicate) return duplicate.id;
+    const newCode = generateCode();
+    await tx.insert(npRooms).values({
+      id: newCode,
+      bookTitle: title,
+      bookAuthor: author,
+      createdBy: userId,
+      weeklyTargetPages: targetPages,
+    });
+    await tx.insert(npRoomMembers).values({ roomId: newCode, userId, currentPage: 0 });
+    return newCode;
   });
-  await db.insert(npRoomMembers).values({ roomId: code, userId, currentPage: 0 });
 
   res.status(201).json({ code });
 });
@@ -120,11 +157,17 @@ router.get("/rooms", async (req, res) => {
   }
 
   const codes = mine.map((r) => r.code);
+  const hiddenIds = await getBlockedUserIds(userId);
   const [memberRows, lastRows] = await Promise.all([
     db
       .select({ roomId: npRoomMembers.roomId, n: sql<number>`count(*)::int` })
       .from(npRoomMembers)
-      .where(inArray(npRoomMembers.roomId, codes))
+      .where(
+        and(
+          inArray(npRoomMembers.roomId, codes),
+          hiddenIds.length ? not(inArray(npRoomMembers.userId, hiddenIds)) : undefined,
+        ),
+      )
       .groupBy(npRoomMembers.roomId),
     db
       .select({
@@ -133,7 +176,12 @@ router.get("/rooms", async (req, res) => {
         n: sql<number>`count(*)::int`,
       })
       .from(npRoomMessages)
-      .where(inArray(npRoomMessages.roomId, codes))
+      .where(
+        and(
+          inArray(npRoomMessages.roomId, codes),
+          hiddenIds.length ? not(inArray(npRoomMessages.userId, hiddenIds)) : undefined,
+        ),
+      )
       .groupBy(npRoomMessages.roomId),
   ]);
 
@@ -172,6 +220,18 @@ router.get("/rooms/:code", async (req, res) => {
     return;
   }
   const room = rooms[0];
+  const membership = await db
+    .select({ userId: npRoomMembers.userId })
+    .from(npRoomMembers)
+    .where(and(eq(npRoomMembers.roomId, code), eq(npRoomMembers.userId, userId)))
+    .limit(1);
+  if (!membership.length) {
+    // Room metadata and membership lists are private. Joining remains
+    // possible through POST /join when the caller has a valid invite code.
+    res.status(403).json({ error: "Join the room to view it" });
+    return;
+  }
+  const hiddenIds = await getBlockedUserIds(userId);
 
   const members = await db
     .select({
@@ -184,7 +244,12 @@ router.get("/rooms/:code", async (req, res) => {
     })
     .from(npRoomMembers)
     .leftJoin(npUsers, eq(npRoomMembers.userId, npUsers.id))
-    .where(eq(npRoomMembers.roomId, code))
+    .where(
+      and(
+        eq(npRoomMembers.roomId, code),
+        hiddenIds.length ? not(inArray(npRoomMembers.userId, hiddenIds)) : undefined,
+      ),
+    )
     .orderBy(desc(npRoomMembers.currentPage));
 
   const myPage = members.find(m => m.userId === userId)?.currentPage ?? 0;
@@ -195,7 +260,7 @@ router.get("/rooms/:code", async (req, res) => {
     bookAuthor: room.bookAuthor,
     weeklyTargetPages: room.weeklyTargetPages,
     createdAt: room.createdAt,
-    isMember: members.some(m => m.userId === userId),
+    isMember: true,
     myPage,
     members: members.map((m, i) => ({
       userId: m.userId,
@@ -221,6 +286,16 @@ router.post("/rooms/:code/join", async (req, res) => {
     return;
   }
 
+  const existingMembers = await db
+    .select({ userId: npRoomMembers.userId })
+    .from(npRoomMembers)
+    .where(eq(npRoomMembers.roomId, code));
+  for (const member of existingMembers) {
+    if (await hasBlockBetween(userId, member.userId)) {
+      res.status(403).json({ error: "Cannot join a room with a blocked user" });
+      return;
+    }
+  }
   await db.insert(npRoomMembers).values({ roomId: code, userId, currentPage: 0 }).onConflictDoNothing();
   res.json({ ok: true });
 });
@@ -253,10 +328,15 @@ router.get("/rooms/:code/messages", async (req, res) => {
 
   const code = req.params.code.toUpperCase();
   const memberRows = await db
-    .select({ currentPage: npRoomMembers.currentPage })
+    .select({ userId: npRoomMembers.userId, currentPage: npRoomMembers.currentPage })
     .from(npRoomMembers)
     .where(and(eq(npRoomMembers.roomId, code), eq(npRoomMembers.userId, userId)));
+  if (!canReadRoomMessages(memberRows.map((member) => member.userId), userId)) {
+    res.status(403).json({ error: "Join the room first" });
+    return;
+  }
   const myPage = memberRows[0]?.currentPage ?? 0;
+  const hiddenIds = await getBlockedUserIds(userId);
 
   const messages = await db
     .select({
@@ -271,7 +351,12 @@ router.get("/rooms/:code/messages", async (req, res) => {
     })
     .from(npRoomMessages)
     .leftJoin(npUsers, eq(npRoomMessages.userId, npUsers.id))
-    .where(eq(npRoomMessages.roomId, code))
+    .where(
+      and(
+        eq(npRoomMessages.roomId, code),
+        hiddenIds.length ? not(inArray(npRoomMessages.userId, hiddenIds)) : undefined,
+      ),
+    )
     .orderBy(npRoomMessages.createdAt);
 
   res.json(
@@ -298,11 +383,11 @@ router.post("/rooms/:code/messages", async (req, res) => {
 
   const code = req.params.code.toUpperCase();
   const memberRows = await db
-    .select({ currentPage: npRoomMembers.currentPage })
+    .select({ userId: npRoomMembers.userId, currentPage: npRoomMembers.currentPage })
     .from(npRoomMembers)
     .where(and(eq(npRoomMembers.roomId, code), eq(npRoomMembers.userId, userId)));
 
-  if (!memberRows.length) {
+  if (!canReadRoomMessages(memberRows.map((member) => member.userId), userId)) {
     res.status(403).json({ error: "Join the room first" });
     return;
   }

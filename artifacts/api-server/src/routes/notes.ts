@@ -1,9 +1,13 @@
 import { Router } from "express";
-import { db, npMarginNotes, npFollows, npUsers } from "@workspace/db";
-import { and, eq, lte, inArray } from "drizzle-orm";
+import { db, npMarginNotes, npFollows, npUsers, npBlocks } from "@workspace/db";
+import { and, eq, lte, inArray, not, or, sql } from "drizzle-orm";
 import { randomUUID } from "crypto";
 
 const router = Router();
+
+export function noteBookKey(title: string, author?: string): string {
+  return `${title.trim().toLocaleLowerCase()}\u0000${(author ?? "").trim().toLocaleLowerCase()}`;
+}
 
 function requireAuth(req: any, res: any): string | null {
   if (!req.isAuthenticated()) {
@@ -18,12 +22,17 @@ router.get("/notes", async (req, res) => {
   const userId = requireAuth(req, res);
   if (!userId) return;
 
-  const { bookTitle, upToPage } = req.query as Record<string, string>;
+  const { bookTitle, bookAuthor, upToPage } = req.query as Record<string, string>;
   if (!bookTitle) {
     res.status(400).json({ error: "bookTitle is required" });
     return;
   }
-  const maxPage = Math.max(0, parseInt(upToPage ?? "9999", 10));
+  // Version 1.0.3 did not send bookAuthor. Keep those requests working, but
+  // match only legacy notes whose stored author is also empty. Never broaden a
+  // title-only request across distinct authored books with the same title.
+  const normalizedAuthor = typeof bookAuthor === "string" ? bookAuthor.trim() : "";
+  const parsedPage = parseInt(upToPage ?? "9999", 10);
+  const maxPage = Number.isFinite(parsedPage) ? Math.max(0, parsedPage) : 9999;
 
   const follows = await db
     .select({ followingId: npFollows.followingId })
@@ -31,6 +40,11 @@ router.get("/notes", async (req, res) => {
     .where(eq(npFollows.followerId, userId));
 
   const allowedIds = [userId, ...follows.map(f => f.followingId)];
+  const blocked = await db
+    .select({ blockerId: npBlocks.blockerId, blockedId: npBlocks.blockedId })
+    .from(npBlocks)
+    .where(or(eq(npBlocks.blockerId, userId), eq(npBlocks.blockedId, userId)));
+  const hiddenIds = blocked.map((row) => row.blockerId === userId ? row.blockedId : row.blockerId);
 
   const notes = await db
     .select({
@@ -47,9 +61,11 @@ router.get("/notes", async (req, res) => {
     .leftJoin(npUsers, eq(npMarginNotes.userId, npUsers.id))
     .where(
       and(
-        eq(npMarginNotes.bookTitle, bookTitle.trim()),
+        sql`lower(trim(${npMarginNotes.bookTitle})) = lower(trim(${String(bookTitle)}))`,
+        sql`lower(trim(${npMarginNotes.bookAuthor})) = lower(trim(${normalizedAuthor}))`,
         lte(npMarginNotes.page, maxPage),
         inArray(npMarginNotes.userId, allowedIds),
+        hiddenIds.length ? not(inArray(npMarginNotes.userId, hiddenIds)) : undefined,
       ),
     )
     .orderBy(npMarginNotes.page, npMarginNotes.createdAt);

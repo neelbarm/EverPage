@@ -1,8 +1,9 @@
-import React, { createContext, useContext, useState, useEffect, useCallback, type ReactNode } from "react";
-import { Platform } from "react-native";
+import React, { createContext, useContext, useState, useEffect, useCallback, useRef, type ReactNode } from "react";
+import { AppState, Platform } from "react-native";
 import { setItem, getItem, deleteItem } from "@/lib/storage";
 
 const AUTH_TOKEN_KEY = "auth_session_token";
+const AUTH_IDENTITY_KEY = "auth_session_identity";
 
 interface User {
   id: string;
@@ -58,40 +59,71 @@ function getApiBaseUrl(): string {
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const authRevision = useRef(0);
+  const checking = useRef(false);
 
   const fetchUser = useCallback(async () => {
+    if (checking.current) return;
+    checking.current = true;
+    const revision = authRevision.current;
     try {
       const token = await getItem(AUTH_TOKEN_KEY);
+      if (revision !== authRevision.current) return;
       if (!token) {
         setUser(null);
         setIsLoading(false);
         return;
       }
 
+      // This cache only unlocks this account's local data while offline.
+      // Server operations still verify the token; it grants no server access.
+      const cached = await getItem(AUTH_IDENTITY_KEY);
+      if (revision !== authRevision.current) return;
+      if (cached) {
+        try {
+          const identity = JSON.parse(cached);
+          if (identity.token === token && typeof identity.user?.id === 'string') setUser(identity.user);
+        } catch { /* Ignore an invalid optional identity cache. */ }
+      }
+      setIsLoading(false);
+
       const apiBase = getApiBaseUrl();
       const res = await fetch(`${apiBase}/api/local-auth/me`, {
         headers: { Authorization: `Bearer ${token}` },
       });
-      const data = await res.json();
+      const data = await res.json().catch(() => ({}));
+      if (revision !== authRevision.current || await getItem(AUTH_TOKEN_KEY) !== token) return;
 
-      if (data.user) {
+      if (res.ok && data.user) {
         setUser(data.user);
-      } else {
+        await setItem(AUTH_IDENTITY_KEY, JSON.stringify({ token, user: data.user }));
+      } else if (res.status === 401 || res.status === 403) {
+        // Only an explicit authentication rejection invalidates a persisted
+        // credential. Network errors and temporary 5xx responses are
+        // retryable and must not log a valid client out.
         await deleteItem(AUTH_TOKEN_KEY);
+        await deleteItem(AUTH_IDENTITY_KEY);
         setUser(null);
       }
     } catch {
-      setUser(null);
+      // Keep the previous identity and token through transient outages.
     } finally {
-      setIsLoading(false);
+      checking.current = false;
+      if (revision === authRevision.current) setIsLoading(false);
     }
   }, []);
 
   useEffect(() => {
-    fetchUser();
+    void fetchUser();
+    const subscription = AppState.addEventListener('change', state => {
+      if (state === 'active') void fetchUser();
+    });
+    const interval = setInterval(() => { void fetchUser(); }, 60_000);
+    return () => { subscription.remove(); clearInterval(interval); };
   }, [fetchUser]);
 
   const login = useCallback(async (email: string, password: string) => {
+    authRevision.current += 1;
     const apiBase = getApiBaseUrl();
     if (!apiBase) throw new Error("API base URL not configured");
 
@@ -108,11 +140,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     if (data.token) {
       await setItem(AUTH_TOKEN_KEY, data.token);
+      await setItem(AUTH_IDENTITY_KEY, JSON.stringify({ token: data.token, user: data.user }));
       setUser(data.user);
     }
   }, []);
 
   const register = useCallback(async (email: string, password: string, username: string, displayName: string, birthday: string) => {
+    authRevision.current += 1;
     const apiBase = getApiBaseUrl();
     if (!apiBase) throw new Error("API base URL not configured");
 
@@ -129,6 +163,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     if (data.token) {
       await setItem(AUTH_TOKEN_KEY, data.token);
+      await setItem(AUTH_IDENTITY_KEY, JSON.stringify({ token: data.token, user: data.user }));
       setUser(data.user);
     }
   }, []);
@@ -182,6 +217,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const logout = useCallback(async () => {
+    authRevision.current += 1;
     try {
       const token = await getItem(AUTH_TOKEN_KEY);
       if (token) {
@@ -195,11 +231,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       // ignore
     } finally {
       await deleteItem(AUTH_TOKEN_KEY);
+      await deleteItem(AUTH_IDENTITY_KEY);
       setUser(null);
     }
   }, []);
 
   const deleteAccount = useCallback(async (password: string) => {
+    authRevision.current += 1;
     const apiBase = getApiBaseUrl();
     if (!apiBase) throw new Error("API base URL not configured");
     const token = await getItem(AUTH_TOKEN_KEY);
@@ -220,6 +258,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
 
     await deleteItem(AUTH_TOKEN_KEY);
+    await deleteItem(AUTH_IDENTITY_KEY);
     setUser(null);
   }, []);
 

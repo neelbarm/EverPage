@@ -73,11 +73,14 @@ export default function RoomScreen() {
   const [messages, setMessages] = useState<RoomMessage[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const [roomStale, setRoomStale] = useState(false);
+  const [accessRequiresJoin, setAccessRequiresJoin] = useState(false);
   const [tab, setTab] = useState<'leaderboard' | 'discussion'>('leaderboard');
   const [composing, setComposing] = useState('');
   const [sending, setSending] = useState(false);
   const [joining, setJoining] = useState(false);
   const flatRef = useRef<FlatList>(null);
+  const roomKnownRef = useRef(false);
 
   const code = (roomId ?? '').toUpperCase();
   const topPad = insets.top + (Platform.OS === 'web' ? 67 : 0);
@@ -86,8 +89,23 @@ export default function RoomScreen() {
     try {
       const data = await apiFetch<RoomDetail>(`/rooms/${code}`);
       setRoom(data);
+      roomKnownRef.current = true;
+      setError('');
+      setRoomStale(false);
+      setAccessRequiresJoin(false);
     } catch (e: any) {
-      setError(e?.message?.includes('404') ? 'Room not found.' : 'Could not load room.');
+      if (e?.message?.includes('403')) {
+        setAccessRequiresJoin(!roomKnownRef.current);
+        setError('Join the room to view its private details.');
+      } else if (roomKnownRef.current) {
+        // Keep displaying the last known membership and metadata while the
+        // network is unavailable; never turn a transient failure into an
+        // apparent missing room.
+        setRoomStale(true);
+        setError('');
+      } else {
+        setError(e?.message?.includes('404') ? 'Room not found.' : 'Could not load room. Tap retry.');
+      }
     } finally {
       setLoading(false);
     }
@@ -185,6 +203,23 @@ export default function RoomScreen() {
           <Text style={[styles.errorText, { color: colors.mutedForeground, fontFamily: 'Inter_400Regular' }]}>
             {error || 'Room not found.'}
           </Text>
+          {accessRequiresJoin && (
+            <TouchableOpacity
+              style={[styles.joinBtn, { backgroundColor: colors.primary, marginTop: 16 }]}
+              onPress={handleJoin}
+              disabled={joining}
+              activeOpacity={0.85}
+            >
+              {joining
+                ? <ActivityIndicator color="#fff" size="small" />
+                : <Text style={[styles.joinBtnText, { fontFamily: 'Inter_600SemiBold' }]}>Join room</Text>}
+            </TouchableOpacity>
+          )}
+          {!accessRequiresJoin && (
+            <TouchableOpacity onPress={loadRoom} style={{ marginTop: 16 }} activeOpacity={0.8}>
+              <Text style={[styles.retryText, { color: colors.primary, fontFamily: 'Inter_600SemiBold' }]}>Retry</Text>
+            </TouchableOpacity>
+          )}
         </View>
       </View>
     );
@@ -224,6 +259,14 @@ export default function RoomScreen() {
           <Ionicons name="people" size={13} color={colors.mutedForeground} />
         </View>
       </View>
+      {roomStale && (
+        <TouchableOpacity style={[styles.staleBanner, { backgroundColor: colors.muted }]} onPress={loadRoom} activeOpacity={0.8}>
+          <Ionicons name="cloud-offline-outline" size={16} color={colors.mutedForeground} />
+          <Text style={[styles.staleText, { color: colors.mutedForeground, fontFamily: 'Inter_500Medium' }]}>
+            Showing saved room details. Tap to retry.
+          </Text>
+        </TouchableOpacity>
+      )}
 
       {!room.isMember && (
         <View style={[styles.joinBanner, { backgroundColor: colors.card, borderColor: colors.primary }]}>
@@ -392,6 +435,9 @@ const styles = StyleSheet.create({
   backBtn2: { padding: 4 },
   center: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 32 },
   errorText: { fontSize: 15, textAlign: 'center' },
+  retryText: { fontSize: 14 },
+  staleBanner: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, paddingVertical: 8 },
+  staleText: { fontSize: 12 },
   header: {
     flexDirection: 'row', alignItems: 'center', gap: 12,
     paddingHorizontal: 16, paddingBottom: 14, borderBottomWidth: StyleSheet.hairlineWidth,

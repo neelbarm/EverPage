@@ -1,11 +1,11 @@
 import React, { useState } from 'react';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { View, Text, TouchableOpacity, StyleSheet, Platform, TextInput, KeyboardAvoidingView, ScrollView } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import * as Haptics from 'expo-haptics';
 import { useColors } from '@/hooks/useColors';
 import { useStore } from '@/context/StoreContext';
-import { useSocial } from '@/context/SocialContext';
 import { BookCover } from '@/components/BookCover';
 import { useAuth } from '@/lib/auth';
 import { apiFetch } from '@/lib/api';
@@ -14,47 +14,54 @@ export default function SessionLogScreen() {
   const colors = useColors();
   const insets = useSafeAreaInsets();
   const router = useRouter();
-  const { bookId, minutes, startPage } = useLocalSearchParams<{ bookId: string; minutes: string; startPage: string }>();
+  const { bookId, minutes, startPage, sessionId } = useLocalSearchParams<{ bookId: string; minutes: string; startPage: string; sessionId?: string }>();
   const { getBook, logSession } = useStore();
-  const { postActivity } = useSocial();
-  const { isAuthenticated } = useAuth();
+  const { isAuthenticated, user } = useAuth();
   const book = getBook(bookId ?? '');
 
-  const durationMin = Math.max(1, parseInt(minutes ?? '1', 10));
-  const startPg = parseInt(startPage ?? '0', 10);
-  const estimatedEnd = Math.min(startPg + Math.max(1, Math.round(durationMin * 0.6)), book?.totalPages ?? 9999);
+  const durationMin = Math.max(0, parseInt(minutes ?? '0', 10) || 0);
+  const startPg = Math.max(0, parseInt(startPage ?? '0', 10) || 0);
+  const estimatedEnd = Math.min(startPg + Math.max(0, Math.round(durationMin * 0.6)), book?.totalPages ?? 9999);
   const [endPageStr, setEndPageStr] = useState(String(estimatedEnd));
   const [noteText, setNoteText] = useState('');
+  const [isSaving, setIsSaving] = useState(false);
 
-  const endPage = Math.min(Math.max(parseInt(endPageStr, 10) || startPg + 1, startPg + 1), book?.totalPages ?? 9999);
+  const parsedEndPage = parseInt(endPageStr, 10);
+  const endPage = Math.min(Math.max(Number.isFinite(parsedEndPage) ? parsedEndPage : startPg, startPg), book?.totalPages ?? 9999);
   const pagesRead = Math.max(0, endPage - startPg);
   const pace = pagesRead > 0 ? (durationMin / pagesRead).toFixed(1) : '--';
   const progressBefore = book ? Math.round((startPg / book.totalPages) * 100) : 0;
   const progressAfter = book ? Math.round((endPage / book.totalPages) * 100) : 0;
 
   async function handleLog() {
-    if (!book) return;
-    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-    await logSession(book.id, durationMin, startPg, endPage);
-    postActivity(book.title, book.author, durationMin, pagesRead).catch(() => {});
+    if (!book || isSaving) return;
+    setIsSaving(true);
+    try {
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      await logSession(book.id, durationMin, startPg, endPage, sessionId);
+      const activeKey = `everpage_active_reading_session:${encodeURIComponent(user?.id ?? 'guest')}:${encodeURIComponent(book.id)}`;
+      await AsyncStorage.removeItem(activeKey);
 
-    if (isAuthenticated && noteText.trim()) {
-      apiFetch('/notes', {
-        method: 'POST',
-        body: JSON.stringify({
-          bookTitle: book.title,
-          bookAuthor: book.author,
-          page: endPage,
-          noteText: noteText.trim(),
-        }),
-      }).catch(() => {});
-    }
+      if (isAuthenticated && noteText.trim()) {
+        apiFetch('/notes', {
+          method: 'POST',
+          body: JSON.stringify({
+            bookTitle: book.title,
+            bookAuthor: book.author,
+            page: endPage,
+            noteText: noteText.trim(),
+          }),
+        }).catch(() => {});
+      }
 
-    const finished = endPage >= book.totalPages;
-    if (finished) {
-      router.replace({ pathname: '/finish/[bookId]', params: { bookId: book.id } });
-    } else {
-      router.replace('/(tabs)');
+      const finished = endPage >= book.totalPages;
+      if (finished) {
+        router.replace({ pathname: '/finish/[bookId]', params: { bookId: book.id } });
+      } else {
+        router.replace('/(tabs)');
+      }
+    } finally {
+      setIsSaving(false);
     }
   }
 
@@ -156,6 +163,7 @@ export default function SessionLogScreen() {
         <TouchableOpacity
           style={[styles.logBtn, { backgroundColor: colors.primary }]}
           onPress={handleLog}
+          disabled={isSaving}
           activeOpacity={0.88}
         >
           <Text style={[styles.logBtnText, { color: colors.primaryForeground, fontFamily: 'Inter_700Bold' }]}>Log session</Text>

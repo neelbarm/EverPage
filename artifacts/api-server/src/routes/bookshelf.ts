@@ -1,6 +1,6 @@
 import { Router, type IRouter } from "express";
 import { db } from "@workspace/db";
-import { npBooks, npSessions, npStreak } from "@workspace/db/schema";
+import { npActivity, npBooks, npSessions, npStreak } from "@workspace/db/schema";
 import { eq, and } from "drizzle-orm";
 
 const router: IRouter = Router();
@@ -127,11 +127,34 @@ router.post("/bookshelf/sessions", async (req, res) => {
     createdAt: createdAt ?? Date.now(),
   };
 
-  const rows = await db
-    .insert(npSessions)
-    .values(values)
-    .onConflictDoNothing()
-    .returning();
+  const rows = await db.transaction(async (tx) => {
+    const inserted = await tx
+      .insert(npSessions)
+      .values(values)
+      .onConflictDoNothing()
+      .returning();
+    if (inserted[0]) {
+      const books = await tx
+        .select({ title: npBooks.title, author: npBooks.author })
+        .from(npBooks)
+        .where(and(eq(npBooks.userId, userId), eq(npBooks.id, bookId)))
+        .limit(1);
+      const book = books[0];
+      if (book) {
+        await tx.insert(npActivity).values({
+          id: `session:${id}`,
+          userId,
+          bookTitle: book.title,
+          bookAuthor: book.author,
+          durationMinutes: Math.max(0, durationMinutes ?? 0),
+          pagesRead: Math.max(0, (endPage ?? 0) - (startPage ?? 0)),
+          activityType: "session",
+          createdAt: new Date(createdAt ?? Date.now()),
+        }).onConflictDoNothing();
+      }
+    }
+    return inserted;
+  });
 
   res.status(201).json(rows[0] ?? values);
 });

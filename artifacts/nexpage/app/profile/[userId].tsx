@@ -110,7 +110,9 @@ export default function PublicProfileScreen() {
     setLoading(true);
     setError(null);
     try {
-      const data = await apiFetch<ProfileData>(`/social/users/${userId}/profile`);
+      const now = new Date();
+      const today = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+      const data = await apiFetch<ProfileData>(`/social/users/${userId}/profile?today=${today}`);
       setProfile(data);
     } catch (e: any) {
       setError(e.message ?? 'Failed to load profile');

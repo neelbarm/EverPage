@@ -71,6 +71,13 @@ export async function setObjectAclPolicy(
   objectFile: File,
   aclPolicy: ObjectAclPolicy,
 ): Promise<void> {
+  if (
+    typeof aclPolicy.owner !== "string" ||
+    aclPolicy.owner.length === 0 ||
+    (aclPolicy.visibility !== "public" && aclPolicy.visibility !== "private")
+  ) {
+    throw new Error("Invalid object ACL policy");
+  }
   const [exists] = await objectFile.exists();
   if (!exists) {
     throw new Error(`Object not found: ${objectFile.name}`);
@@ -91,7 +98,23 @@ export async function getObjectAclPolicy(
   if (!aclPolicy) {
     return null;
   }
-  return JSON.parse(aclPolicy as string);
+  try {
+    const parsed: unknown = JSON.parse(aclPolicy as string);
+    if (
+      !parsed ||
+      typeof parsed !== "object" ||
+      typeof (parsed as ObjectAclPolicy).owner !== "string" ||
+      !(parsed as ObjectAclPolicy).owner ||
+      !["public", "private"].includes((parsed as ObjectAclPolicy).visibility)
+    ) {
+      return null;
+    }
+    return parsed as ObjectAclPolicy;
+  } catch {
+    // A corrupt custom metadata value must fail closed, rather than turning
+    // an object route into an accidental public download.
+    return null;
+  }
 }
 
 export async function canAccessObject({
@@ -103,35 +126,40 @@ export async function canAccessObject({
   objectFile: File;
   requestedPermission: ObjectPermission;
 }): Promise<boolean> {
-  const aclPolicy = await getObjectAclPolicy(objectFile);
-  if (!aclPolicy) {
-    return false;
-  }
+  try {
+    const aclPolicy = await getObjectAclPolicy(objectFile);
+    if (!aclPolicy) {
+      return false;
+    }
 
-  if (
-    aclPolicy.visibility === "public" &&
-    requestedPermission === ObjectPermission.READ
-  ) {
-    return true;
-  }
-
-  if (!userId) {
-    return false;
-  }
-
-  if (aclPolicy.owner === userId) {
-    return true;
-  }
-
-  for (const rule of aclPolicy.aclRules || []) {
-    const accessGroup = createObjectAccessGroup(rule.group);
     if (
-      (await accessGroup.hasMember(userId)) &&
-      isPermissionAllowed(requestedPermission, rule.permission)
+      aclPolicy.visibility === "public" &&
+      requestedPermission === ObjectPermission.READ
     ) {
       return true;
     }
-  }
 
-  return false;
+    if (!userId) {
+      return false;
+    }
+
+    if (aclPolicy.owner === userId) {
+      return true;
+    }
+
+    for (const rule of aclPolicy.aclRules || []) {
+      const accessGroup = createObjectAccessGroup(rule.group);
+      if (
+        (await accessGroup.hasMember(userId)) &&
+        isPermissionAllowed(requestedPermission, rule.permission)
+      ) {
+        return true;
+      }
+    }
+
+    return false;
+  } catch {
+    // Unknown access groups and malformed metadata fail closed.
+    return false;
+  }
 }

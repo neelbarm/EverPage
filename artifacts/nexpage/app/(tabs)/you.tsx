@@ -182,7 +182,11 @@ export default function YouScreen() {
   const colors = useColors();
   const insets = useSafeAreaInsets();
   const router = useRouter();
-  const { profile, streak, reminder, setReminder, setDailyGoal, books, pendingGoalMet, clearPendingGoalMet, useStreakFreeze, updateProfile, sessions } = useStore();
+  const {
+    profile, streak, reminder, setReminder, setDailyGoal, books, pendingGoalMet,
+    clearPendingGoalMet, useStreakFreeze, updateProfile, sessions,
+    syncError, isSyncing, retrySync,
+  } = useStore();
   const { socialProfile, setNudgesEnabled, isRegistered, followers, uploadAvatar, registerPushToken } = useSocial();
 
   // Autofill the profile name from the account's display name (set at sign-up)
@@ -381,6 +385,18 @@ export default function YouScreen() {
         showsVerticalScrollIndicator={false}
         contentInsetAdjustmentBehavior={Platform.OS === 'ios' ? 'automatic' : 'never'}
       >
+        {(syncError || isSyncing) && (
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10, padding: 12, borderRadius: 12, backgroundColor: colors.muted }}>
+            <Text style={{ flex: 1, color: syncError ? colors.destructive : colors.mutedForeground, fontFamily: 'Inter_400Regular', fontSize: 13 }}>
+              {isSyncing ? 'Saving your reading data…' : `Sync paused: ${syncError}`}
+            </Text>
+            {syncError && (
+              <TouchableOpacity onPress={() => { void retrySync(); }} disabled={isSyncing}>
+                <Text style={{ color: colors.primary, fontFamily: 'Inter_600SemiBold' }}>Retry</Text>
+              </TouchableOpacity>
+            )}
+          </View>
+        )}
         {/* Profile card */}
         <View style={[styles.profileCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
           <TouchableOpacity

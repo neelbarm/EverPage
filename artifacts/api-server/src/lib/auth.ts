@@ -1,8 +1,8 @@
 import * as client from "openid-client";
 import crypto from "crypto";
 import { type Request, type Response } from "express";
-import { db, sessionsTable } from "@workspace/db";
-import { eq } from "drizzle-orm";
+import { db, npUsers, sessionsTable } from "@workspace/db";
+import { eq, sql } from "drizzle-orm";
 import type { AuthUser } from "@workspace/api-zod";
 
 export const ISSUER_URL = process.env.ISSUER_URL ?? "https://replit.com/oidc";
@@ -18,6 +18,8 @@ export interface SessionData {
   access_token: string;
   refresh_token?: string;
   expires_at?: number;
+  /** True for local-password sessions; OIDC sessions may have no np_users row. */
+  localAuth?: boolean;
 }
 
 let oidcConfig: client.Configuration | null = null;
@@ -53,6 +55,22 @@ export async function getSession(sid: string): Promise<SessionData | null> {
     return null;
   }
 
+  const session = row.sess as unknown as SessionData;
+  // A deleted local account must not remain usable through a bearer token.
+  // The marker also lets existing OIDC identities continue to work even though
+  // they intentionally do not have a row in np_users.
+  if (session.localAuth || session.access_token === "") {
+    const [localUser] = await db
+      .select({ id: npUsers.id })
+      .from(npUsers)
+      .where(eq(npUsers.id, session.user.id))
+      .limit(1);
+    if (!localUser) {
+      await deleteSession(sid);
+      return null;
+    }
+  }
+
   if (row.expire.getTime() - Date.now() < SESSION_RENEWAL_WINDOW) {
     await db
       .update(sessionsTable)
@@ -60,7 +78,7 @@ export async function getSession(sid: string): Promise<SessionData | null> {
       .where(eq(sessionsTable.sid, sid));
   }
 
-  return row.sess as unknown as SessionData;
+  return session;
 }
 
 export async function updateSession(
@@ -78,6 +96,16 @@ export async function updateSession(
 
 export async function deleteSession(sid: string): Promise<void> {
   await db.delete(sessionsTable).where(eq(sessionsTable.sid, sid));
+}
+
+/** Revoke every local or OIDC session whose serialized user id matches. */
+export async function deleteUserSessions(
+  userId: string,
+  executor: Pick<typeof db, "delete"> = db,
+): Promise<void> {
+  await executor.delete(sessionsTable).where(
+    sql`${sessionsTable.sess}->'user'->>'id' = ${userId}`,
+  );
 }
 
 export async function clearSession(

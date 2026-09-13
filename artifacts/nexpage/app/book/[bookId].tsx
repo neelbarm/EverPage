@@ -67,6 +67,7 @@ export default function BookDetailScreen() {
   const [joiningRoom, setJoiningRoom] = useState(false);
   const [creatingRoom, setCreatingRoom] = useState(false);
   const [existingRoomCode, setExistingRoomCode] = useState<string | null>(null);
+  const [roomLookupError, setRoomLookupError] = useState<string | null>(null);
   // Start in a loading state so returning members never briefly see a
   // misleading “Create room” button before their saved membership loads.
   const [loadingRoom, setLoadingRoom] = useState(true);
@@ -114,9 +115,9 @@ export default function BookDetailScreen() {
   useEffect(() => {
     if (!book || !isAuthenticated) return;
     apiFetch<Array<{ id: string; userId: string; page: number; noteText: string; displayName: string; initial: string; color: string; isOwnNote: boolean }>>(
-      `/notes?bookTitle=${encodeURIComponent(book.title)}&upToPage=${book.currentPage}`,
+      `/notes?bookTitle=${encodeURIComponent(book.title)}&bookAuthor=${encodeURIComponent(book.author)}&upToPage=${book.currentPage}`,
     ).then(data => setNotes(data)).catch(() => {});
-  }, [book?.title, book?.currentPage, isAuthenticated]);
+  }, [book?.title, book?.author, book?.currentPage, isAuthenticated]);
 
   // Room membership lives on the server, not in the screen state. Re-check it
   // every time this book screen becomes active so reopening the app doesn't
@@ -124,17 +125,20 @@ export default function BookDetailScreen() {
   const loadExistingRoom = useCallback(async () => {
     if (!book || !isAuthenticated) {
       setExistingRoomCode(null);
+      setRoomLookupError(null);
       return;
     }
 
     setLoadingRoom(true);
+    setRoomLookupError(null);
     try {
       const rooms = await apiFetch<MyRoom[]>('/rooms');
       setExistingRoomCode(rooms.find(room => isRoomForBook(room, book.title, book.author))?.code ?? null);
     } catch {
-      // The create endpoint also protects against duplicates. Keep the normal
-      // controls available if membership cannot be loaded (for example, offline).
-      setExistingRoomCode(null);
+      // Preserve a known membership during a transient outage. With no known
+      // membership, do not turn an unknown state into a misleading Create
+      // button; let the reader explicitly retry instead.
+      setRoomLookupError('Could not verify room membership.');
     } finally {
       setLoadingRoom(false);
     }
@@ -383,12 +387,28 @@ export default function BookDetailScreen() {
                 <ActivityIndicator size="small" color={colors.mutedForeground} />
               </View>
             ) : existingRoomCode ? (
-              <TouchableOpacity
-                style={[styles.roomBtn, { backgroundColor: colors.primary }]}
-                onPress={() => router.push({ pathname: '/room/[roomId]', params: { roomId: existingRoomCode } })}
-                activeOpacity={0.85}
-              >
-                <Text style={[styles.roomBtnText, { color: '#fff', fontFamily: 'Inter_600SemiBold' }]}>Go to room</Text>
+              <>
+                <TouchableOpacity
+                  style={[styles.roomBtn, { backgroundColor: colors.primary }]}
+                  onPress={() => router.push({ pathname: '/room/[roomId]', params: { roomId: existingRoomCode } })}
+                  activeOpacity={0.85}
+                >
+                  <Text style={[styles.roomBtnText, { color: '#fff', fontFamily: 'Inter_600SemiBold' }]}>Go to room</Text>
+                </TouchableOpacity>
+                {roomLookupError && (
+                  <TouchableOpacity onPress={loadExistingRoom} style={styles.roomRetry} activeOpacity={0.8}>
+                    <Text style={[styles.roomRetryText, { color: colors.mutedForeground, fontFamily: 'Inter_400Regular' }]}>
+                      {roomLookupError} Tap to retry.
+                    </Text>
+                  </TouchableOpacity>
+                )}
+              </>
+            ) : roomLookupError ? (
+              <TouchableOpacity onPress={loadExistingRoom} style={styles.roomUnknown} activeOpacity={0.8}>
+                <Ionicons name="refresh-outline" size={18} color={colors.primary} />
+                <Text style={[styles.roomRetryText, { color: colors.primary, fontFamily: 'Inter_600SemiBold' }]}>
+                  Room status unknown — tap to retry
+                </Text>
               </TouchableOpacity>
             ) : (
               <View style={styles.roomBtns}>
@@ -661,6 +681,9 @@ const styles = StyleSheet.create({
   roomTitle: { fontSize: 16 },
   roomDesc: { fontSize: 13, lineHeight: 18 },
   roomLoading: { minHeight: 42, justifyContent: 'center', alignItems: 'center' },
+  roomRetry: { paddingTop: 8, alignItems: 'center' },
+  roomUnknown: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, paddingVertical: 11 },
+  roomRetryText: { fontSize: 13, textAlign: 'center' },
   roomBtns: { flexDirection: 'row', gap: 10 },
   roomBtn: { flex: 1, paddingVertical: 11, borderRadius: 10, alignItems: 'center' },
   roomBtnOutline: { flex: 1, paddingVertical: 11, borderRadius: 10, alignItems: 'center', borderWidth: 1 },

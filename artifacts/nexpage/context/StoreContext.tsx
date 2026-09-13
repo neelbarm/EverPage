@@ -2,6 +2,11 @@ import React, { createContext, useContext, useEffect, useRef, useState } from 'r
 import { AppState, Platform } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { getItem as getStoredItem } from '@/lib/storage';
+import {
+  bindVerifiedCredential,
+  canSendAccountOperation,
+  type AccountBoundCredential,
+} from '@/lib/offlineQueue';
 import { useAuth } from '@/lib/auth';
 import {
   cancelStreakRescueNotification,
@@ -9,6 +14,15 @@ import {
   rescheduleStreakRescueForTomorrow,
   scheduleStreakRescueNotification,
 } from '@/lib/notifications';
+import {
+  acknowledgeQueueEntity,
+  localCalendarDayDistance,
+  localDateKey,
+  localWeekDates,
+  queueEntityId,
+  upsertQueueEntity,
+  upsertSessionByStableId,
+} from '@/lib/reliabilityPolicies';
 
 export interface Book {
   id: string;
@@ -116,7 +130,7 @@ interface StoreContextType {
   clearPendingFreezeEarned: () => void;
   pendingGoalMet: boolean;
   clearPendingGoalMet: () => void;
-  logSession: (bookId: string, durationMinutes: number, startPage: number, endPage: number) => Promise<void>;
+  logSession: (bookId: string, durationMinutes: number, startPage: number, endPage: number, stableSessionId?: string) => Promise<void>;
   finishBook: (bookId: string, favoriteQuote?: string) => void;
   useStreakFreeze: () => void;
   addBook: (title: string, author: string, totalPages: number, genre: string, coverImageUri?: string, startingPage?: number) => void;
@@ -125,6 +139,11 @@ interface StoreContextType {
   setReminder: (settings: ReminderSettings) => Promise<void>;
   setDailyGoal: (minutes: number) => Promise<void>;
   updateProfile: (name: string, color: string) => Promise<void>;
+  syncError: string | null;
+  isSyncing: boolean;
+  retrySync: () => Promise<void>;
+  /** Deliberately opt in to copying the local guest shelf into this account. */
+  migrateGuestDataToAccount: () => Promise<void>;
 }
 
 const StoreContext = createContext<StoreContextType | null>(null);
@@ -135,11 +154,7 @@ function todayStr(): string {
   // Reading days are based on the reader's local calendar, not UTC. Using an
   // ISO timestamp here made a late-evening session count toward tomorrow for
   // some readers (and left yesterday's total on the new day's goal).
-  const date = new Date();
-  const year = date.getFullYear();
-  const month = String(date.getMonth() + 1).padStart(2, '0');
-  const day = String(date.getDate()).padStart(2, '0');
-  return `${year}-${month}-${day}`;
+  return localDateKey(new Date());
 }
 
 function minutesForDate(readingSessions: ReadingSession[], date: string): number {
@@ -292,6 +307,91 @@ const SUGGESTED: SuggestedFriend[] = [
 
 const STORAGE_KEY = 'everpage_v1';
 const CLOUD_INIT_KEY = 'everpage_cloud_initialized';
+const QUEUE_KEY = 'everpage_offline_queue_v1';
+const GUEST_ACCOUNT_ID = 'guest';
+
+type SyncOperation = {
+  id: string;
+  accountId: string;
+  kind: 'book' | 'session' | 'streak';
+  payload: Book | ReadingSession | StreakData;
+  createdAt: number;
+};
+
+function accountStorageKey(base: string, accountId: string): string {
+  // User ids are server controlled, but encode them so a malformed id cannot
+  // collide with another account's local namespace.
+  return `${base}:${encodeURIComponent(accountId)}`;
+}
+
+function dateFromString(value: string): Date | null {
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value);
+  if (!match) return null;
+  const date = new Date(Number(match[1]), Number(match[2]) - 1, Number(match[3]));
+  return Number.isNaN(date.getTime())
+    || date.getFullYear() !== Number(match[1])
+    || date.getMonth() !== Number(match[2]) - 1
+    || date.getDate() !== Number(match[3])
+    ? null
+    : date;
+}
+
+function calendarDayNumber(value: string): number | null {
+  return localCalendarDayDistance(value, '1970-01-01');
+}
+
+function deriveProfile(
+  profile: UserProfile,
+  booksToDerive: Book[],
+  readingSessions: ReadingSession[],
+): UserProfile {
+  const weekDates = localWeekDates();
+  const weekSet = new Set(weekDates);
+  const weeklyMinutes = [0, 0, 0, 0, 0, 0, 0];
+  let totalMinutes = 0;
+  let totalPages = 0;
+  const dates = new Set<string>();
+
+  for (const session of readingSessions) {
+    const minutes = Number(session.durationMinutes);
+    const pageDelta = Number(session.endPage) - Number(session.startPage);
+    const pages = Number.isFinite(pageDelta) ? Math.max(0, pageDelta) : 0;
+    if (Number.isFinite(minutes) && minutes > 0) totalMinutes += minutes;
+    if (Number.isFinite(pages)) totalPages += pages;
+    if (typeof session.date === 'string' && dateFromString(session.date)) {
+      dates.add(session.date);
+      const weekIndex = weekDates.indexOf(session.date);
+      if (weekIndex >= 0) weeklyMinutes[weekIndex] += Number.isFinite(minutes) && minutes > 0 ? minutes : 0;
+    }
+  }
+
+  // Streak length is derived from dates, not from a counter that can be
+  // replayed after a hydration or retry race.
+  let longestStreak = 0;
+  let run = 0;
+  const sortedDates = [...dates].sort();
+  for (let i = 0; i < sortedDates.length; i += 1) {
+    const current = dateFromString(sortedDates[i]);
+    const previous = i > 0 ? dateFromString(sortedDates[i - 1]) : null;
+    const currentDay = calendarDayNumber(sortedDates[i]);
+    const previousDay = i > 0 ? calendarDayNumber(sortedDates[i - 1]) : null;
+    if (current && previous && currentDay !== null && previousDay !== null && currentDay - previousDay === 1) run += 1;
+    else run = 1;
+    longestStreak = Math.max(longestStreak, run);
+  }
+
+  return {
+    ...profile,
+    booksFinished: booksToDerive.filter(book => !!book.finishedAt).length,
+    totalMinutes,
+    totalPages,
+    weeklyMinutes,
+    weeklyPages: readingSessions.reduce((total, session) => (
+      weekSet.has(session.date) ? total + Math.max(0, Number(session.endPage) - Number(session.startPage)) : total
+    ), 0),
+    longestStreak,
+  };
+}
 
 const DEFAULT_REMINDER: ReminderSettings = {
   enabled: false,
@@ -321,6 +421,14 @@ async function getAuthToken(): Promise<string | null> {
 
 async function apiFetch<T>(path: string, options: RequestInit = {}): Promise<T> {
   const token = await getAuthToken();
+  return apiFetchWithToken(path, token, options);
+}
+
+async function apiFetchWithToken<T>(
+  path: string,
+  token: string | null,
+  options: RequestInit = {},
+): Promise<T> {
   const headers: Record<string, string> = {
     'Content-Type': 'application/json',
     ...(token ? { Authorization: `Bearer ${token}` } : {}),
@@ -364,7 +472,7 @@ function rowToSession(row: any): ReadingSession {
 }
 
 export function StoreProvider({ children }: { children: React.ReactNode }) {
-  const { isAuthenticated, isLoading: authLoading } = useAuth();
+  const { user, isAuthenticated, isLoading: authLoading } = useAuth();
   const [books, setBooks] = useState<Book[]>([]);
   const [sessions, setSessions] = useState<ReadingSession[]>([]);
   const [friends] = useState<Friend[]>([]);
@@ -375,7 +483,94 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
   const [recommendedBooks, setRecommendedBooks] = useState<RecommendedBook[]>(RECOMMENDED);
   const [pendingFreezeEarned, setPendingFreezeEarned] = useState(false);
   const [pendingGoalMet, setPendingGoalMet] = useState(false);
-  const cloudSyncedRef = useRef(false);
+  const [syncError, setSyncError] = useState<string | null>(null);
+  const [isSyncing, setIsSyncing] = useState(false);
+  const accountId = user?.id ?? GUEST_ACCOUNT_ID;
+  const accountIdRef = useRef(accountId);
+  const queueRef = useRef<SyncOperation[]>([]);
+  const queueWriteRef = useRef<Promise<void>>(Promise.resolve());
+  const stateWriteRef = useRef<Promise<void>>(Promise.resolve());
+  const syncInFlightRef = useRef(false);
+  const savingSessionIdsRef = useRef(new Set<string>());
+  const identityVersionRef = useRef(0);
+  const initializedAccountRef = useRef<string | null>(null);
+  const accountCredentialRef = useRef<AccountBoundCredential | null>(null);
+  const mutationRevisionRef = useRef(0);
+  const snapshotRef = useRef({ books, sessions, streak, profile, reminder });
+  snapshotRef.current = { books, sessions, streak, profile, reminder };
+
+  async function verifiedCredential(version: number, owner: string): Promise<AccountBoundCredential | null> {
+    if (owner === GUEST_ACCOUNT_ID) return null;
+    if (version !== identityVersionRef.current || owner !== accountIdRef.current) return null;
+    if (accountCredentialRef.current?.accountId === owner) return accountCredentialRef.current;
+    const token = await getAuthToken();
+    if (!token || version !== identityVersionRef.current || owner !== accountIdRef.current) return null;
+    const identity = await apiFetchWithToken<{ user?: { id?: string } }>('/local-auth/me', token);
+    if (version !== identityVersionRef.current || owner !== accountIdRef.current) return null;
+    accountCredentialRef.current = bindVerifiedCredential(owner, token, identity.user?.id);
+    return accountCredentialRef.current;
+  }
+
+  function resetInMemoryState() {
+    setBooks([]);
+    setSessions([]);
+    setStreak(INITIAL_STREAK);
+    setProfile(INITIAL_PROFILE);
+    setReminderState(DEFAULT_REMINDER);
+    setRecommendedBooks(RECOMMENDED);
+    setPendingFreezeEarned(false);
+    setPendingGoalMet(false);
+    setSyncError(null);
+  }
+
+  function persistQueue(nextQueue: SyncOperation[]): Promise<void> {
+    queueRef.current = nextQueue;
+    const key = accountStorageKey(QUEUE_KEY, accountIdRef.current);
+    queueWriteRef.current = queueWriteRef.current
+      .catch(() => {})
+      .then(() => AsyncStorage.setItem(key, JSON.stringify(nextQueue)));
+    return queueWriteRef.current;
+  }
+
+  function queueOperation(kind: SyncOperation['kind'], payload: SyncOperation['payload']): Promise<void> {
+    mutationRevisionRef.current += 1;
+    if (accountIdRef.current === GUEST_ACCOUNT_ID) {
+      // Guest edits are durable and intentionally remain isolated. They can
+      // only reach an account through migrateGuestDataToAccount().
+    }
+    const entityId = kind === 'streak' ? 'streak' : (payload as Book | ReadingSession).id;
+    const operation: SyncOperation = {
+      id: queueEntityId(kind, entityId),
+      accountId: accountIdRef.current,
+      kind,
+      payload,
+      createdAt: Date.now(),
+    };
+    const next = upsertQueueEntity(queueRef.current, operation);
+    return persistQueue(next);
+  }
+
+  function queueOperations(
+    operations: Array<Pick<SyncOperation, 'kind' | 'payload'>>,
+  ): Promise<void> {
+    mutationRevisionRef.current += 1;
+    const ownerAccountId = accountIdRef.current;
+    let next = [...queueRef.current];
+    for (const item of operations) {
+      const entityId = item.kind === 'streak'
+        ? 'streak'
+        : (item.payload as Book | ReadingSession).id;
+      const operation: SyncOperation = {
+        id: queueEntityId(item.kind, entityId),
+        accountId: ownerAccountId,
+        kind: item.kind,
+        payload: item.payload,
+        createdAt: Date.now(),
+      };
+      next = upsertQueueEntity(next, operation);
+    }
+    return persistQueue(next);
+  }
 
   function clearPendingFreezeEarned() {
     setPendingFreezeEarned(false);
@@ -386,41 +581,103 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
   }
 
   useEffect(() => {
+    if (authLoading) return;
+    const version = identityVersionRef.current + 1;
+    identityVersionRef.current = version;
+    accountIdRef.current = accountId;
+    accountCredentialRef.current = null;
+    initializedAccountRef.current = null;
+    resetInMemoryState();
+    setIsLoaded(false);
+
     (async () => {
+      let loadedStreak: StreakData = INITIAL_STREAK;
+      let loadedProfile: UserProfile = INITIAL_PROFILE;
+      let loadedReminder: ReminderSettings = DEFAULT_REMINDER;
       try {
-        const raw = await AsyncStorage.getItem(STORAGE_KEY);
-        if (raw) {
-          const s = JSON.parse(raw);
-          const storedSessions = Array.isArray(s.sessions) ? s.sessions : [];
-          if (s.books) setBooks(s.books);
+        if (accountId !== GUEST_ACCOUNT_ID) {
+          const token = await getAuthToken();
+          if (version !== identityVersionRef.current || accountIdRef.current !== accountId) return;
+          if (token) {
+            try {
+              const identity = await apiFetchWithToken<{ user?: { id?: string } }>(
+                '/local-auth/me',
+                token,
+              );
+              if (version !== identityVersionRef.current || accountIdRef.current !== accountId) return;
+              accountCredentialRef.current = bindVerifiedCredential(
+                accountId,
+                token,
+                identity.user?.id,
+              );
+            } catch {
+              // Offline credentials remain stored, but no queued write can be
+              // sent until this token is verified as belonging to this account.
+              accountCredentialRef.current = null;
+            }
+          }
+        }
+        const key = accountStorageKey(STORAGE_KEY, accountId);
+        let raw = await AsyncStorage.getItem(key);
+        // Released builds used an unpartitioned guest key. It is migrated only
+        // into the guest namespace; authenticated accounts never inherit it.
+        if (!raw && accountId === GUEST_ACCOUNT_ID) {
+          const legacy = await AsyncStorage.getItem(STORAGE_KEY);
+          if (legacy) {
+            raw = legacy;
+            await AsyncStorage.setItem(key, legacy);
+          }
+        }
+        const queueRaw = await AsyncStorage.getItem(accountStorageKey(QUEUE_KEY, accountId));
+        const storedQueue = queueRaw ? JSON.parse(queueRaw) : [];
+        if (version !== identityVersionRef.current || accountIdRef.current !== accountId) return;
+        queueRef.current = Array.isArray(storedQueue)
+          ? storedQueue.filter((item: SyncOperation) => item?.accountId === accountId)
+          : [];
+        {
+          const stored = raw ? JSON.parse(raw) : {};
+          const bookMap = new Map<string, Book>((Array.isArray(stored.books) ? stored.books.map(rowToBook) : []).map((book: Book) => [book.id, book]));
+          const sessionMap = new Map<string, ReadingSession>((Array.isArray(stored.sessions) ? stored.sessions.map(rowToSession) : []).map((session: ReadingSession) => [session.id, session]));
+          // Recover a crash between the durable outbox write and cache write,
+          // including guest/offline launches where no cloud hydration runs.
+          for (const operation of queueRef.current) {
+            if (operation.kind === 'book') bookMap.set((operation.payload as Book).id, operation.payload as Book);
+            else if (operation.kind === 'session') sessionMap.set((operation.payload as ReadingSession).id, operation.payload as ReadingSession);
+            else stored.streak = operation.payload;
+          }
+          const storedBooks = [...bookMap.values()];
+          const storedSessions = [...sessionMap.values()];
+          const storedProfile = stored.profile ? { ...INITIAL_PROFILE, ...stored.profile } : INITIAL_PROFILE;
+          loadedStreak = stored.streak ? withDerivedTodayMinutes(stored.streak, storedSessions) : INITIAL_STREAK;
+          loadedProfile = deriveProfile(storedProfile, storedBooks, storedSessions);
+          loadedReminder = stored.reminder ? { ...DEFAULT_REMINDER, ...stored.reminder } : DEFAULT_REMINDER;
+          setBooks(storedBooks);
           setSessions(storedSessions);
-          if (s.streak) setStreak(withDerivedTodayMinutes(s.streak, storedSessions));
-          if (s.profile) setProfile(s.profile);
-          if (s.reminder) setReminderState(s.reminder);
+          setStreak(loadedStreak);
+          setProfile(loadedProfile);
+          setReminderState(loadedReminder);
         }
       } catch {
-        // use defaults
+        queueRef.current = [];
       }
+      if (version !== identityVersionRef.current || accountIdRef.current !== accountId) return;
       setIsLoaded(true);
+      if (isAuthenticated) {
+        void hydrateFromCloud(version, accountId, loadedStreak, loadedProfile, loadedReminder);
+        void fetchRecommendations(version, accountId);
+      }
     })();
-  }, []);
+    return () => { identityVersionRef.current += 1; };
+  }, [accountId, authLoading, isAuthenticated]);
 
-  useEffect(() => {
-    if (authLoading || !isLoaded) return;
-    if (!isAuthenticated) {
-      cloudSyncedRef.current = false;
-      return;
-    }
-    if (cloudSyncedRef.current) return;
-    cloudSyncedRef.current = true;
-    hydrateFromCloud();
-    fetchRecommendations();
-  }, [isAuthenticated, authLoading, isLoaded]);
-
-  async function fetchRecommendations() {
+  async function fetchRecommendations(version = identityVersionRef.current, expectedAccountId = accountIdRef.current) {
     try {
-      const recs = await apiFetch<RecommendedBook[]>('/social/recommendations');
-      if (Array.isArray(recs) && recs.length > 0) setRecommendedBooks(recs);
+      const credential = await verifiedCredential(version, expectedAccountId);
+      if (!credential) return;
+      const recs = await apiFetchWithToken<RecommendedBook[]>('/social/recommendations', credential.token);
+      if (version === identityVersionRef.current && expectedAccountId === accountIdRef.current && Array.isArray(recs) && recs.length > 0) {
+        setRecommendedBooks(recs);
+      }
     } catch {
       // keep curated defaults on failure
     }
@@ -432,12 +689,15 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     if (!isLoaded) return;
     const reconcileToday = () => {
-      setStreak(current => {
-        const reconciled = withDerivedTodayMinutes(current, sessions);
-        if (reconciled === current) return current;
-        void persist(books, sessions, reconciled, profile, reminder);
-        return reconciled;
-      });
+      const reconciledStreak = withDerivedTodayMinutes(streak, sessions);
+      const reconciledProfile = deriveProfile(profile, books, sessions);
+      const streakChanged = reconciledStreak.todayMinutes !== streak.todayMinutes;
+      const profileChanged = JSON.stringify(reconciledProfile) !== JSON.stringify(profile);
+      if (streakChanged) setStreak(reconciledStreak);
+      if (profileChanged) setProfile(reconciledProfile);
+      if (streakChanged || profileChanged) {
+        void persist(books, sessions, reconciledStreak, reconciledProfile, reminder);
+      }
     };
     reconcileToday();
     const appStateSubscription = AppState.addEventListener('change', state => {
@@ -448,7 +708,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
       appStateSubscription.remove();
       clearInterval(interval);
     };
-  }, [books, isLoaded, profile, reminder, sessions]);
+  }, [books, isLoaded, profile, reminder, sessions, streak]);
 
   useEffect(() => {
     if (!isLoaded) return;
@@ -467,84 +727,168 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
     })();
   }, [isLoaded, sessions]);
 
-  async function hydrateFromCloud() {
+  async function persist(b: Book[], se: ReadingSession[], st: StreakData, p: UserProfile, r: ReminderSettings) {
+    mutationRevisionRef.current += 1;
     try {
-      const data = await apiFetch<{ books: any[]; sessions: any[]; streak: any | null }>(`/bookshelf?today=${encodeURIComponent(todayStr())}`);
-
-      const cloudHasData = data.books.length > 0 || data.sessions.length > 0 || data.streak !== null;
-
-      if (cloudHasData) {
-        const cloudBooks = data.books.map(rowToBook);
-        const cloudSessions = data.sessions.map(rowToSession);
-        const cloudStreak = data.streak ? withDerivedTodayMinutes(data.streak, cloudSessions) : undefined;
-
-        // The cloud copy is canonical for a signed-in reader. In particular,
-        // do not leave old on-device sessions in place when their account has
-        // no matching cloud sessions.
-        setBooks(cloudBooks);
-        setSessions(cloudSessions);
-        if (cloudStreak) setStreak(cloudStreak);
-
-        await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify({
-          books: cloudBooks,
-          sessions: cloudSessions,
-          streak: cloudStreak ?? withDerivedTodayMinutes(streak, cloudSessions),
-          profile,
-          reminder,
-        }));
-      } else {
-        const alreadyInitialized = await AsyncStorage.getItem(CLOUD_INIT_KEY);
-        if (!alreadyInitialized) {
-          await AsyncStorage.setItem(CLOUD_INIT_KEY, '1');
-          syncBooksToCloud(books);
-          await Promise.all(sessions.map(s => syncSessionToCloud(s)));
-          syncStreakToCloud(streak);
-        }
-      }
+      const key = accountStorageKey(STORAGE_KEY, accountIdRef.current);
+      const serialized = JSON.stringify({
+        books: b,
+        sessions: se,
+        streak: st,
+        profile: p,
+        reminder: r,
+      });
+      stateWriteRef.current = stateWriteRef.current
+        .catch(() => {})
+        .then(() => AsyncStorage.setItem(key, serialized));
+      await stateWriteRef.current;
     } catch {
-      // offline or unauthenticated — keep local data
+      // A later mutation or retry will attempt persistence again.
     }
   }
 
-  async function persist(b: Book[], se: ReadingSession[], st: StreakData, p: UserProfile, r: ReminderSettings) {
-    try {
-      await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify({ books: b, sessions: se, streak: st, profile: p, reminder: r }));
-    } catch { /* ignore */ }
-  }
-
-  async function syncBooksToCloud(booksToSync: Book[]) {
-    if (!isAuthenticated) return;
-    try {
-      await Promise.all(
-        booksToSync.map(book =>
-          apiFetch('/bookshelf/books', {
-            method: 'POST',
-            body: JSON.stringify(book),
-          }).catch(() => { /* non-blocking */ }),
-        ),
-      );
-    } catch { /* non-blocking */ }
-  }
-
-  async function syncSessionToCloud(session: ReadingSession) {
-    if (!isAuthenticated) return;
-    try {
-      await apiFetch('/bookshelf/sessions', {
-        method: 'POST',
-        body: JSON.stringify(session),
-      });
-    } catch { /* non-blocking */ }
-  }
-
-  async function syncStreakToCloud(st: StreakData) {
-    if (!isAuthenticated) return;
-    try {
-      await apiFetch('/bookshelf/streak', {
+  async function sendOperation(operation: SyncOperation, token: string): Promise<void> {
+    if (operation.kind === 'book') {
+      await apiFetchWithToken('/bookshelf/books', token, { method: 'POST', body: JSON.stringify(operation.payload) });
+    } else if (operation.kind === 'session') {
+      await apiFetchWithToken('/bookshelf/sessions', token, { method: 'POST', body: JSON.stringify(operation.payload) });
+    } else {
+      await apiFetchWithToken('/bookshelf/streak', token, {
         method: 'PUT',
-        body: JSON.stringify({ ...st, todayDate: todayStr() }),
+        body: JSON.stringify({ ...operation.payload, todayDate: todayStr() }),
       });
-    } catch { /* non-blocking */ }
+    }
   }
+
+  async function flushQueue(expectedVersion = identityVersionRef.current, expectedAccountId = accountIdRef.current): Promise<void> {
+    if (!isAuthenticated || expectedAccountId === GUEST_ACCOUNT_ID || syncInFlightRef.current) return;
+    syncInFlightRef.current = true;
+    setIsSyncing(true);
+    setSyncError(null);
+    try {
+      const credential = await verifiedCredential(expectedVersion, expectedAccountId);
+      if (!credential) return;
+      while (
+        queueRef.current.length > 0
+        && expectedVersion === identityVersionRef.current
+        && expectedAccountId === accountIdRef.current
+      ) {
+        // Do not send a mutation before its outbox write is durable.
+        let durableWrite: Promise<void>;
+        do {
+          durableWrite = queueWriteRef.current;
+          await durableWrite.catch(() => persistQueue(queueRef.current));
+        } while (durableWrite !== queueWriteRef.current);
+        if (expectedVersion !== identityVersionRef.current || expectedAccountId !== accountIdRef.current) return;
+        const operation = queueRef.current[0];
+        if (!operation) break;
+        if (!canSendAccountOperation(operation.accountId, expectedAccountId, credential)) {
+          throw new Error("Queued write belongs to a different account");
+        }
+        await sendOperation(operation, credential.token);
+        if (expectedVersion !== identityVersionRef.current || expectedAccountId !== accountIdRef.current) return;
+        await persistQueue(acknowledgeQueueEntity(queueRef.current, operation));
+      }
+    } catch (error) {
+      if (expectedVersion === identityVersionRef.current && expectedAccountId === accountIdRef.current) {
+        setSyncError(error instanceof Error ? error.message : 'Sync failed. Please retry.');
+      }
+    } finally {
+      syncInFlightRef.current = false;
+      setIsSyncing(false);
+    }
+  }
+
+  async function hydrateFromCloud(
+    expectedVersion: number,
+    expectedAccountId: string,
+    loadedStreak: StreakData,
+    loadedProfile: UserProfile,
+    loadedReminder: ReminderSettings,
+  ) {
+    if (!isAuthenticated || expectedAccountId === GUEST_ACCOUNT_ID) return;
+    try {
+      const credential = await verifiedCredential(expectedVersion, expectedAccountId);
+      if (!credential) return;
+      const revision = mutationRevisionRef.current;
+      const pendingAtRequest = [...queueRef.current];
+      const data = await apiFetchWithToken<{ books: any[]; sessions: any[]; streak: any | null }>(
+        `/bookshelf?today=${encodeURIComponent(todayStr())}`,
+        credential.token,
+      );
+      if (expectedVersion !== identityVersionRef.current || expectedAccountId !== accountIdRef.current) return;
+      // A GET started before a local edit cannot replace the edited state,
+      // even if that edit has already been sent and left the queue.
+      if (revision !== mutationRevisionRef.current) { await flushQueue(expectedVersion, expectedAccountId); return; }
+
+      const booksById = new Map(data.books.map(row => {
+        const book = rowToBook(row);
+        return [book.id, book] as const;
+      }));
+      const sessionsById = new Map(data.sessions.map(row => {
+        const session = rowToSession(row);
+        return [session.id, session] as const;
+      }));
+      let hydratedStreak: StreakData | null = data.streak
+        ? { ...INITIAL_STREAK, ...data.streak }
+        : null;
+      // Apply only edits that were durably queued while offline. This avoids
+      // cloud hydration erasing a session that has not reached the server yet.
+      for (const operation of [...pendingAtRequest, ...queueRef.current]) {
+        if (operation.kind === 'book') {
+          const book = operation.payload as Book;
+          booksById.set(book.id, book);
+        } else if (operation.kind === 'session') {
+          const session = operation.payload as ReadingSession;
+          sessionsById.set(session.id, session);
+        } else {
+          hydratedStreak = operation.payload as StreakData;
+        }
+      }
+      const hydratedBooks = [...booksById.values()];
+      const hydratedSessions = [...sessionsById.values()];
+      const nextStreak = hydratedStreak
+        ? withDerivedTodayMinutes(hydratedStreak, hydratedSessions)
+        : withDerivedTodayMinutes(loadedStreak, hydratedSessions);
+      const nextProfile = deriveProfile(loadedProfile, hydratedBooks, hydratedSessions);
+      setBooks(hydratedBooks);
+      setSessions(hydratedSessions);
+      setStreak(nextStreak);
+      setProfile(nextProfile);
+      await persist(hydratedBooks, hydratedSessions, nextStreak, nextProfile, loadedReminder);
+      await flushQueue(expectedVersion, expectedAccountId);
+      if (queueRef.current.length === 0) {
+        await AsyncStorage.setItem(accountStorageKey(CLOUD_INIT_KEY, expectedAccountId), '1');
+        initializedAccountRef.current = expectedAccountId;
+      }
+    } catch (error) {
+      if (expectedVersion === identityVersionRef.current && expectedAccountId === accountIdRef.current) {
+        setSyncError(error instanceof Error ? error.message : 'Unable to sync. Please retry.');
+      }
+    }
+  }
+
+  useEffect(() => {
+    if (!isLoaded || !isAuthenticated) return;
+    const retry = () => {
+      void flushQueue().then(() => {
+        if (initializedAccountRef.current !== accountId) {
+          const snapshot = snapshotRef.current;
+          void hydrateFromCloud(identityVersionRef.current, accountId, snapshot.streak, snapshot.profile, snapshot.reminder);
+          void fetchRecommendations();
+        }
+      });
+    };
+    const subscription = AppState.addEventListener('change', state => {
+      if (state === 'active') retry();
+    });
+    const interval = setInterval(retry, 30_000);
+    retry();
+    return () => {
+      subscription.remove();
+      clearInterval(interval);
+    };
+  }, [isLoaded, isAuthenticated, accountId]);
 
   async function setReminder(settings: ReminderSettings) {
     setReminderState(settings);
@@ -555,7 +899,8 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
     const newStreak = { ...withDerivedTodayMinutes(streak, sessions), dailyGoalMinutes: minutes };
     setStreak(newStreak);
     await persist(books, sessions, newStreak, profile, reminder);
-    syncStreakToCloud(newStreak);
+    await queueOperation('streak', newStreak);
+    void flushQueue();
   }
 
   async function updateProfile(name: string, color: string) {
@@ -565,19 +910,38 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
     await persist(books, sessions, streak, newProfile, reminder);
   }
 
-  async function logSession(bookId: string, durationMinutes: number, startPage: number, endPage: number) {
+  async function logSession(
+    bookId: string,
+    durationMinutes: number,
+    startPage: number,
+    endPage: number,
+    stableSessionId?: string,
+  ) {
+    const sessionId = stableSessionId ?? generateId();
+    const existingSession = sessions.find(existing => existing.id === sessionId);
+    if (savingSessionIdsRef.current.has(sessionId)) return;
+    if (existingSession) {
+      // A previous attempt may have persisted local state but failed before
+      // persisting its queue. Re-enqueueing the stable ID is idempotent.
+      await queueOperation('session', existingSession);
+      void flushQueue();
+      return;
+    }
+    savingSessionIdsRef.current.add(sessionId);
+    try {
+    const safeDuration = Number.isFinite(durationMinutes) ? Math.max(0, durationMinutes) : 0;
     const session: ReadingSession = {
-      id: generateId(),
+      id: sessionId,
       bookId,
-      durationMinutes,
-      startPage,
-      endPage,
+      durationMinutes: safeDuration,
+      startPage: Math.max(0, Math.floor(startPage)),
+      endPage: Math.max(Math.floor(startPage), Math.floor(endPage)),
       date: todayStr(),
       createdAt: Date.now(),
     };
-    const newSessions = [...sessions, session];
+    const newSessions = upsertSessionByStableId(sessions, session);
     const newBooks = books.map(b =>
-      b.id === bookId ? { ...b, currentPage: Math.min(endPage, b.totalPages) } : b
+      b.id === bookId ? { ...b, currentPage: Math.min(session.endPage, b.totalPages) } : b
     );
     const currentTodayMinutes = minutesForDate(sessions, todayStr());
     const wasUnderGoal = streak.dailyGoalMinutes > 0 && currentTodayMinutes < streak.dailyGoalMinutes;
@@ -611,31 +975,27 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
         earnedFreeze = true;
       }
     }
-    const dayIdx = new Date().getDay() === 0 ? 6 : new Date().getDay() - 1;
-    const newWeekly = [...profile.weeklyMinutes];
-    newWeekly[dayIdx] = (newWeekly[dayIdx] ?? 0) + durationMinutes;
-    const newProfile: UserProfile = {
-      ...profile,
-      totalMinutes: profile.totalMinutes + durationMinutes,
-      totalPages: profile.totalPages + Math.max(0, endPage - startPage),
-      weeklyPages: profile.weeklyPages + Math.max(0, endPage - startPage),
-      weeklyMinutes: newWeekly,
-      longestStreak: Math.max(profile.longestStreak, newStreak.currentStreak),
-    };
+    const newProfile = deriveProfile(profile, newBooks, newSessions);
+    const updatedBook = newBooks.find(b => b.id === bookId);
+    await queueOperations([
+      ...(updatedBook ? [{ kind: 'book' as const, payload: updatedBook }] : []),
+      { kind: 'session', payload: session },
+      { kind: 'streak', payload: newStreak },
+    ]);
+    await persist(newBooks, newSessions, newStreak, newProfile, reminder);
     setSessions(newSessions);
     setBooks(newBooks);
     setStreak(newStreak);
     setProfile(newProfile);
     if (earnedFreeze) setPendingFreezeEarned(true);
     if (goalJustMet) setPendingGoalMet(true);
-    await persist(newBooks, newSessions, newStreak, newProfile, reminder);
-    const updatedBook = newBooks.find(b => b.id === bookId);
-    if (updatedBook) await syncBooksToCloud([updatedBook]);
-    await syncSessionToCloud(session);
-    await syncStreakToCloud(newStreak);
+    void flushQueue();
     void fetchRecommendations();
     await cancelStreakRescueNotification();
     rescheduleStreakRescueForTomorrow();
+    } finally {
+    savingSessionIdsRef.current.delete(sessionId);
+    }
   }
 
   function finishBook(bookId: string, favoriteQuote?: string) {
@@ -644,7 +1004,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
     const newBooks = books.map(b =>
       b.id === bookId ? { ...b, currentPage: b.totalPages, finishedAt: Date.now(), favoriteQuote: favoriteQuote ?? b.favoriteQuote } : b
     );
-    const newProfile = { ...profile, booksFinished: profile.booksFinished + 1 };
+    const newProfile = deriveProfile(profile, newBooks, sessions);
     const newStreak: StreakData =
       streak.freezesLeft < MAX_FREEZES
         ? { ...streak, freezesLeft: Math.min(streak.freezesLeft + 1, MAX_FREEZES) }
@@ -654,12 +1014,17 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
     setProfile(newProfile);
     setStreak(newStreak);
     if (earnedFreeze) setPendingFreezeEarned(true);
-    persist(newBooks, sessions, newStreak, newProfile, reminder);
+    void persist(newBooks, sessions, newStreak, newProfile, reminder);
     const finishedBook = newBooks.find(b => b.id === bookId);
     if (finishedBook) {
-      void syncBooksToCloud([finishedBook]).then(() => fetchRecommendations());
+      void queueOperation('book', finishedBook).then(() => {
+        void flushQueue();
+        return fetchRecommendations();
+      });
     }
-    if (earnedFreeze) syncStreakToCloud(newStreak);
+    if (earnedFreeze) {
+      void queueOperation('streak', newStreak).then(() => flushQueue());
+    }
   }
 
   function useStreakFreeze() {
@@ -673,8 +1038,8 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
         : [...streak.checkedDays, todayStr()],
     };
     setStreak(newStreak);
-    persist(books, sessions, newStreak, profile, reminder);
-    syncStreakToCloud(newStreak);
+    void persist(books, sessions, newStreak, profile, reminder);
+    void queueOperation('streak', newStreak).then(() => flushQueue());
   }
 
   function addBook(title: string, author: string, totalPages: number, genre: string, coverImageUri?: string, startingPage = 0) {
@@ -696,22 +1061,57 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
     };
     const newBooks = [...books, newBook];
     setBooks(newBooks);
-    persist(newBooks, sessions, streak, profile, reminder);
-    void syncBooksToCloud([newBook]).then(() => fetchRecommendations());
+    void persist(newBooks, sessions, streak, profile, reminder);
+    void queueOperation('book', newBook).then(() => {
+      void flushQueue();
+      return fetchRecommendations();
+    });
   }
 
   function updateBook(id: string, updates: Partial<Pick<Book, 'title' | 'author' | 'totalPages' | 'genre' | 'coverImageUri'>>) {
     const newBooks = books.map(b => b.id === id ? { ...b, ...updates } : b);
     setBooks(newBooks);
-    persist(newBooks, sessions, streak, profile, reminder);
+    void persist(newBooks, sessions, streak, profile, reminder);
     const updatedBook = newBooks.find(b => b.id === id);
     if (updatedBook) {
-      void syncBooksToCloud([updatedBook]).then(() => fetchRecommendations());
+      void queueOperation('book', updatedBook).then(() => {
+        void flushQueue();
+        return fetchRecommendations();
+      });
     }
   }
 
   function getBook(id: string) {
     return books.find(b => b.id === id);
+  }
+
+  async function migrateGuestDataToAccount() {
+    if (!isAuthenticated || accountIdRef.current === GUEST_ACCOUNT_ID) {
+      throw new Error('Sign in before migrating guest data.');
+    }
+    const guestRaw = await AsyncStorage.getItem(accountStorageKey(STORAGE_KEY, GUEST_ACCOUNT_ID))
+      ?? await AsyncStorage.getItem(STORAGE_KEY);
+    if (!guestRaw) return;
+    const guestState = JSON.parse(guestRaw);
+    const guestBooks = Array.isArray(guestState.books) ? guestState.books.map(rowToBook) : [];
+    const guestSessions = Array.isArray(guestState.sessions) ? guestState.sessions.map(rowToSession) : [];
+    const mergedBooks = [...books, ...guestBooks.filter((book: Book) => !books.some(existing => existing.id === book.id))];
+    const mergedSessions = [...sessions, ...guestSessions.filter((session: ReadingSession) => !sessions.some(existing => existing.id === session.id))];
+    const mergedStreak = guestState.streak ? { ...streak, ...guestState.streak } : streak;
+    const mergedProfile = deriveProfile({ ...profile, ...(guestState.profile ?? {}) }, mergedBooks, mergedSessions);
+    const mergedReminder = guestState.reminder ? { ...DEFAULT_REMINDER, ...guestState.reminder } : reminder;
+    setBooks(mergedBooks);
+    setSessions(mergedSessions);
+    setStreak(mergedStreak);
+    setProfile(mergedProfile);
+    setReminderState(mergedReminder);
+    await persist(mergedBooks, mergedSessions, mergedStreak, mergedProfile, mergedReminder);
+    await Promise.all([
+      ...mergedBooks.map(book => queueOperation('book', book)),
+      ...mergedSessions.map(session => queueOperation('session', session)),
+      queueOperation('streak', mergedStreak),
+    ]);
+    await flushQueue();
   }
 
   return (
@@ -726,6 +1126,10 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
       pendingGoalMet,
       clearPendingGoalMet,
       logSession, finishBook, useStreakFreeze, addBook, updateBook, getBook, setReminder, setDailyGoal, updateProfile,
+      syncError,
+      isSyncing,
+      retrySync: () => flushQueue(),
+      migrateGuestDataToAccount,
     }}>
       {children}
     </StoreContext.Provider>

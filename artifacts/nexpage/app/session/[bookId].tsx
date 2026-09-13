@@ -7,17 +7,29 @@ import { Ionicons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
 import { useColors } from '@/hooks/useColors';
 import { useStore } from '@/context/StoreContext';
+import { useAuth } from '@/lib/auth';
 import { BookCover } from '@/components/BookCover';
 
 const ACTIVE_SESSION_KEY = 'everpage_active_reading_session';
+const GUEST_ACCOUNT_ID = 'guest';
 
 type ActiveReadingSession = {
+  id: string;
   bookId: string;
+  startPage: number;
   elapsedSeconds: number;
   // A timestamp, rather than a ticking counter, lets the session catch up
   // after iOS suspends or terminates the app.
   startedAt: number | null;
 };
+
+function activeSessionKey(accountId: string, bookId: string): string {
+  return `${ACTIVE_SESSION_KEY}:${encodeURIComponent(accountId)}:${encodeURIComponent(bookId)}`;
+}
+
+function generateSessionId(): string {
+  return `${Date.now()}${Math.random().toString(36).slice(2, 11)}`;
+}
 
 function elapsedSecondsFor(session: ActiveReadingSession, now = Date.now()) {
   if (session.startedAt === null) return session.elapsedSeconds;
@@ -27,9 +39,12 @@ function elapsedSecondsFor(session: ActiveReadingSession, now = Date.now()) {
 function isActiveReadingSession(value: unknown): value is ActiveReadingSession {
   if (!value || typeof value !== 'object') return false;
   const session = value as Record<string, unknown>;
-  return typeof session.bookId === 'string'
+  return (session.id === undefined || typeof session.id === 'string')
+    && typeof session.bookId === 'string'
+    && (session.startPage === undefined || (typeof session.startPage === 'number' && Number.isFinite(session.startPage)))
     && typeof session.elapsedSeconds === 'number'
-    && (typeof session.startedAt === 'number' || session.startedAt === null);
+    && Number.isFinite(session.elapsedSeconds)
+    && (session.startedAt === null || (typeof session.startedAt === 'number' && Number.isFinite(session.startedAt)));
 }
 
 export default function SessionScreen() {
@@ -38,7 +53,9 @@ export default function SessionScreen() {
   const router = useRouter();
   const { bookId } = useLocalSearchParams<{ bookId: string }>();
   const { getBook } = useStore();
+  const { user } = useAuth();
   const book = getBook(bookId ?? '');
+  const accountId = user?.id ?? GUEST_ACCOUNT_ID;
 
   const [seconds, setSeconds] = useState(0);
   const [isRunning, setIsRunning] = useState(true);
@@ -47,7 +64,7 @@ export default function SessionScreen() {
   const sessionRef = useRef<ActiveReadingSession | null>(null);
 
   function saveSession(session: ActiveReadingSession) {
-    return AsyncStorage.setItem(ACTIVE_SESSION_KEY, JSON.stringify(session));
+    return AsyncStorage.setItem(activeSessionKey(accountId, session.bookId), JSON.stringify(session));
   }
 
   useEffect(() => {
@@ -55,17 +72,23 @@ export default function SessionScreen() {
 
     async function restoreSession() {
       let session: ActiveReadingSession = {
+        id: generateSessionId(),
         bookId: bookId ?? '',
+        startPage: book?.currentPage ?? 0,
         elapsedSeconds: 0,
         startedAt: Date.now(),
       };
 
       try {
-        const saved = await AsyncStorage.getItem(ACTIVE_SESSION_KEY);
+        const saved = await AsyncStorage.getItem(activeSessionKey(accountId, session.bookId));
         if (saved) {
           const parsed: unknown = JSON.parse(saved);
           if (isActiveReadingSession(parsed) && parsed.bookId === session.bookId) {
-            session = parsed;
+            session = {
+              ...parsed,
+              id: parsed.id ?? session.id,
+              startPage: parsed.startPage ?? session.startPage,
+            };
           }
         }
         // Store the timestamp immediately. If the user force-quits before
@@ -84,7 +107,7 @@ export default function SessionScreen() {
 
     restoreSession();
     return () => { cancelled = true; };
-  }, [bookId]);
+  }, [accountId, book?.currentPage, bookId]);
 
   useEffect(() => {
     if (!isReady || !isRunning) return;
@@ -116,19 +139,25 @@ export default function SessionScreen() {
   const secs = seconds % 60;
   const display = `${String(mins).padStart(2, '0')}:${String(secs).padStart(2, '0')}`;
 
-  function handleStop() {
+  async function handleStop() {
     if (!sessionRef.current) return;
     if (intervalRef.current) clearInterval(intervalRef.current);
     const totalSeconds = elapsedSecondsFor(sessionRef.current);
     sessionRef.current = { ...sessionRef.current, elapsedSeconds: totalSeconds, startedAt: null };
     setSeconds(totalSeconds);
     setIsRunning(false);
-    void AsyncStorage.removeItem(ACTIVE_SESSION_KEY);
+    // Keep the stopped draft until the log write is durably acknowledged.
+    await saveSession(sessionRef.current);
     Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-    const elapsed = Math.max(1, Math.floor(totalSeconds / 60));
+    const elapsed = Math.max(0, Math.floor(totalSeconds / 60));
     router.replace({
       pathname: '/session-log/[bookId]',
-      params: { bookId: bookId ?? '', minutes: String(elapsed), startPage: String(book?.currentPage ?? 0) },
+      params: {
+        bookId: bookId ?? '',
+        minutes: String(elapsed),
+        startPage: String(sessionRef.current.startPage),
+        sessionId: sessionRef.current.id,
+      },
     });
   }
 
@@ -151,7 +180,7 @@ export default function SessionScreen() {
     // Closing is an intentional discard. Backgrounding or force-quitting does
     // not call this, so those cases continue when the reader returns.
     sessionRef.current = null;
-    void AsyncStorage.removeItem(ACTIVE_SESSION_KEY);
+    void AsyncStorage.removeItem(activeSessionKey(accountId, bookId ?? ''));
     router.back();
   }
 

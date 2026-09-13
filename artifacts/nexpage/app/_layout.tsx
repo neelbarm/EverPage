@@ -118,6 +118,21 @@ function RootLayoutNav() {
   );
 }
 
+function AccountProviders() {
+  const { user, isLoading } = useAuth();
+  // Remount account-owned state and screens. Async work from a signed-out
+  // account must never reuse the next account's refs or storage namespace.
+  if (isLoading) return null;
+  return (
+    <StoreProvider key={user?.id ?? 'guest'}>
+      <SocialProvider>
+        <PushTokenRegistrar />
+        <RootLayoutNav />
+      </SocialProvider>
+    </StoreProvider>
+  );
+}
+
 export default function RootLayout() {
   const [fontsLoaded, fontError] = useFonts({
     Inter_400Regular,
@@ -149,12 +164,7 @@ export default function RootLayout() {
             <KeyboardProvider>
               <ThemeProvider>
                 <AuthProvider>
-                  <StoreProvider>
-                    <SocialProvider>
-                      <PushTokenRegistrar />
-                      <RootLayoutNav />
-                    </SocialProvider>
-                  </StoreProvider>
+                  <AccountProviders />
                 </AuthProvider>
               </ThemeProvider>
             </KeyboardProvider>

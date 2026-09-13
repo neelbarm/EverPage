@@ -1,7 +1,10 @@
 import { Router, type IRouter } from "express";
 import { db } from "@workspace/db";
-import { npUsers, npFollows, npActivity, npNudges, npBooks, npBlocks, npSessions } from "@workspace/db/schema";
-import { eq, ilike, or, and, ne, sql, desc, not, inArray, gte } from "drizzle-orm";
+import { npUsers, npFollows, npActivity, npNudges, npBooks, npBlocks, npSessions, npPushDeliveries } from "@workspace/db/schema";
+import { eq, ilike, or, and, ne, sql, desc, asc, not, inArray, gte } from "drizzle-orm";
+import { assignAvatarUpload, objectPathFromAvatarUrl } from "./storage";
+import { ObjectNotFoundError } from "../lib/objectStorage";
+import { expoReceiptPersistenceUpdate, readingCalendarDay } from "../lib/reliabilityPolicies";
 
 const router: IRouter = Router();
 
@@ -36,6 +39,8 @@ async function isBlockedBetween(a: string, b: string): Promise<boolean> {
 const EXPO_PUSH_URL = "https://exp.host/--/api/v2/push/send";
 const NUDGE_RETENTION_DAYS = 30;
 const NUDGE_COOLDOWN_DAYS = 1;
+const TRUSTED_PUBLIC_ORIGIN = (process.env.PUBLIC_APP_ORIGIN ?? "https://nex-page.replit.app")
+  .replace(/\/+$/, "");
 
 function generateId(): string {
   return Date.now().toString(36) + Math.random().toString(36).substring(2, 9);
@@ -43,6 +48,80 @@ function generateId(): string {
 
 function isExpoPushToken(token: string): boolean {
   return /^(?:Exponent|Expo)PushToken\[[^\]]+\]$/.test(token);
+}
+
+type ExpoTicket = {
+  id?: string;
+  status?: string;
+  details?: { error?: string };
+};
+
+export function expoReceiptState(receipt: ExpoTicket | undefined): "queued" | "accepted" | "failed" {
+  if (!receipt || (receipt.status !== "ok" && receipt.status !== "error")) return "queued";
+  return receipt.status === "error" ? "failed" : "accepted";
+}
+
+// Expo has returned both `data: ticket` and `data: [ticket]` over the
+// lifetime of the API. Treat either form as one-message input; never silently
+// report success just because the HTTP request itself succeeded.
+export function normalizeExpoTickets(data: unknown): ExpoTicket[] {
+  if (Array.isArray(data)) return data.filter((ticket): ticket is ExpoTicket => !!ticket && typeof ticket === "object");
+  return data && typeof data === "object" ? [data as ExpoTicket] : [];
+}
+
+function failedAttemptId(nudgeId: string): string {
+  return `failed_${nudgeId}_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
+}
+
+// Receipts are intentionally processed from durable ticket rows. This is
+// best-effort when called from a request: a temporary Expo outage leaves rows
+// queued for the next request instead of losing delivery state.
+export async function processExpoReceipts(): Promise<void> {
+  const queued = await db
+    .select()
+    .from(npPushDeliveries)
+    .where(eq(npPushDeliveries.status, "queued"))
+    .limit(100);
+  if (!queued.length) return;
+
+  const response = await fetch("https://exp.host/--/api/v2/push/getReceipts", {
+    signal: AbortSignal.timeout(10_000),
+    method: "POST",
+    headers: { "Content-Type": "application/json", Accept: "application/json" },
+    body: JSON.stringify({ ids: queued.map((row) => row.ticketId) }),
+  });
+  if (!response.ok) return;
+  const payload = await response.json() as { data?: unknown };
+  const receiptMap = payload.data && typeof payload.data === "object" && !Array.isArray(payload.data)
+    ? payload.data as Record<string, ExpoTicket>
+    : {};
+
+  for (const delivery of queued) {
+    const receipt = receiptMap[delivery.ticketId];
+    const receiptState = expoReceiptState(receipt);
+    if (receiptState === "queued") continue;
+    const persisted = expoReceiptPersistenceUpdate(receipt);
+    if (!persisted) continue;
+    const failed = persisted.status === "failed";
+    await db
+      .update(npPushDeliveries)
+      .set({
+        // An Expo receipt with status "ok" means the provider accepted the
+        // message for delivery. It cannot confirm that iOS displayed it.
+        status: persisted.status,
+        receiptError: persisted.receiptError,
+        updatedAt: new Date(),
+      })
+      .where(eq(npPushDeliveries.ticketId, delivery.ticketId));
+
+    // Never clear a newly rotated token because an old ticket completed later.
+    if (failed && receipt.details?.error === "DeviceNotRegistered") {
+      await db
+        .update(npUsers)
+        .set({ pushToken: null, updatedAt: new Date() })
+        .where(and(eq(npUsers.id, delivery.recipientId), eq(npUsers.pushToken, delivery.token)));
+    }
+  }
 }
 
 function requireAuth(req: any, res: any): string | null {
@@ -59,6 +138,20 @@ function formatUser(u: typeof npUsers.$inferSelect) {
 
 function formatMe(u: typeof npUsers.$inferSelect) {
   return { id: u.id, username: u.username, displayName: u.displayName, color: u.color, initial: u.initial, avatarUrl: u.avatarUrl ?? null, nudgesEnabled: u.nudgesEnabled };
+}
+
+export function canonicalAvatarUrl(value: string, publicOrigin: string): string | null {
+  const objectPath = objectPathFromAvatarUrl(value);
+  if (!objectPath) return null;
+  try {
+    const origin = new URL(publicOrigin);
+    const submitted = new URL(value, origin);
+    if (submitted.origin !== origin.origin) return null;
+    if (submitted.pathname !== `/api/storage${objectPath}`) return null;
+    return `${origin.origin}/api/storage${objectPath}`;
+  } catch {
+    return null;
+  }
 }
 
 async function getSocialProfile(userId: string) {
@@ -331,6 +424,31 @@ router.post("/social/activity", async (req, res) => {
   }
   const validTypes = ["session", "recommendation"];
   const resolvedType = validTypes.includes(activityType) ? activityType : "session";
+  if (resolvedType === "session") {
+    // Released 1.0.3 posts activity immediately after posting its session.
+    // New session writes create an idempotent activity in the same transaction;
+    // return that row instead of duplicating the legacy follow-up request.
+    const recentCutoff = new Date(Date.now() - 2 * 60 * 1000);
+    const existing = await db
+      .select()
+      .from(npActivity)
+      .where(and(
+        eq(npActivity.userId, userId),
+        eq(npActivity.bookTitle, String(bookTitle)),
+        eq(npActivity.bookAuthor, String(bookAuthor ?? "")),
+        eq(npActivity.durationMinutes, Math.max(0, Number(durationMinutes) || 0)),
+        eq(npActivity.pagesRead, Math.max(0, Number(pagesRead) || 0)),
+        eq(npActivity.activityType, "session"),
+        gte(npActivity.createdAt, recentCutoff),
+      ))
+      .orderBy(desc(npActivity.createdAt))
+      .limit(5);
+    const sessionActivity = existing.find((row) => row.id.startsWith("session:"));
+    if (sessionActivity) {
+      res.status(200).json(sessionActivity);
+      return;
+    }
+  }
   const id = generateId();
   const rows = await db
     .insert(npActivity)
@@ -357,32 +475,29 @@ router.get("/social/leaderboard", async (req, res) => {
     .where(eq(npFollows.followerId, userId));
 
   const hidden = await getHiddenUserIds(userId);
-  const now = new Date();
-  const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-  const weekStart = new Date(todayStart);
-  weekStart.setDate(weekStart.getDate() - 6);
+  const { today, monday } = readingCalendarDay(req.query.today);
 
   const rows = await db
     .select({
-      userId: npActivity.userId,
+      userId: npUsers.id,
       username: npUsers.username,
       displayName: npUsers.displayName,
       color: npUsers.color,
       initial: npUsers.initial,
-      todayMinutes: sql<number>`coalesce(sum(case when ${npActivity.createdAt} >= ${todayStart.toISOString()} then ${npActivity.durationMinutes} else 0 end), 0)`.as("today_minutes"),
-      todayPages: sql<number>`coalesce(sum(case when ${npActivity.createdAt} >= ${todayStart.toISOString()} then ${npActivity.pagesRead} else 0 end), 0)`.as("today_pages"),
-      weekMinutes: sql<number>`coalesce(sum(case when ${npActivity.createdAt} >= ${weekStart.toISOString()} then ${npActivity.durationMinutes} else 0 end), 0)`.as("week_minutes"),
-      weekPages: sql<number>`coalesce(sum(case when ${npActivity.createdAt} >= ${weekStart.toISOString()} then ${npActivity.pagesRead} else 0 end), 0)`.as("week_pages"),
+      todayMinutes: sql<number>`coalesce(sum(case when ${npSessions.date} = ${today} then greatest(0, ${npSessions.durationMinutes}) else 0 end), 0)`.as("today_minutes"),
+      todayPages: sql<number>`coalesce(sum(case when ${npSessions.date} = ${today} then greatest(0, ${npSessions.endPage} - ${npSessions.startPage}) else 0 end), 0)`.as("today_pages"),
+      weekMinutes: sql<number>`coalesce(sum(case when ${npSessions.date} BETWEEN ${monday} AND ${today} then greatest(0, ${npSessions.durationMinutes}) else 0 end), 0)`.as("week_minutes"),
+      weekPages: sql<number>`coalesce(sum(case when ${npSessions.date} BETWEEN ${monday} AND ${today} then greatest(0, ${npSessions.endPage} - ${npSessions.startPage}) else 0 end), 0)`.as("week_pages"),
     })
-    .from(npActivity)
-    .innerJoin(npUsers, eq(npActivity.userId, npUsers.id))
+    .from(npUsers)
+    .leftJoin(npSessions, eq(npSessions.userId, npUsers.id))
     .where(
       and(
-        inArray(npActivity.userId, followingSubq),
-        hidden.length ? not(inArray(npActivity.userId, hidden)) : undefined,
+        inArray(npUsers.id, followingSubq),
+        hidden.length ? not(inArray(npUsers.id, hidden)) : undefined,
       ),
     )
-    .groupBy(npActivity.userId, npUsers.username, npUsers.displayName, npUsers.color, npUsers.initial)
+    .groupBy(npUsers.id, npUsers.username, npUsers.displayName, npUsers.color, npUsers.initial)
     .orderBy(desc(sql`today_minutes`));
 
   res.json(rows.map(r => ({
@@ -425,30 +540,21 @@ router.get("/social/users/:id/profile", async (req, res) => {
     .orderBy(desc(npActivity.createdAt))
     .limit(50);
 
-  const weekStart = new Date();
-  weekStart.setDate(weekStart.getDate() - 6);
-  weekStart.setHours(0, 0, 0, 0);
-
-  const weekPages = activity
-    .filter(a => new Date(a.createdAt as any) >= weekStart)
-    .reduce((sum, a) => sum + (a.pagesRead ?? 0), 0);
-
-  const activityDays = new Set(
-    activity.map(a => {
-      const d = new Date(a.createdAt as any);
-      return `${d.getFullYear()}-${d.getMonth()}-${d.getDate()}`;
-    })
-  );
+  const { today, monday } = readingCalendarDay(req.query.today);
+  const readingSessions = await db.select().from(npSessions).where(eq(npSessions.userId, targetId));
+  const weekPages = readingSessions
+    .filter(session => session.date >= monday && session.date <= today)
+    .reduce((sum, session) => sum + Math.max(0, session.endPage - session.startPage), 0);
+  const activityDays = new Set(readingSessions.map(session => session.date));
 
   let streakDays = 0;
-  const today = new Date();
   for (let i = 0; i < 365; i++) {
-    const d = new Date(today);
-    d.setDate(d.getDate() - i);
-    const key = `${d.getFullYear()}-${d.getMonth()}-${d.getDate()}`;
+    const d = new Date(`${today}T12:00:00Z`);
+    d.setUTCDate(d.getUTCDate() - i);
+    const key = d.toISOString().slice(0, 10);
     if (activityDays.has(key)) {
       streakDays++;
-    } else {
+    } else if (i !== 0) {
       break;
     }
   }
@@ -540,6 +646,14 @@ router.patch("/social/me/settings", async (req, res) => {
 router.post("/social/nudge/:userId", async (req, res) => {
   const senderId = requireAuth(req, res);
   if (!senderId) return;
+  await db.transaction(async (tx) => {
+  // Serialize the cooldown check and send across autoscaled API instances.
+  // A simultaneous second tap must not create or send a duplicate nudge.
+  await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtext(${`nudge:${senderId}:${req.params.userId}`}))`);
+  const db = tx;
+  // Complete receipts left by an earlier request before deciding whether this
+  // nudge is still cooling down.
+  processExpoReceipts().catch(() => {});
 
   const targetUserId = req.params.userId;
   if (targetUserId === senderId) {
@@ -550,6 +664,10 @@ router.post("/social/nudge/:userId", async (req, res) => {
   const sender = await getSocialProfile(senderId);
   if (!sender) {
     res.status(404).json({ error: "Create your social profile first" });
+    return;
+  }
+  if (await isBlockedBetween(senderId, targetUserId)) {
+    res.status(403).json({ error: "Cannot nudge a blocked user" });
     return;
   }
 
@@ -584,15 +702,30 @@ router.post("/social/nudge/:userId", async (req, res) => {
     )
     .limit(1);
 
+  let nudgeId: string;
+  let retryingFailedDelivery = false;
   if (recentNudge.length > 0) {
     const sentAt = new Date(recentNudge[0].createdAt as any).getTime();
-    const cooldownUntil = new Date(sentAt + cooldownMs).toISOString();
-    res.status(429).json({ error: "Already nudged this person in the last 24 hours", cooldownUntil });
-    return;
+    const previousDelivery = await db
+      .select({ status: npPushDeliveries.status })
+      .from(npPushDeliveries)
+      .where(eq(npPushDeliveries.nudgeId, recentNudge[0].id))
+      .orderBy(desc(npPushDeliveries.createdAt))
+      .limit(1);
+    // A failed push may be retried without creating a second in-app nudge or
+    // racing the cooldown. Queued and delivered attempts remain cooled down.
+    if (previousDelivery[0]?.status === "failed") {
+      nudgeId = recentNudge[0].id;
+      retryingFailedDelivery = true;
+    } else {
+      const cooldownUntil = new Date(sentAt + cooldownMs).toISOString();
+      res.status(429).json({ error: "Already nudged this person in the last 24 hours", cooldownUntil });
+      return;
+    }
+  } else {
+    nudgeId = generateId();
+    await db.insert(npNudges).values({ id: nudgeId, senderId, recipientId: targetUserId });
   }
-
-  const nudgeId = generateId();
-  await db.insert(npNudges).values({ id: nudgeId, senderId, recipientId: targetUserId });
 
   // Fire-and-forget: delete nudge records older than NUDGE_RETENTION_DAYS to keep the table tidy
   const retentionCutoff = new Date(Date.now() - NUDGE_RETENTION_DAYS * 24 * 60 * 60 * 1000);
@@ -608,8 +741,10 @@ router.post("/social/nudge/:userId", async (req, res) => {
     return;
   }
 
+  const sentToken = target.pushToken;
   try {
     const pushRes = await fetch(EXPO_PUSH_URL, {
+      signal: AbortSignal.timeout(10_000),
       method: "POST",
       headers: { "Content-Type": "application/json", "Accept": "application/json", "Accept-Encoding": "gzip, deflate" },
       body: JSON.stringify({
@@ -622,8 +757,8 @@ router.post("/social/nudge/:userId", async (req, res) => {
         channelId: "default",
       }),
     });
-    const result = await pushRes.json() as { data?: Array<{ id?: string; status?: string; details?: { error?: string } }> };
-    const ticket = result.data?.[0];
+    const result = await pushRes.json() as { data?: unknown };
+    const ticket = normalizeExpoTickets(result.data)[0];
     // A 200 response alone is not a push ticket. Require Expo to explicitly
     // accept the notification before reporting that a phone notification was queued.
     if (!pushRes.ok || ticket?.status !== "ok" || !ticket.id) {
@@ -631,22 +766,65 @@ router.post("/social/nudge/:userId", async (req, res) => {
       // so a future app launch can register a fresh token instead of silently
       // failing every nudge.
       if (ticket?.details?.error === "DeviceNotRegistered") {
-        await db.update(npUsers).set({ pushToken: null, updatedAt: new Date() }).where(eq(npUsers.id, targetUserId));
+        await db
+          .update(npUsers)
+          .set({ pushToken: null, updatedAt: new Date() })
+          .where(and(eq(npUsers.id, targetUserId), eq(npUsers.pushToken, sentToken)));
       }
-      res.status(202).json({ ok: true, delivery: "in_app", skipped: "push_unavailable" });
+      await db.insert(npPushDeliveries).values({
+        ticketId: failedAttemptId(nudgeId),
+        nudgeId,
+        recipientId: targetUserId,
+        token: sentToken,
+        status: "failed",
+        receiptError: ticket?.details?.error ?? "Expo did not accept the notification",
+      });
+      res.status(202).json({
+        ok: true,
+        delivery: "in_app",
+        pushStatus: "failed",
+        retryable: true,
+        skipped: "push_unavailable",
+      });
       return;
     }
-    res.json({ ok: true, delivery: "push", pushTicketId: ticket.id });
+    await db.insert(npPushDeliveries).values({
+      ticketId: ticket.id,
+      nudgeId,
+      recipientId: targetUserId,
+      token: sentToken,
+      status: "queued",
+    }).onConflictDoNothing();
+    res.json({
+      ok: true,
+      delivery: "queued",
+      pushStatus: "queued",
+      pushTicketId: ticket.id,
+      retrying: retryingFailedDelivery,
+    });
   } catch (err: any) {
-    res.status(500).json({ error: "Failed to send push notification", detail: err?.message });
+    // The in-app nudge is already durable. A transient Expo failure must not
+    // turn it into a lost action or consume the retry cooldown.
+    await db.insert(npPushDeliveries).values({
+      ticketId: failedAttemptId(nudgeId),
+      nudgeId,
+      recipientId: targetUserId,
+      token: sentToken,
+      status: "failed",
+      receiptError: "Expo request failed",
+    });
+    res.status(202).json({ ok: true, delivery: "in_app", pushStatus: "failed", retryable: true });
   }
+  });
 });
 
 router.get("/social/nudges", async (req, res) => {
   const userId = requireAuth(req, res);
   if (!userId) return;
+  processExpoReceipts().catch(() => {});
 
   const thirtyDaysAgo = new Date(Date.now() - NUDGE_RETENTION_DAYS * 24 * 60 * 60 * 1000);
+  const hidden = await getHiddenUserIds(userId);
   const rows = await db
     .select({
       id: npNudges.id,
@@ -659,7 +837,11 @@ router.get("/social/nudges", async (req, res) => {
     })
     .from(npNudges)
     .innerJoin(npUsers, eq(npNudges.senderId, npUsers.id))
-    .where(and(eq(npNudges.recipientId, userId), gte(npNudges.createdAt, thirtyDaysAgo)))
+    .where(and(
+      eq(npNudges.recipientId, userId),
+      gte(npNudges.createdAt, thirtyDaysAgo),
+      hidden.length ? not(inArray(npNudges.senderId, hidden)) : undefined,
+    ))
     .orderBy(desc(npNudges.createdAt))
     .limit(50);
 
@@ -671,12 +853,16 @@ router.get("/social/nudges", async (req, res) => {
 router.get("/social/nudges/sent", async (req, res) => {
   const userId = requireAuth(req, res);
   if (!userId) return;
+  processExpoReceipts().catch(() => {});
 
   const since = new Date(Date.now() - NUDGE_COOLDOWN_DAYS * 24 * 60 * 60 * 1000);
   const rows = await db
     .select({ recipientId: npNudges.recipientId, createdAt: npNudges.createdAt })
     .from(npNudges)
-    .where(and(eq(npNudges.senderId, userId), gte(npNudges.createdAt, since)))
+    .where(and(
+      eq(npNudges.senderId, userId), gte(npNudges.createdAt, since),
+      sql`COALESCE((SELECT status FROM np_push_deliveries WHERE nudge_id = ${npNudges.id} ORDER BY created_at DESC LIMIT 1), 'in_app') <> 'failed'`,
+    ))
     .orderBy(desc(npNudges.createdAt));
 
   res.json(rows.map((r) => r.recipientId));
@@ -690,16 +876,49 @@ router.patch("/social/me/avatar", async (req, res) => {
     res.status(400).json({ error: "avatarUrl (string | null) required" });
     return;
   }
-  const updated = await db
-    .update(npUsers)
-    .set({ avatarUrl: avatarUrl ?? null, updatedAt: new Date() })
-    .where(eq(npUsers.id, userId))
-    .returning();
-  if (!updated[0]) {
-    res.status(404).json({ error: "Social profile not found" });
-    return;
+  try {
+    if (avatarUrl === null) {
+      const updated = await db
+        .update(npUsers)
+        .set({ avatarUrl: null, updatedAt: new Date() })
+        .where(eq(npUsers.id, userId))
+        .returning();
+      if (!updated[0]) {
+        res.status(404).json({ error: "Social profile not found" });
+        return;
+      }
+      res.json(formatMe(updated[0]));
+      return;
+    }
+    // Never persist an origin derived from Host/X-Forwarded-Host. Those are
+    // caller-controlled unless every proxy hop is trusted and configured.
+    const canonicalUrl = canonicalAvatarUrl(avatarUrl, TRUSTED_PUBLIC_ORIGIN);
+    if (!canonicalUrl) {
+      res.status(422).json({ error: "Avatar URL must use this API's storage endpoint" });
+      return;
+    }
+    const updated = await assignAvatarUpload(userId, canonicalUrl);
+    if (!updated) {
+      res.status(404).json({ error: "Social profile not found" });
+      return;
+    }
+    res.json(formatMe(updated));
+  } catch (error) {
+    const code = error instanceof Error ? error.message : "";
+    if (code === "INVALID_AVATAR_PATH" || code === "AVATAR_METADATA_MISMATCH") {
+      res.status(422).json({ error: "Avatar upload is invalid or incomplete" });
+      return;
+    }
+    if (code === "AVATAR_NOT_OWNED") {
+      res.status(403).json({ error: "Avatar upload is not owned by this account" });
+      return;
+    }
+    if (error instanceof ObjectNotFoundError) {
+      res.status(409).json({ error: "Avatar upload has not reached object storage" });
+      return;
+    }
+    throw error;
   }
-  res.json(formatMe(updated[0]));
 });
 
 // Curated fallbacks so a fresh app (no friends, empty catalog) is never empty.
@@ -714,16 +933,32 @@ const CURATED_RECS = [
   { id: "rec_circe", title: "Circe", author: "Madeline Miller", genre: "Fantasy", coverColor: "#80613E", coverImageUri: "https://covers.openlibrary.org/b/isbn/9780316556347-M.jpg", reason: "readers with similar tastes love it", friendsCount: 0 },
 ];
 
+const cleanText = (s: string | null | undefined) => (s ?? "").replace(/\s+/g, " ").trim();
 const normKey = (t: string, a: string) =>
-  `${(t ?? "").trim().toLowerCase()}|${(a ?? "").trim().toLowerCase()}`;
-const normGenre = (genre: string | null | undefined) => (genre ?? "").trim().toLowerCase().replace(/\s+/g, " ");
+  `${cleanText(t).toLowerCase()}|${cleanText(a).toLowerCase()}`;
+const GENRE_ALIASES: Record<string, string> = {
+  "sci fi": "science fiction",
+  "sci-fi": "science fiction",
+  scifi: "science fiction",
+  nonfiction: "non-fiction",
+  "non fiction": "non-fiction",
+  "non-fiction": "non-fiction",
+  biography: "biography",
+  biographies: "biography",
+  memoirs: "memoir",
+  "historical novels": "historical fiction",
+  fantasy: "fantasy",
+};
+const normGenre = (genre: string | null | undefined) => {
+  const raw = cleanText(genre).toLowerCase().replace(/[\/_]+/g, " ").replace(/\s+/g, " ");
+  return GENRE_ALIASES[raw] ?? raw;
+};
 
 // Author values that mean "no real author" — books with these must never be recommended.
 const BAD_AUTHORS = new Set([
   "", "not available", "n/a", "na", "none", "unknown", "unknown author",
   "author", "various", "-", "—",
 ]);
-const cleanText = (s: string | null | undefined) => (s ?? "").replace(/\s+/g, " ").trim();
 
 // A recommendation card must render cleanly: real cover image, real author, sane title.
 // Anything that would show up blank or malformed (the "Not Available" / no-cover cards
@@ -745,6 +980,10 @@ function isQualityRec(a: { title: string; author: string; coverImageUri: string 
 router.get("/social/recommendations", async (req, res) => {
   const userId = requireAuth(req, res);
   if (!userId) return;
+  const parsedLimit = Number.parseInt(String(req.query.limit ?? "8"), 10);
+  const recommendationLimit = Number.isFinite(parsedLimit)
+    ? Math.min(8, Math.max(1, parsedLimit))
+    : 8;
 
   // Books already on my shelf (to exclude), plus session-weighted genre taste.
   const myBooks = await db
@@ -800,6 +1039,7 @@ router.get("/social/recommendations", async (req, res) => {
         hidden.length ? not(inArray(npBooks.userId, hidden)) : undefined,
       ),
     )
+    .orderBy(asc(npBooks.title), asc(npBooks.author), asc(npBooks.userId))
     .limit(2000);
 
   type Agg = {
@@ -847,7 +1087,10 @@ router.get("/social/recommendations", async (req, res) => {
     if (genreDifference !== 0) return genreDifference;
     const friendsDifference = b.friends.size - a.friends.size;
     if (friendsDifference !== 0) return friendsDifference;
-    return b.owners.size - a.owners.size;
+    const ownerDifference = b.owners.size - a.owners.size;
+    if (ownerDifference !== 0) return ownerDifference;
+    const titleDifference = a.title.localeCompare(b.title);
+    return titleDifference !== 0 ? titleDifference : a.author.localeCompare(b.author);
   });
 
   for (const candidate of rankedCandidates) {
@@ -861,6 +1104,7 @@ router.get("/social/recommendations", async (req, res) => {
     } else {
       push(candidate, "it's popular right now");
     }
+    if (picked.length >= recommendationLimit) break;
   }
 
   // Fallback — start with curated books in the same genres, then use a varied
@@ -870,14 +1114,23 @@ router.get("/social/recommendations", async (req, res) => {
     return scoreDifference;
   });
   for (const c of curated) {
-    if (picked.length >= 6) break;
+    if (picked.length >= recommendationLimit) break;
     const key = normKey(c.title, c.author);
     if (myKeys.has(key) || used.has(key)) continue;
     used.add(key);
-    picked.push(c);
+    const genre = normGenre(c.genre);
+    const genreScore = genreScores.get(genre) ?? 0;
+    picked.push({
+      ...c,
+      // Curated books are not friend/popularity signals. Say why they are
+      // shown instead of claiming a taste match that was not observed.
+      reason: genreScore > 0
+        ? `it matches your ${c.genre.toLowerCase()} reading`
+        : "a curated pick while we learn your preferences",
+    });
   }
 
-  res.json(picked.slice(0, 8));
+  res.json(picked.slice(0, recommendationLimit));
 });
 
 export default router;

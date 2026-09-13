@@ -40,6 +40,26 @@ export class ObjectNotFoundError extends Error {
 export class ObjectStorageService {
   constructor() {}
 
+  async createObjectEntityUploadURL(): Promise<{
+    uploadURL: string;
+    objectPath: string;
+  }> {
+    const privateObjectDir = this.getPrivateObjectDir().replace(/\/+$/, "");
+    const objectId = randomUUID();
+    const fullPath = `${privateObjectDir}/uploads/${objectId}`;
+    const { bucketName, objectName } = parseObjectPath(fullPath);
+
+    return {
+      uploadURL: await signObjectURL({
+        bucketName,
+        objectName,
+        method: "PUT",
+        ttlSec: 900,
+      }),
+      objectPath: `/objects/uploads/${objectId}`,
+    };
+  }
+
   getPublicObjectSearchPaths(): Array<string> {
     const pathsStr = process.env.PUBLIC_OBJECT_SEARCH_PATHS || "";
     const paths = Array.from(
@@ -71,7 +91,25 @@ export class ObjectStorageService {
   }
 
   async searchPublicObject(filePath: string): Promise<File | null> {
+    if (
+      !filePath ||
+      filePath.startsWith("/") ||
+      filePath.split("/").some((part) => part === "." || part === "..")
+    ) {
+      return null;
+    }
+    const privateObjectDir = process.env.PRIVATE_OBJECT_DIR?.replace(/\/+$/, "");
     for (const searchPath of this.getPublicObjectSearchPaths()) {
+      const normalizedSearchPath = searchPath.replace(/\/+$/, "");
+      // A misconfigured public search path must not turn the private bucket
+      // prefix into an unauthenticated object browser.
+      if (
+        privateObjectDir &&
+        (normalizedSearchPath === privateObjectDir ||
+          normalizedSearchPath.startsWith(`${privateObjectDir}/`))
+      ) {
+        continue;
+      }
       const fullPath = `${searchPath}/${filePath}`;
 
       const { bucketName, objectName } = parseObjectPath(fullPath);
@@ -107,25 +145,26 @@ export class ObjectStorageService {
   }
 
   async getObjectEntityUploadURL(): Promise<string> {
-    const privateObjectDir = this.getPrivateObjectDir();
-    if (!privateObjectDir) {
-      throw new Error(
-        "PRIVATE_OBJECT_DIR not set. Create a bucket in 'Object Storage' " +
-          "tool and set PRIVATE_OBJECT_DIR env var."
-      );
-    }
+    const target = await this.createObjectEntityUploadURL();
+    return target.uploadURL;
+  }
 
-    const objectId = randomUUID();
-    const fullPath = `${privateObjectDir}/uploads/${objectId}`;
-
-    const { bucketName, objectName } = parseObjectPath(fullPath);
-
-    return signObjectURL({
-      bucketName,
-      objectName,
-      method: "PUT",
-      ttlSec: 900,
-    });
+  async getUploadedObjectMetadata(file: File): Promise<{
+    size: number;
+    contentType: string;
+    customMetadata: Record<string, string>;
+  }> {
+    const [metadata] = await file.getMetadata();
+    const size = Number(metadata.size);
+    const contentType = typeof metadata.contentType === "string"
+      ? metadata.contentType.toLowerCase().split(";")[0].trim()
+      : "";
+    const customMetadata = Object.fromEntries(
+      Object.entries(metadata.metadata ?? {}).filter(
+        (entry): entry is [string, string] => typeof entry[1] === "string",
+      ),
+    );
+    return { size, contentType, customMetadata };
   }
 
   async getObjectEntityFile(objectPath: string): Promise<File> {
@@ -139,6 +178,13 @@ export class ObjectStorageService {
     }
 
     const entityId = parts.slice(1).join("/");
+    if (
+      !entityId ||
+      entityId.split("/").some((part) => part.length === 0 || part === "." || part === "..") ||
+      entityId.includes("\\")
+    ) {
+      throw new ObjectNotFoundError();
+    }
     let entityDir = this.getPrivateObjectDir();
     if (!entityDir.endsWith("/")) {
       entityDir = `${entityDir}/`;

@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import { Alert, KeyboardAvoidingView, Platform, StyleSheet, Text, TextInput, TouchableOpacity, View } from "react-native";
 import { useLocalSearchParams, router } from "expo-router";
 import { useColors } from "@/hooks/useColors";
@@ -9,20 +9,28 @@ export default function ResetPasswordScreen() {
   const { resetPassword } = useAuth();
   const params = useLocalSearchParams<{ token?: string | string[] }>();
   const token = Array.isArray(params.token) ? params.token[0] : params.token;
+  const [resetToken] = useState(() => token);
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [error, setError] = useState("");
   const [saving, setSaving] = useState(false);
 
+  useEffect(() => {
+    // Do not leave the bearer-like reset secret in browser history/address
+    // bars after the route has captured it. Native deep links remain fully
+    // compatible because the token is read before the params are cleared.
+    if (token) router.setParams({ token: undefined });
+  }, [token]);
+
   async function submit() {
-    if (!token) { setError("This reset link is invalid. Request a new one from the sign-in screen."); return; }
+    if (!resetToken || resetToken.length > 256) { setError("This reset link is invalid. Request a new one from the sign-in screen."); return; }
     if (password.length < 6) { setError("Your new password must be at least 6 characters."); return; }
     if (password !== confirmPassword) { setError("Passwords do not match."); return; }
 
     setSaving(true);
     setError("");
     try {
-      await resetPassword(token, password);
+      await resetPassword(resetToken, password);
       Alert.alert("Password updated", "Your password has been changed. Please sign in with your new password.", [
         { text: "Sign in", onPress: () => router.replace("/") },
       ]);
