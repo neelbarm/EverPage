@@ -5,12 +5,12 @@ the user's Apple sign-in inside Replit's Expo Launch wizard.
 
 ## Deployed source and verification
 
-- GitHub main/review branch app-source revision: `2f8ecd614463a9df47231f8ef3d1b1cd240b1f31`.
-- Replit merged app-source revision: `acfcd9426c77bf87af64565f7726225295306a72`.
+- GitHub main/review branch app-source revision: `b4da6dba5539a08aa98f3b43be346826d0fcad98`.
+- Replit merged app-source revision: `654e3cc44906531b8bd4af60129bfe6952097aaa`.
 - Replit confirmed clean working tree and passing mobile/API/database checks.
 - Reviewed generated production SQL: exactly the three additive tables and
   their constraints/indexes; no existing-data overwrite option selected.
-- Replit reported Published/Live; publish history includes `eb85830d`.
+- Replit reported Published/Live; latest backend deployment is `dd63ef9c`.
 - Production `/api/healthz`: HTTP 200, `{ "status": "ok" }`.
 - Non-mutating malformed login probe: HTTP 400 with controlled validation error.
 - Production Database overview confirms `np_auth_rate_limits`,
@@ -25,7 +25,31 @@ the user's Apple sign-in inside Replit's Expo Launch wizard.
 
 Baseline GitHub commit: `01ec88a2040a319d2fd436c702b7c57d62f62567`.
 Target review branch: `codex/reliability-review` (imports Replit candidate plus independent fixes).
-Email-domain verification is paused. Do not treat recovery email as operational.
+Email-domain setup is complete; the actual production reset-link test awaits an
+email belonging to an existing app account. See email verification below.
+
+## Email verification — September 13
+
+- Transferred everpage.blog to the client-owned Resend team with approval;
+  Resend reports Verified. Added ownership TXT, DKIM TXT, sending MX and SPF TXT
+  in GoDaddy; all eight pre-existing DNS records were preserved.
+- Created an approved sending-only API key restricted to everpage.blog and stored
+  it server-side in Replit. Production RESEND_API_KEY, EMAIL_FROM and
+  PASSWORD_RESET_WEB_ORIGIN are synchronized. No secrets are recorded here.
+- Added API-hosted GET /api/local-auth/reset-password after the previous root
+  reset URL returned 404. Production now returns 200 HTML with no-store,
+  no-referrer, nonce-based CSP, nosniff and frame denial headers. Email tokens
+  use a URL fragment that the page immediately clears.
+- Six reset-page tests passed; eight actual API/disposable-Postgres regression
+  cases passed again, including atomic reset and session revocation. API
+  typecheck/build and diff checks passed. Browser rendering was inspected.
+- One ordinary delivery test from Replit to the approved inbox was confirmed
+  Delivered in Resend: message c12616e6-9cb6-415b-bfdf-01d90c994af3.
+- The requested reset test for everpageofficial@gmail.com returned the expected
+  generic 200 response. A read-only production EXISTS check confirmed that email
+  is not an app account, so no reset link was generated. Awaiting an existing
+  account email; no real password was changed. Ordinary email delivery does not
+  constitute a completed production password-reset test.
 
 ## Apple release preparation
 
@@ -99,6 +123,6 @@ Push delivery needs a permitted real-device test and valid production APNs/EAS
 credentials. Compilation and mocked Expo responses alone do not prove delivery.
 Even an Expo receipt with status `ok` means Apple/Google accepted the notification,
 not that the user's phone displayed it. See Expo's sending-notifications docs.
-Password-reset mail needs a verified sender domain and configured EMAIL_FROM;
-that setup remains explicitly paused pending the client's domain access.
+Password-reset sender configuration and ordinary delivery are verified above;
+the real-account production reset flow still needs its final test.
 App Store submission and Apple approval are distinct from backend deployment.
