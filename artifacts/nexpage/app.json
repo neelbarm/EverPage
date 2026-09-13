@@ -15,7 +15,7 @@
     },
     "ios": {
       "supportsTablet": false,
-      "bundleIdentifier": "app.everpage.mobile",
+      "bundleIdentifier": "app.everpage",
       "entitlements": {
         "aps-environment": "production"
       },
