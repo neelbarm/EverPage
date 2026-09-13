@@ -1,6 +1,7 @@
 import { Router, type IRouter, type Request, type Response } from "express";
 import bcrypt from "bcryptjs";
 import crypto from "crypto";
+import { passwordResetPage } from "../lib/passwordResetPage";
 import { db, npUsers, npBooks, npSessions, npStreak, npMarginNotes, npRoomMembers, npRoomMessages, npPasswordResetTokens, npAuthRateLimits, sessionsTable } from "@workspace/db";
 import { and, eq, gt, isNull, sql } from "drizzle-orm";
 import {
@@ -58,7 +59,8 @@ function getPasswordResetUrl(token: string): string {
   const origin = configuredOrigin?.startsWith("https://")
     ? configuredOrigin
     : (configuredDomain ? `https://${configuredDomain.replace(/^https?:\/\//, "")}` : "https://nex-page.replit.app");
-  return `${origin.replace(/\/$/, "")}/reset-password?token=${encodeURIComponent(token)}`;
+  // A fragment keeps the credential out of proxy/server request logs.
+  return `${origin.replace(/\/$/, "")}/api/local-auth/reset-password#token=${encodeURIComponent(token)}`;
 }
 
 function getNativePasswordResetUrl(token: string): string {
@@ -372,6 +374,18 @@ router.post("/local-auth/forgot-password", async (req: Request, res: Response) =
   }
 
   res.json(genericResponse);
+});
+
+router.get("/local-auth/reset-password", (_req: Request, res: Response) => {
+  const nonce = crypto.randomBytes(18).toString("base64");
+  res.set({
+    "Cache-Control": "no-store",
+    "Referrer-Policy": "no-referrer",
+    "X-Content-Type-Options": "nosniff",
+    "X-Frame-Options": "DENY",
+    "Content-Security-Policy": `default-src 'none'; script-src 'nonce-${nonce}'; style-src 'nonce-${nonce}'; connect-src 'self'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'`,
+  });
+  res.type("html").send(passwordResetPage(nonce));
 });
 
 router.post("/local-auth/reset-password", async (req: Request, res: Response) => {
