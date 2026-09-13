@@ -207,7 +207,7 @@ export default function StatsScreen() {
                   numberOfLines={1}
                   adjustsFontSizeToFit
                 >
-                  {remaining} more minute{remaining !== 1 ? 's' : ''} keeps the streak alive
+                  {remaining} more minute{remaining !== 1 ? 's' : ''} to reach today's goal
                 </Text>
               )}
             </View>

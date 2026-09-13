@@ -34,6 +34,12 @@ No build attached and no submission made. Release notes await verified fixes.
   acknowledgements; account provider remount; token-bound social requests; offline
   identity cache/retry; outbox overlay on cold start; hydration mutation guard;
   nudge concurrency/retry; preserve previously delivered reset links on mail failure.
+- Local browser smoke checks: complete birthday entry, test-account sign-in,
+  book added at page 50 with no reading credit, recommendation expansion and
+  science-fiction matching explanation, timer restored after page reload,
+  short-session save with zero forced minutes/pages, and matching shelf/Stats totals.
+  Corrected goal copy to distinguish reaching the daily goal from logging a streak day.
+  These are web checks and do not certify iOS force-quit or notification display.
 
 The checklist below remains the broader release/device checklist. A test above
 does not imply every platform/device variation below has been manually tested.
