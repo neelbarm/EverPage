@@ -1,6 +1,27 @@
 # EverPage reliability release verification
 
-Status: candidate implemented and independently reviewed locally; not yet deployed.
+Status: backend deployed and verified September 13; iOS build/submission awaits
+the user's Apple sign-in inside Replit's Expo Launch wizard.
+
+## Deployed source and verification
+
+- GitHub main/review branch app-source revision: `2f8ecd614463a9df47231f8ef3d1b1cd240b1f31`.
+- Replit merged app-source revision: `acfcd9426c77bf87af64565f7726225295306a72`.
+- Replit confirmed clean working tree and passing mobile/API/database checks.
+- Reviewed generated production SQL: exactly the three additive tables and
+  their constraints/indexes; no existing-data overwrite option selected.
+- Replit reported Published/Live; publish history includes `eb85830d`.
+- Production `/api/healthz`: HTTP 200, `{ "status": "ok" }`.
+- Non-mutating malformed login probe: HTTP 400 with controlled validation error.
+- Production Database overview confirms `np_auth_rate_limits`,
+  `np_push_deliveries`, and `np_storage_uploads`; pre-existing table counts
+  observed in the overview remained unchanged during this check.
+- Local browser also confirmed room navigation after reload opens the same
+  room through “Go to room.”
+- Replit's aggregate workspace typecheck has a React type-version conflict in
+  `artifacts/mockup-sandbox/src/components/ui/calendar.tsx:132`. API/mobile/DB
+  checks pass and that design artifact is not in the production build.
+- Local test API, Expo server, and disposable Postgres instance stopped.
 
 Baseline GitHub commit: `01ec88a2040a319d2fd436c702b7c57d62f62567`.
 Target review branch: `codex/reliability-review` (imports Replit candidate plus independent fixes).
@@ -11,7 +32,10 @@ Email-domain verification is paused. Do not treat recovery email as operational.
 App Store Connect inspected September 13: current live version is 1.0.3 build 7;
 TestFlight has no newer upload. Created 1.0.4 draft (Prepare for Submission),
 preserving existing metadata and automatic-after-approval release settings.
-No build attached and no submission made. Release notes await verified fixes.
+No build attached and no submission made. Accurate release notes are saved.
+The Replit Expo Launch wizard selected the existing EverPage project, then
+requested a separate Apple Developer login. User input was requested; no
+credential was guessed or changed. App Store Connect remains signed in.
 
 ## Release gates
 
