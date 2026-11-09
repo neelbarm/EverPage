@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useRef, useState } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { View, Text, TouchableOpacity, StyleSheet, Platform, TextInput, KeyboardAvoidingView, ScrollView } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
@@ -25,6 +25,11 @@ export default function SessionLogScreen() {
   const [endPageStr, setEndPageStr] = useState(String(estimatedEnd));
   const [noteText, setNoteText] = useState('');
   const [isSaving, setIsSaving] = useState(false);
+  const [saveError, setSaveError] = useState('');
+  const [saveStarted, setSaveStarted] = useState(false);
+  const savingRef = useRef(false);
+  const stableSessionId = useRef(sessionId || `${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`);
+  const savedRef = useRef({ session: false, note: false });
 
   const parsedEndPage = parseInt(endPageStr, 10);
   const endPage = Math.min(Math.max(Number.isFinite(parsedEndPage) ? parsedEndPage : startPg, startPg), book?.totalPages ?? 9999);
@@ -34,33 +39,49 @@ export default function SessionLogScreen() {
   const progressAfter = book ? Math.round((endPage / book.totalPages) * 100) : 0;
 
   async function handleLog() {
-    if (!book || isSaving) return;
+    if (!book || savingRef.current) return;
+    savingRef.current = true;
     setIsSaving(true);
+    setSaveStarted(true);
+    setSaveError('');
     try {
-      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-      await logSession(book.id, durationMin, startPg, endPage, sessionId);
-      const activeKey = `everpage_active_reading_session:${encodeURIComponent(user?.id ?? 'guest')}:${encodeURIComponent(book.id)}`;
-      await AsyncStorage.removeItem(activeKey);
+      if (!savedRef.current.session) {
+        await logSession(book.id, durationMin, startPg, endPage, stableSessionId.current);
+        savedRef.current.session = true;
+      }
 
-      if (isAuthenticated && noteText.trim()) {
-        apiFetch('/notes', {
+      if (isAuthenticated && noteText.trim() && !savedRef.current.note) {
+        await apiFetch('/notes', {
           method: 'POST',
           body: JSON.stringify({
+            id: stableSessionId.current,
             bookTitle: book.title,
             bookAuthor: book.author,
             page: endPage,
             noteText: noteText.trim(),
           }),
-        }).catch(() => {});
+        });
+        savedRef.current.note = true;
       }
 
+      // Keep the stopped session and note on screen until both saves succeed.
+      // A retry skips acknowledged writes; the note ID also handles a lost
+      // server response without creating a duplicate note.
+      const activeKey = `everpage_active_reading_session:${encodeURIComponent(user?.id ?? 'guest')}:${encodeURIComponent(book.id)}`;
+      await AsyncStorage.removeItem(activeKey);
+      void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
       const finished = endPage >= book.totalPages;
       if (finished) {
         router.replace({ pathname: '/finish/[bookId]', params: { bookId: book.id } });
       } else {
         router.replace('/(tabs)');
       }
+    } catch {
+      setSaveError(savedRef.current.session && !savedRef.current.note && noteText.trim()
+        ? 'Your reading session is saved, but your note could not be saved. Your note is still here. Please retry.'
+        : 'Could not finish saving. Your entry is still here. Please retry.');
     } finally {
+      savingRef.current = false;
       setIsSaving(false);
     }
   }
@@ -108,6 +129,7 @@ export default function SessionLogScreen() {
             style={[styles.pageInput, { color: colors.foreground, backgroundColor: colors.muted, borderColor: colors.border, fontFamily: 'Inter_700Bold' }]}
             value={endPageStr}
             onChangeText={setEndPageStr}
+            editable={!saveStarted}
             keyboardType="number-pad"
             selectTextOnFocus
             maxLength={6}
@@ -152,6 +174,7 @@ export default function SessionLogScreen() {
               placeholderTextColor={colors.mutedForeground}
               value={noteText}
               onChangeText={setNoteText}
+              editable={!saveStarted}
               multiline
               maxLength={300}
             />
@@ -160,13 +183,14 @@ export default function SessionLogScreen() {
       </ScrollView>
 
       <View style={[styles.footer, { paddingBottom: insets.bottom + (Platform.OS === 'web' ? 34 : 20) }]}>
+        {!!saveError && <Text accessibilityRole="alert" style={{ color: colors.destructive, marginBottom: 12 }}>{saveError}</Text>}
         <TouchableOpacity
           style={[styles.logBtn, { backgroundColor: colors.primary }]}
           onPress={handleLog}
           disabled={isSaving}
           activeOpacity={0.88}
         >
-          <Text style={[styles.logBtnText, { color: colors.primaryForeground, fontFamily: 'Inter_700Bold' }]}>Log session</Text>
+          <Text style={[styles.logBtnText, { color: colors.primaryForeground, fontFamily: 'Inter_700Bold' }]}>{isSaving ? 'Saving…' : saveError ? 'Retry save' : 'Log session'}</Text>
         </TouchableOpacity>
       </View>
     </KeyboardAvoidingView>

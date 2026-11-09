@@ -104,7 +104,9 @@ export default function RegisterModal({
 
   async function handleAuth() {
     const e = email.trim().toLowerCase();
-    const p = password.trim();
+    // Password reset/change preserve whitespace, so login must submit the exact
+    // password. Keep the existing normalization only for new registrations.
+    const p = mode === 'register' ? password.trim() : password;
     if (!e) { setAuthError('Enter your email.'); return; }
     if (!p) { setAuthError('Enter your password.'); return; }
     if (mode === 'register' && p !== confirmPassword.trim()) {

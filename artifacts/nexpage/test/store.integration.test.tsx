@@ -4,6 +4,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { StoreProvider, useStore } from '../context/StoreContext';
 import { runtime, storage } from './store-runtime';
+import { localDateKey } from '../lib/reliabilityPolicies';
 
 (globalThis as any).IS_REACT_ACT_ENVIRONMENT = true;
 let store: ReturnType<typeof useStore>;
@@ -138,5 +139,119 @@ test('real StoreProvider synchronization', async t => {
       }
       assert.equal(sent.some(request => request.token === 'Bearer token-b'), false);
     } finally { heldWrite.resolve(); await act(() => root.unmount()); }
+  });
+});
+
+test('streak reconciliation and freezes', async t => {
+  function daysAgo(days: number): string {
+    const date = new Date();
+    date.setDate(date.getDate() - days);
+    return localDateKey(date);
+  }
+  function cloudWithStreak(streak: Record<string, unknown>, sessions: unknown[] = []) {
+    const streakWrites: Array<Record<string, unknown>> = [];
+    globalThis.fetch = async (url, init) => {
+      if (String(url).endsWith('/local-auth/me')) return response({ user: { id: 'account-a' } });
+      if (String(url).endsWith('/bookshelf/streak') && init?.method === 'PUT') {
+        streakWrites.push(JSON.parse(String(init.body)));
+      }
+      if (init?.method === 'POST' || init?.method === 'PUT') return response({});
+      return response(String(url).includes('recommendations') ? [] : { books: [book], sessions, streak });
+    };
+    return streakWrites;
+  }
+
+  await t.test('an expired cloud streak resets without erasing reading history or spending a freeze', async () => {
+    reset();
+    const dates = [7, 6, 5, 4, 3].map(daysAgo);
+    const sessions = dates.map((date, i) => ({ id: `old-${i}`, bookId: book.id, durationMinutes: 10, startPage: i, endPage: i + 1, date, createdAt: i }));
+    const streakWrites = cloudWithStreak({ currentStreak: 5, lastReadDate: dates[4], checkedDays: dates, freezesLeft: 1 }, sessions);
+    const root = await mount();
+    try {
+      assert.equal(store.streak.currentStreak, 0);
+      assert.deepEqual(store.streak.checkedDays, dates);
+      assert.equal(store.profile.longestStreak, 5);
+      assert.equal(streakWrites.at(-1)?.currentStreak, 0);
+      assert.deepEqual(streakWrites.at(-1)?.checkedDays, dates);
+      await act(() => store.useStreakFreeze());
+      assert.equal(store.streak.freezesLeft, 1);
+      assert.equal(store.streak.lastReadDate, dates[4]);
+      await act(async () => { await store.logSession(book.id, 10, 10, 20, 'after-gap'); });
+      assert.equal(store.streak.currentStreak, 1);
+      assert.equal(store.profile.longestStreak, 5);
+    } finally { await act(() => root.unmount()); }
+  });
+
+  await t.test('an expired locally cached streak is reconciled while offline', async () => {
+    reset();
+    const checkedDays = [daysAgo(3), daysAgo(2)];
+    storage.set('everpage_v1:account-a', JSON.stringify({
+      books: [book], sessions: [],
+      streak: { currentStreak: 2, lastReadDate: checkedDays[1], checkedDays, dailyGoalMinutes: 30, todayMinutes: 20, freezesLeft: 2 },
+    }));
+    globalThis.fetch = async () => { throw new Error('offline'); };
+    const root = await mount();
+    try {
+      assert.equal(store.streak.currentStreak, 0);
+      assert.equal(store.streak.todayMinutes, 0);
+      assert.deepEqual(store.streak.checkedDays, checkedDays);
+      assert.equal(store.streak.freezesLeft, 2);
+    } finally { await act(() => root.unmount()); }
+  });
+
+  await t.test('a valid freeze covers today once, including two presses before rerender', async () => {
+    reset();
+    const yesterday = daysAgo(1);
+    cloudWithStreak({ currentStreak: 2, lastReadDate: yesterday, checkedDays: [daysAgo(2), yesterday], freezesLeft: 2 });
+    const root = await mount();
+    try {
+      const freeze = store.useStreakFreeze;
+      await act(async () => { freeze(); freeze(); await tick(); });
+      assert.equal(store.streak.currentStreak, 2);
+      assert.equal(store.streak.freezesLeft, 1);
+      assert.equal(store.streak.lastReadDate, daysAgo(0));
+      assert.equal(store.streak.checkedDays.filter(date => date === daysAgo(0)).length, 1);
+      await act(() => store.useStreakFreeze());
+      assert.equal(store.streak.freezesLeft, 1);
+    } finally { await act(() => root.unmount()); }
+  });
+
+  await t.test('reading today prevents spending a freeze and existing earning rules stay intact', async () => {
+    reset();
+    cloudWithStreak({ currentStreak: 2, lastReadDate: daysAgo(1), checkedDays: [daysAgo(2), daysAgo(1)], freezesLeft: 1 });
+    const root = await mount();
+    try {
+      await act(async () => { await store.logSession(book.id, 10, 10, 20, 'third-day'); });
+      assert.equal(store.streak.currentStreak, 3);
+      assert.equal(store.streak.freezesLeft, 2);
+      await act(() => store.useStreakFreeze());
+      assert.equal(store.streak.freezesLeft, 2);
+    } finally { await act(() => root.unmount()); }
+  });
+
+  await t.test('day rollover reconciles a previously active streak without a new session', async t => {
+    reset();
+    const initialNow = new Date(2026, 10, 8, 23, 59).getTime();
+    t.mock.timers.enable({ apis: ['Date'], now: initialNow });
+    const originalSetInterval = globalThis.setInterval;
+    let reconcile: (() => void) | undefined;
+    t.mock.method(globalThis, 'setInterval', (callback: () => void, ms: number) => {
+      if (ms === 60_000) reconcile = callback;
+      return originalSetInterval(callback, ms);
+    });
+    cloudWithStreak({ currentStreak: 2, lastReadDate: daysAgo(1), checkedDays: [daysAgo(2), daysAgo(1)], freezesLeft: 1 });
+    const root = await mount();
+    try {
+      assert.equal(store.streak.currentStreak, 2);
+      t.mock.timers.setTime(new Date(2026, 10, 9, 0, 1).getTime());
+      assert.ok(reconcile);
+      await act(async () => { reconcile!(); await tick(); });
+      assert.equal(store.streak.currentStreak, 0);
+      assert.equal(store.streak.freezesLeft, 1);
+    } finally {
+      await act(() => root.unmount());
+      t.mock.restoreAll();
+      t.mock.timers.reset();
+    }
   });
 });

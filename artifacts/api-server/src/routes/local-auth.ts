@@ -6,7 +6,7 @@ import { db, npUsers, npBooks, npSessions, npStreak, npMarginNotes, npRoomMember
 import { and, eq, gt, isNull, sql } from "drizzle-orm";
 import {
   createSession,
-  deleteSession,
+  logoutSession,
   deleteUserSessions,
   getSession,
   getSessionId,
@@ -336,7 +336,7 @@ router.post("/local-auth/forgot-password", async (req: Request, res: Response) =
   }
 
   const [user] = await db
-    .select({ id: npUsers.id, email: npUsers.email })
+    .select({ id: npUsers.id, email: npUsers.email, passwordHash: npUsers.passwordHash })
     .from(npUsers)
     .where(eq(npUsers.email, email))
     .limit(1);
@@ -351,12 +351,25 @@ router.post("/local-auth/forgot-password", async (req: Request, res: Response) =
   const tokenHash = hashResetToken(token);
   // A mail-provider outage must not invalidate a previously delivered link.
   // Successful consumption below revokes every outstanding link atomically.
-  await db.insert(npPasswordResetTokens).values({
-    id: generateId(),
-    userId: user.id,
-    tokenHash,
-    expiresAt: new Date(Date.now() + PASSWORD_RESET_TTL_MS),
+  const issued = await db.transaction(async (tx) => {
+    await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtext(${`password-reset:${user.id}`}))`);
+    const [current] = await tx.select({ passwordHash: npUsers.passwordHash })
+      .from(npUsers).where(eq(npUsers.id, user.id)).limit(1);
+    // Do not issue a link from a stale account snapshot after another request
+    // changes the password. Issuance and revocation share the same lock.
+    if (!current || current.passwordHash !== user.passwordHash) return false;
+    await tx.insert(npPasswordResetTokens).values({
+      id: generateId(),
+      userId: user.id,
+      tokenHash,
+      expiresAt: new Date(Date.now() + PASSWORD_RESET_TTL_MS),
+    });
+    return true;
   });
+  if (!issued) {
+    res.json(genericResponse);
+    return;
+  }
 
   try {
     const delivered = await sendPasswordResetEmail(user.email, token);
@@ -508,13 +521,25 @@ router.post("/local-auth/change-password", async (req: Request, res: Response) =
   }
 
   const newHash = await hashPassword(newPassword);
-  await db.transaction(async (tx) => {
-    await tx
+  const changed = await db.transaction(async (tx) => {
+    await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtext(${`password-reset:${session.user.id}`}))`);
+    const [updated] = await tx
       .update(npUsers)
       .set({ passwordHash: newHash, updatedAt: new Date() })
-      .where(eq(npUsers.id, session.user.id));
+      .where(and(eq(npUsers.id, session.user.id), eq(npUsers.passwordHash, rows[0].passwordHash!)))
+      .returning({ id: npUsers.id });
+    // A reset/change may have completed while bcrypt was running. Never let
+    // an already-validated old password overwrite that newer credential.
+    if (!updated) return false;
     await deleteUserSessions(session.user.id, tx);
+    await tx.update(npPasswordResetTokens).set({ usedAt: new Date() })
+      .where(and(eq(npPasswordResetTokens.userId, session.user.id), isNull(npPasswordResetTokens.usedAt)));
+    return true;
   });
+  if (!changed) {
+    res.status(401).json({ error: "Your password changed. Sign in again and retry." });
+    return;
+  }
 
   res.json({ success: true });
 });
@@ -522,7 +547,7 @@ router.post("/local-auth/change-password", async (req: Request, res: Response) =
 router.post("/local-auth/logout", async (req: Request, res: Response) => {
   const sid = getSessionId(req);
   if (sid) {
-    await deleteSession(sid);
+    await logoutSession(sid);
   }
   res.json({ success: true });
 });
@@ -560,6 +585,10 @@ router.delete("/local-auth/account", async (req: Request, res: Response) => {
   const userId = session.user.id;
 
   await db.transaction(async (tx) => {
+    // Keep the same account-before-session lock order as push registration
+    // and credential changes when revoking this account's sessions.
+    await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtext(${`password-reset:${userId}`}))`);
+    await tx.select({ id: npUsers.id }).from(npUsers).where(eq(npUsers.id, userId)).for("update");
     await tx.delete(npBooks).where(eq(npBooks.userId, userId));
     await tx.delete(npSessions).where(eq(npSessions.userId, userId));
     await tx.delete(npStreak).where(eq(npStreak.userId, userId));

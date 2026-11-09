@@ -165,9 +165,20 @@ function minutesForDate(readingSessions: ReadingSession[], date: string): number
   }, 0);
 }
 
+function withCurrentStreak(streakData: StreakData, today = todayStr()): StreakData {
+  const daysSinceLastCoveredDay = localCalendarDayDistance(today, streakData.lastReadDate);
+  // Yesterday still leaves today available to read or freeze. A missed day
+  // before today breaks the current run, not its historical checked days.
+  return daysSinceLastCoveredDay !== null && daysSinceLastCoveredDay > 1 && streakData.currentStreak !== 0
+    ? { ...streakData, currentStreak: 0 }
+    : streakData;
+}
+
 function withDerivedTodayMinutes(streakData: StreakData, readingSessions: ReadingSession[]): StreakData {
-  const todayMinutes = minutesForDate(readingSessions, todayStr());
-  return streakData.todayMinutes === todayMinutes ? streakData : { ...streakData, todayMinutes };
+  const today = todayStr();
+  const reconciled = withCurrentStreak(streakData, today);
+  const todayMinutes = minutesForDate(readingSessions, today);
+  return reconciled.todayMinutes === todayMinutes ? reconciled : { ...reconciled, todayMinutes };
 }
 
 function generateId(): string {
@@ -691,12 +702,15 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
     const reconcileToday = () => {
       const reconciledStreak = withDerivedTodayMinutes(streak, sessions);
       const reconciledProfile = deriveProfile(profile, books, sessions);
-      const streakChanged = reconciledStreak.todayMinutes !== streak.todayMinutes;
+      const streakChanged = reconciledStreak !== streak;
       const profileChanged = JSON.stringify(reconciledProfile) !== JSON.stringify(profile);
       if (streakChanged) setStreak(reconciledStreak);
       if (profileChanged) setProfile(reconciledProfile);
       if (streakChanged || profileChanged) {
         void persist(books, sessions, reconciledStreak, reconciledProfile, reminder);
+      }
+      if (reconciledStreak.currentStreak !== streak.currentStreak) {
+        void queueOperation('streak', reconciledStreak).then(() => flushQueue());
       }
     };
     reconcileToday();
@@ -755,7 +769,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
     } else {
       await apiFetchWithToken('/bookshelf/streak', token, {
         method: 'PUT',
-        body: JSON.stringify({ ...operation.payload, todayDate: todayStr() }),
+        body: JSON.stringify({ ...withCurrentStreak(operation.payload as StreakData), todayDate: todayStr() }),
       });
     }
   }
@@ -855,6 +869,9 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
       setSessions(hydratedSessions);
       setStreak(nextStreak);
       setProfile(nextProfile);
+      if (hydratedStreak && nextStreak.currentStreak !== hydratedStreak.currentStreak) {
+        await queueOperation('streak', nextStreak);
+      }
       await persist(hydratedBooks, hydratedSessions, nextStreak, nextProfile, loadedReminder);
       await flushQueue(expectedVersion, expectedAccountId);
       if (queueRef.current.length === 0) {
@@ -948,7 +965,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
     // Sessions, rather than a separately accumulated counter, are the source
     // of truth for the daily goal. This avoids duplicate/missing minutes after
     // a restart or cloud hydration.
-    const newStreak = { ...streak, todayMinutes: minutesForDate(newSessions, todayStr()) };
+    const newStreak = { ...withCurrentStreak(streak), todayMinutes: minutesForDate(newSessions, todayStr()) };
     const goalJustMet = wasUnderGoal && newStreak.todayMinutes >= streak.dailyGoalMinutes;
     let earnedFreeze = false;
     if (!newStreak.checkedDays.includes(todayStr())) {
@@ -1028,15 +1045,22 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
   }
 
   function useStreakFreeze() {
-    if (streak.freezesLeft <= 0) return;
+    const current = withCurrentStreak(snapshotRef.current.streak);
+    const today = todayStr();
+    if (
+      current.freezesLeft <= 0
+      || current.currentStreak <= 0
+      || localCalendarDayDistance(today, current.lastReadDate) !== 1
+      || current.checkedDays.includes(today)
+    ) return;
     const newStreak: StreakData = {
-      ...streak,
-      freezesLeft: streak.freezesLeft - 1,
-      lastReadDate: todayStr(),
-      checkedDays: streak.checkedDays.includes(todayStr())
-        ? streak.checkedDays
-        : [...streak.checkedDays, todayStr()],
+      ...current,
+      freezesLeft: current.freezesLeft - 1,
+      lastReadDate: today,
+      checkedDays: [...current.checkedDays, today],
     };
+    // Protect against two presses before React commits the next render.
+    snapshotRef.current = { ...snapshotRef.current, streak: newStreak };
     setStreak(newStreak);
     void persist(books, sessions, newStreak, profile, reminder);
     void queueOperation('streak', newStreak).then(() => flushQueue());

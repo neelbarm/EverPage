@@ -90,22 +90,39 @@ router.post("/notes", async (req, res) => {
   const userId = requireAuth(req, res);
   if (!userId) return;
 
-  const { bookTitle, bookAuthor, page, noteText } = req.body ?? {};
+  const { id: requestId, bookTitle, bookAuthor, page, noteText } = req.body ?? {};
   const pageNum = parseInt(String(page ?? ""), 10);
   if (!bookTitle || isNaN(pageNum) || pageNum < 0 || !noteText?.trim()) {
     res.status(400).json({ error: "bookTitle, page (number) and noteText are required" });
     return;
   }
 
-  const id = randomUUID();
-  await db.insert(npMarginNotes).values({
+  if (requestId !== undefined && (typeof requestId !== 'string' || !/^[A-Za-z0-9_-]{1,128}$/.test(requestId))) {
+    res.status(400).json({ error: 'Invalid note request ID' });
+    return;
+  }
+  // Scope retry IDs to the authenticated account. Older clients that do not
+  // send an ID retain their existing create behavior.
+  const id = requestId === undefined ? randomUUID() : `session-note:${userId}:${requestId}`;
+  const note = {
     id,
     userId,
     bookTitle: String(bookTitle).trim(),
     bookAuthor: String(bookAuthor ?? "").trim(),
     page: pageNum,
     noteText: String(noteText).trim(),
-  });
+  };
+  const inserted = await db.insert(npMarginNotes).values(note).onConflictDoNothing().returning({ id: npMarginNotes.id });
+  if (!inserted.length) {
+    const [existing] = await db.select().from(npMarginNotes)
+      .where(and(eq(npMarginNotes.id, id), eq(npMarginNotes.userId, userId))).limit(1);
+    if (!existing || existing.bookTitle !== note.bookTitle || existing.bookAuthor !== note.bookAuthor || existing.page !== note.page || existing.noteText !== note.noteText) {
+      res.status(409).json({ error: 'This note request ID was already used for a different note' });
+      return;
+    }
+    res.status(200).json({ id });
+    return;
+  }
 
   res.status(201).json({ id });
 });

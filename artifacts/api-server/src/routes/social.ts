@@ -5,6 +5,7 @@ import { eq, ilike, or, and, ne, sql, desc, asc, not, inArray, gte } from "drizz
 import { assignAvatarUpload, objectPathFromAvatarUrl } from "./storage";
 import { ObjectNotFoundError } from "../lib/objectStorage";
 import { expoReceiptPersistenceUpdate, readingCalendarDay } from "../lib/reliabilityPolicies";
+import { getSessionId, registerSessionPushToken } from "../lib/auth";
 
 const router: IRouter = Router();
 
@@ -621,10 +622,11 @@ router.post("/social/push-token", async (req, res) => {
     res.status(400).json({ error: "A valid Expo push token is required" });
     return;
   }
-  await db
-    .update(npUsers)
-    .set({ pushToken: token, updatedAt: new Date() })
-    .where(eq(npUsers.id, userId));
+  const sid = getSessionId(req);
+  if (!sid || !(await registerSessionPushToken(sid, userId, token))) {
+    res.status(401).json({ error: "Authentication required" });
+    return;
+  }
   res.json({ ok: true });
 });
 

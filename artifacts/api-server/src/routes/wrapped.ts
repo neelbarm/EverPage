@@ -60,7 +60,26 @@ router.get("/wrapped/:year", async (req, res) => {
   }
   const topGenre = Object.entries(genreCounts).sort((a, b) => b[1] - a[1])[0]?.[0] ?? "Literary Fiction";
 
-  const longestStreak = streakRows[0]?.currentStreak ?? 0;
+  // checkedDays also contains redeemed freeze days. Preserve those while
+  // measuring the best run within this year, not today's current streak.
+  let checkedDays: unknown = [];
+  try { checkedDays = JSON.parse(streakRows[0]?.checkedDays ?? "[]"); } catch { /* use durable sessions */ }
+  const readingDays = new Set(sessions.map(session => session.date));
+  if (Array.isArray(checkedDays)) {
+    for (const day of checkedDays) if (typeof day === "string") readingDays.add(day);
+  }
+  let longestStreak = 0;
+  let run = 0;
+  let previousDay = Number.NEGATIVE_INFINITY;
+  for (const day of [...readingDays].sort()) {
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(day) || day < yearStart || day >= yearEnd) continue;
+    const timestamp = Date.parse(`${day}T00:00:00Z`);
+    if (!Number.isFinite(timestamp) || new Date(timestamp).toISOString().slice(0, 10) !== day) continue;
+    const dayNumber = timestamp / 86_400_000;
+    run = dayNumber === previousDay + 1 ? run + 1 : 1;
+    longestStreak = Math.max(longestStreak, run);
+    previousDay = dayNumber;
+  }
 
   const totalUsers = allUserMinutes.length;
   const usersBelow = allUserMinutes.filter(u => (u.total ?? 0) < totalMinutes).length;
