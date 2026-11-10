@@ -2,7 +2,8 @@
   "expo": {
     "name": "EverPage",
     "slug": "everpage",
-    "version": "1.0.5",
+    "owner": "everpages-team",
+    "version": "1.0.6",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
     "scheme": "everpage",
@@ -60,6 +61,11 @@
         }
       ]
     ],
+    "extra": {
+      "eas": {
+        "projectId": "b743bd49-189f-471f-91c8-542032324ce1"
+      }
+    },
     "experiments": {
       "typedRoutes": true,
       "reactCompiler": true

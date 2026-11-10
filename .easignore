@@ -1,0 +1,72 @@
+# EAS reads this file at the Git repository root instead of all .gitignore files.
+# Preserve root .gitignore exclusions.
+dist
+tmp
+out-tsc
+*.tsbuildinfo
+.expo
+.expo-shared
+node_modules
+/.idea
+.project
+.classpath
+.c9/
+*.launch
+.settings/
+*.sublime-workspace
+.vscode/*
+!.vscode/settings.json
+!.vscode/tasks.json
+!.vscode/launch.json
+!.vscode/extensions.json
+/.sass-cache
+/connect.lock
+/coverage
+/libpeerconnection.log
+npm-debug.log
+yarn-error.log
+testem.log
+/typings
+.DS_Store
+Thumbs.db
+.cursor/rules/nx-rules.mdc
+.github/instructions/nx.instructions.md
+.cache/
+.local/
+artifacts/api-server/.env
+
+# Preserve additional artifacts/nexpage/.gitignore exclusions.
+/artifacts/nexpage/web-build/
+/artifacts/nexpage/expo-env.d.ts
+/artifacts/nexpage/ios/
+/artifacts/nexpage/android/
+/artifacts/nexpage/**/*.orig.*
+/artifacts/nexpage/**/.metro-health-check*
+/artifacts/nexpage/**/npm-debug.*
+/artifacts/nexpage/**/yarn-debug.*
+/artifacts/nexpage/**/yarn-error.*
+/artifacts/nexpage/**/.vercel/
+
+# Never upload unrelated user projects, Git history, or local credentials.
+# Match the directory entry itself as well, so EAS never descends into it.
+/pluely
+/pluely/
+.git
+.env*
+credentials.json
+*.p8
+*.p12
+*.pfx
+*.pem
+*.key
+*.jks
+*.keystore
+*.mobileprovision
+
+# Generated exports/signing outputs are not native build inputs.
+/artifacts/nexpage/static-build/
+*.ipa
+*.apk
+*.aab
+*.xcarchive/
+*.dSYM/
