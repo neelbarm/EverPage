@@ -1048,6 +1048,7 @@ router.get("/social/recommendations", async (req, res) => {
     title: string; author: string; genre: string;
     coverColor: string; coverImageUri: string | null;
     owners: Set<string>; friends: Set<string>;
+    curatedId?: string;
   };
   const map = new Map<string, Agg>();
   for (const b of others) {
@@ -1062,17 +1063,27 @@ router.get("/social/recommendations", async (req, res) => {
     if (friendIds.has(b.userId)) a.friends.add(b.userId);
     if (!a.coverImageUri && b.coverImageUri) a.coverImageUri = b.coverImageUri;
   }
-  const aggs = [...map.values()];
+  // Rank every available genre match together. Filling the list from community
+  // books first would let unrelated titles crowd out matching curated books.
+  const aggs: Agg[] = [
+    ...map.values(),
+    ...CURATED_RECS.map((book) => ({
+      ...book,
+      owners: new Set<string>(),
+      friends: new Set<string>(),
+      curatedId: book.id,
+    })),
+  ];
 
   const picked: any[] = [];
   const used = new Set<string>();
   const push = (a: Agg, reason: string) => {
     if (!isQualityRec(a)) return;
     const key = normKey(a.title, a.author);
-    if (used.has(key)) return;
+    if (myKeys.has(key) || used.has(key)) return;
     used.add(key);
     picked.push({
-      id: `rec_${key}`.replace(/[^a-z0-9_]/gi, "_").slice(0, 60),
+      id: a.curatedId ?? `rec_${key}`.replace(/[^a-z0-9_]/gi, "_").slice(0, 60),
       title: a.title,
       author: a.author,
       coverColor: a.coverColor || "#5C849E",
@@ -1091,6 +1102,9 @@ router.get("/social/recommendations", async (req, res) => {
     if (friendsDifference !== 0) return friendsDifference;
     const ownerDifference = b.owners.size - a.owners.size;
     if (ownerDifference !== 0) return ownerDifference;
+    // Keep the catalog's existing order when two curated picks have equal taste
+    // scores. Community ties retain their existing title/author ordering.
+    if (a.curatedId && b.curatedId) return 0;
     const titleDifference = a.title.localeCompare(b.title);
     return titleDifference !== 0 ? titleDifference : a.author.localeCompare(b.author);
   });
@@ -1098,38 +1112,17 @@ router.get("/social/recommendations", async (req, res) => {
   for (const candidate of rankedCandidates) {
     const genre = normGenre(candidate.genre);
     const genreScore = genreScoreFor(candidate);
-    const genreLabel = genreLabels.get(genre) ?? candidate.genre;
+    const genreLabel = candidate.curatedId ? candidate.genre : genreLabels.get(genre) ?? candidate.genre;
     if (genreScore > 0) {
       push(candidate, `it matches your ${genreLabel.toLowerCase()} reading`);
+    } else if (candidate.curatedId) {
+      push(candidate, "a curated pick while we learn your preferences");
     } else if (candidate.friends.size > 0) {
       push(candidate, candidate.friends.size === 1 ? "a friend is reading it" : `${candidate.friends.size} friends are reading it`);
     } else {
       push(candidate, "it's popular right now");
     }
     if (picked.length >= recommendationLimit) break;
-  }
-
-  // Fallback — start with curated books in the same genres, then use a varied
-  // catalog only if there are not enough matches to fill the shelf.
-  const curated = [...CURATED_RECS].sort((a, b) => {
-    const scoreDifference = (genreScores.get(normGenre(b.genre)) ?? 0) - (genreScores.get(normGenre(a.genre)) ?? 0);
-    return scoreDifference;
-  });
-  for (const c of curated) {
-    if (picked.length >= recommendationLimit) break;
-    const key = normKey(c.title, c.author);
-    if (myKeys.has(key) || used.has(key)) continue;
-    used.add(key);
-    const genre = normGenre(c.genre);
-    const genreScore = genreScores.get(genre) ?? 0;
-    picked.push({
-      ...c,
-      // Curated books are not friend/popularity signals. Say why they are
-      // shown instead of claiming a taste match that was not observed.
-      reason: genreScore > 0
-        ? `it matches your ${c.genre.toLowerCase()} reading`
-        : "a curated pick while we learn your preferences",
-    });
   }
 
   res.json(picked.slice(0, recommendationLimit));

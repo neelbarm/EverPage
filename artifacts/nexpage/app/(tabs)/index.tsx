@@ -78,6 +78,7 @@ export default function ShelfScreen() {
 
   const [selectedRec, setSelectedRec] = useState<typeof recommendedBooks[0] | null>(null);
   const [recPagesStr, setRecPagesStr] = useState('');
+  const recPagesEditedRef = useRef(false);
   const [recommendationsExpanded, setRecommendationsExpanded] = useState(false);
   const sheetTranslateY = useRef(new Animated.Value(0)).current;
   const panResponder = useRef(
@@ -100,6 +101,7 @@ export default function ShelfScreen() {
   // When a recommendation opens, pre-fill its page count from OpenLibrary so
   // "Add to my shelf" is ready immediately (the button needs a page count).
   useEffect(() => {
+    recPagesEditedRef.current = false;
     if (!selectedRec) { setRecPagesStr(''); return; }
     setRecPagesStr('');
     let cancelled = false;
@@ -110,7 +112,7 @@ export default function ShelfScreen() {
         if (!res.ok) return;
         const data = await res.json();
         const pages = data?.docs?.[0]?.number_of_pages_median;
-        if (!cancelled && typeof pages === 'number' && pages > 0) {
+        if (!cancelled && !recPagesEditedRef.current && typeof pages === 'number' && pages > 0) {
           setRecPagesStr(String(pages));
         }
       } catch { /* user can still type it manually */ }
@@ -492,7 +494,10 @@ export default function ShelfScreen() {
                   <TextInput
                     style={[styles.recModalPageInput, { color: colors.foreground, backgroundColor: colors.muted, borderColor: colors.border, fontFamily: 'Inter_400Regular' }]}
                     value={recPagesStr}
-                    onChangeText={setRecPagesStr}
+                    onChangeText={value => {
+                      recPagesEditedRef.current = true;
+                      setRecPagesStr(value);
+                    }}
                     keyboardType="number-pad"
                     placeholder="e.g. 320"
                     placeholderTextColor={colors.mutedForeground}

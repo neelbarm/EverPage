@@ -17,6 +17,9 @@
     "ios": {
       "supportsTablet": false,
       "bundleIdentifier": "app.everpage",
+      "config": {
+        "usesNonExemptEncryption": false
+      },
       "entitlements": {
         "aps-environment": "production"
       },

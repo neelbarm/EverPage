@@ -9,7 +9,7 @@ const app = resolve('artifacts/nexpage');
 const fixture = join(app, 'test/store-runtime.ts');
 const directory = await mkdtemp(join(tmpdir(), 'everpage-mobile-tests.'));
 const outputs = [];
-for (const suite of ['store', 'auth']) {
+for (const suite of ['store', 'auth', 'recommendations']) {
 const output = join(directory, `${suite}.cjs`);
 await build({
   entryPoints: [join(app, `test/${suite}.integration.test.tsx`)], outfile: output,

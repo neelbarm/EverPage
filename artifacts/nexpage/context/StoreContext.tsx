@@ -507,6 +507,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
   const initializedAccountRef = useRef<string | null>(null);
   const accountCredentialRef = useRef<AccountBoundCredential | null>(null);
   const mutationRevisionRef = useRef(0);
+  const recommendationRequestRef = useRef(0);
   const snapshotRef = useRef({ books, sessions, streak, profile, reminder });
   snapshotRef.current = { books, sessions, streak, profile, reminder };
 
@@ -682,15 +683,22 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
   }, [accountId, authLoading, isAuthenticated]);
 
   async function fetchRecommendations(version = identityVersionRef.current, expectedAccountId = accountIdRef.current) {
+    if (version !== identityVersionRef.current || expectedAccountId !== accountIdRef.current || expectedAccountId === GUEST_ACCOUNT_ID) return;
+    const request = ++recommendationRequestRef.current;
     try {
       const credential = await verifiedCredential(version, expectedAccountId);
       if (!credential) return;
       const recs = await apiFetchWithToken<RecommendedBook[]>('/social/recommendations', credential.token);
-      if (version === identityVersionRef.current && expectedAccountId === accountIdRef.current && Array.isArray(recs) && recs.length > 0) {
+      if (
+        request === recommendationRequestRef.current
+        && version === identityVersionRef.current
+        && expectedAccountId === accountIdRef.current
+        && Array.isArray(recs)
+      ) {
         setRecommendedBooks(recs);
       }
     } catch {
-      // keep curated defaults on failure
+      // Keep the last successful results (or initial defaults) on failure.
     }
   }
 
@@ -779,6 +787,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
     syncInFlightRef.current = true;
     setIsSyncing(true);
     setSyncError(null);
+    let recommendationInputsSynced = false;
     try {
       const credential = await verifiedCredential(expectedVersion, expectedAccountId);
       if (!credential) return;
@@ -802,6 +811,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
         await sendOperation(operation, credential.token);
         if (expectedVersion !== identityVersionRef.current || expectedAccountId !== accountIdRef.current) return;
         await persistQueue(acknowledgeQueueEntity(queueRef.current, operation));
+        if (operation.kind === 'book' || operation.kind === 'session') recommendationInputsSynced = true;
       }
     } catch (error) {
       if (expectedVersion === identityVersionRef.current && expectedAccountId === accountIdRef.current) {
@@ -810,6 +820,15 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
     } finally {
       syncInFlightRef.current = false;
       setIsSyncing(false);
+      // The active flush also drains edits queued while it was in flight.
+      // Refresh only after those writes reach the server, including retries.
+      if (
+        recommendationInputsSynced
+        && expectedVersion === identityVersionRef.current
+        && expectedAccountId === accountIdRef.current
+      ) {
+        void fetchRecommendations(expectedVersion, expectedAccountId);
+      }
     }
   }
 
@@ -1007,7 +1026,6 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
     if (earnedFreeze) setPendingFreezeEarned(true);
     if (goalJustMet) setPendingGoalMet(true);
     void flushQueue();
-    void fetchRecommendations();
     await cancelStreakRescueNotification();
     rescheduleStreakRescueForTomorrow();
     } finally {
@@ -1034,10 +1052,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
     void persist(newBooks, sessions, newStreak, newProfile, reminder);
     const finishedBook = newBooks.find(b => b.id === bookId);
     if (finishedBook) {
-      void queueOperation('book', finishedBook).then(() => {
-        void flushQueue();
-        return fetchRecommendations();
-      });
+      void queueOperation('book', finishedBook).then(() => flushQueue());
     }
     if (earnedFreeze) {
       void queueOperation('streak', newStreak).then(() => flushQueue());
@@ -1086,10 +1101,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
     const newBooks = [...books, newBook];
     setBooks(newBooks);
     void persist(newBooks, sessions, streak, profile, reminder);
-    void queueOperation('book', newBook).then(() => {
-      void flushQueue();
-      return fetchRecommendations();
-    });
+    void queueOperation('book', newBook).then(() => flushQueue());
   }
 
   function updateBook(id: string, updates: Partial<Pick<Book, 'title' | 'author' | 'totalPages' | 'genre' | 'coverImageUri'>>) {
@@ -1098,10 +1110,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
     void persist(newBooks, sessions, streak, profile, reminder);
     const updatedBook = newBooks.find(b => b.id === id);
     if (updatedBook) {
-      void queueOperation('book', updatedBook).then(() => {
-        void flushQueue();
-        return fetchRecommendations();
-      });
+      void queueOperation('book', updatedBook).then(() => flushQueue());
     }
   }
 
